@@ -1,10 +1,15 @@
 const { test, expect } = require('@playwright/test');
 
+const openCreateEventDialog = async (page, date = '2026-07-02') => {
+  await page.locator(`.day-cell[data-date="${date}"] .day-add`).click();
+};
+
 test('calendar loads with Firebase sync UI', async ({ page }) => {
   await page.goto('/');
   await expect(page.locator('#monthTitle')).toBeVisible();
   await expect(page.locator('#accountButton')).toBeVisible();
   await expect(page.locator('#syncStatus')).toBeHidden();
+  await expect(page.locator('#createEventButton')).toHaveCount(0);
 });
 
 test('account avatar opens sync dropdown and uses generic icon', async ({ page }) => {
@@ -37,6 +42,7 @@ test('keyboard shortcuts switch views and navigate periods', async ({ page }) =>
   await expect(page.locator('#viewSelect')).toHaveValue('four-week');
   await page.keyboard.press('5');
   await expect(page.locator('#viewSelect')).toHaveValue('heatmap');
+  await expect(page.locator('body')).toHaveClass(/view-heatmap/);
   await expect(page.locator('#monthTitle')).toHaveText('July 1 – 31, 2026');
   await page.keyboard.press('3');
   await expect(page.locator('#viewSelect')).toHaveValue('month');
@@ -56,7 +62,10 @@ test('heatmap view renders one square per day with worked-hour intensity', async
   await expect(page.locator('.heatmap-day[data-date="2026-07-03"]')).toHaveAttribute('data-hours', '0');
   await expect(page.locator('.heatmap-day[data-date="2026-07-03"]')).toHaveAttribute('data-level', '0');
 
+  await expect(page.locator('.heatmap-details')).toHaveCount(0);
   await page.locator('.heatmap-day[data-date="2026-07-01"]').click();
+  await expect(page.locator('.heatmap-details')).toHaveClass(/heatmap-details--popover/);
+  await expect(page.locator('.heatmap-details')).toHaveCSS('position', 'fixed');
   await expect(page.locator('.heatmap-details')).toContainText('Wednesday, July 1, 2026');
   await expect(page.locator('.heatmap-details')).toContainText('1h worked');
   await expect(page.locator('.heatmap-details')).toContainText('CS seminar prep');
@@ -283,12 +292,12 @@ test('calendar rows can be edited for name and color', async ({ page }) => {
 test('create event modal selects earliest currently visible calendar', async ({ page }) => {
   await page.goto('/');
   await page.locator('input[data-calendar="teaching"]').uncheck();
-  await page.locator('#createEventButton').click();
+  await openCreateEventDialog(page);
   await expect(page.locator('#eventCalendar')).toHaveValue('research');
   await page.locator('#cancelEvent').click();
 
   await page.locator('input[data-calendar="research"]').uncheck();
-  await page.locator('#createEventButton').click();
+  await openCreateEventDialog(page);
   await expect(page.locator('#eventCalendar')).toHaveValue('deadlines');
 });
 
@@ -308,6 +317,84 @@ test('time analysis panel shows current view events filtered by calendar selecti
   await expect(page.locator('#sidebarTimeAnalysisSummary')).toHaveText('1 occurrence · 1h');
   await expect(page.locator('#sidebarTimeAnalysisList')).toContainText('CS seminar prep');
   await expect(page.locator('#sidebarTimeAnalysisList')).not.toContainText('Reading group');
+});
+
+test('time analysis uses imported ICS event durations', async ({ page }) => {
+  await page.goto('/');
+  await page.locator('#addCalendarButton').click();
+
+  const ics = `BEGIN:VCALENDAR
+VERSION:2.0
+X-WR-CALNAME:Duration Import
+BEGIN:VEVENT
+UID:duration-1
+DTSTART:20260703T090000
+DTEND:20260703T113000
+SUMMARY:Long seminar
+END:VEVENT
+END:VCALENDAR`;
+  await page.locator('#calendarFileInput').setInputFiles({
+    name: 'duration.ics',
+    mimeType: 'text/calendar',
+    buffer: Buffer.from(ics),
+  });
+  await page.locator('#calendarModalForm').getByRole('button', { name: 'Create', exact: true }).click();
+
+  await page.keyboard.press('2');
+  await page.locator('.sidebar-tab[data-panel="analysis"]').click();
+
+  await expect(page.locator('#sidebarTimeAnalysisSummary')).toHaveText('3 occurrences · 4.5h');
+  await expect(page.locator('.time-analysis-item').filter({ hasText: 'Long seminar' })).toContainText('2.5h');
+});
+
+test('time analysis renders weekly cumulative activity chart', async ({ page }) => {
+  await page.goto('/');
+  await page.locator('#addCalendarButton').click();
+
+  const ics = `BEGIN:VCALENDAR
+VERSION:2.0
+X-WR-CALNAME:Activity Import
+BEGIN:VEVENT
+UID:read-1
+DTSTART:20260701T090000
+DTEND:20260701T100000
+SUMMARY:read: Paper A
+END:VEVENT
+BEGIN:VEVENT
+UID:code-1
+DTSTART:20260708T090000
+DTEND:20260708T110000
+SUMMARY:code: Prototype
+END:VEVENT
+BEGIN:VEVENT
+UID:read-2
+DTSTART:20260715T090000
+DTEND:20260715T103000
+SUMMARY:read: Paper B
+END:VEVENT
+END:VCALENDAR`;
+  await page.locator('#calendarFileInput').setInputFiles({
+    name: 'activity.ics',
+    mimeType: 'text/calendar',
+    buffer: Buffer.from(ics),
+  });
+  await page.locator('#calendarModalForm').getByRole('button', { name: 'Create', exact: true }).click();
+
+  await page.locator('.sidebar-tab[data-panel="analysis"]').click();
+
+  await expect(page.locator('#weeklyActivityChart')).toBeVisible();
+  await expect(page.locator('.weekly-activity-svg')).toHaveAttribute('data-week-count', '3');
+  await expect(page.locator('.weekly-activity-legend-item[data-category="read"]')).toHaveText('Read');
+  await expect(page.locator('.weekly-activity-legend-item[data-category="code"]')).toHaveText('Code');
+  await expect(page.locator('.weekly-activity-line[data-category="read"]')).toHaveCount(1);
+  await expect(page.locator('.weekly-activity-line[data-category="code"]')).toHaveCount(1);
+  await expect(page.locator('.weekly-activity-point[data-category="read"][data-week="2026-W29"][data-hours="2.5"]')).toHaveCount(1);
+  await expect(page.locator('.weekly-activity-point[data-category="code"][data-week="2026-W28"][data-hours="2"]')).toHaveCount(1);
+
+  await page.locator('.weekly-activity-point[data-category="code"][data-week="2026-W28"]').hover();
+  await expect(page.locator('.weekly-activity-tooltip')).toBeVisible();
+  await expect(page.locator('.weekly-activity-tooltip')).toContainText('2026-W28');
+  await expect(page.locator('.weekly-activity-tooltip')).toContainText('Code: 2h cumulative');
 });
 
 test('sidebar panels can switch by click and Control-number shortcuts', async ({ page }) => {
@@ -358,6 +445,33 @@ test('week view renders hourly grid and t centers current-time indicator', async
   await expect(page.locator('.week-now-time')).toBeVisible();
 });
 
+test('dragging hour boxes in week view creates an event with that range', async ({ page }) => {
+  await page.goto('/');
+  await page.keyboard.press('2');
+
+  const column = page.locator('.week-day-column[data-date="2026-07-02"]');
+  const box = await column.boundingBox();
+  expect(box).not.toBeNull();
+
+  const x = box.x + 24;
+  await page.mouse.move(x, box.y + (2 * 72) + 10);
+  await page.mouse.down();
+  await page.mouse.move(x, box.y + (4 * 72) + 10, { steps: 4 });
+  await expect(page.locator('.week-drag-selection')).toBeVisible();
+  await page.mouse.up();
+
+  await expect(page.locator('#eventModal')).toHaveClass(/is-open/);
+  await expect(page.locator('#eventTime')).toHaveValue('02:00');
+  await expect(page.locator('#eventDurationMinutes')).toHaveValue('180');
+  await page.locator('#eventTitle').fill('Dragged focus block');
+  await page.getByRole('button', { name: 'Save' }).click();
+
+  const created = await page.evaluate(() => JSON.parse(localStorage.getItem('academical.events.v1')).find((event) => event.title === 'Dragged focus block'));
+  expect(created.time).toBe('02:00');
+  expect(created.durationMinutes).toBe(180);
+  await expect(page.locator('.week-timed-event').filter({ hasText: 'Dragged focus block' })).toBeVisible();
+});
+
 test('p opens Add paper modal and Enter submits', async ({ page }) => {
   await page.goto('/');
   await page.keyboard.press('p');
@@ -396,7 +510,7 @@ test('paper URLs are stored as static source links without external API calls', 
 
 test('creating every weekday recurring event skips weekends', async ({ page }) => {
   await page.goto('/');
-  await page.locator('#createEventButton').click();
+  await openCreateEventDialog(page);
   await page.locator('#eventTitle').fill('Weekday standup');
   await page.locator('#eventDate').fill('2026-07-02');
   await page.locator('#eventTime').fill('10:00');
@@ -410,7 +524,7 @@ test('creating every weekday recurring event skips weekends', async ({ page }) =
 
 test('deleting recurring event removes only selected instance', async ({ page }) => {
   await page.goto('/');
-  await page.locator('#createEventButton').click();
+  await openCreateEventDialog(page);
   await page.locator('#eventTitle').fill('Weekday standup');
   await page.locator('#eventDate').fill('2026-07-02');
   await page.locator('#eventTime').fill('10:00');
@@ -432,7 +546,7 @@ test('deleting recurring event removes only selected instance', async ({ page })
 
 test('delete recurring button removes the entire recurring series', async ({ page }) => {
   await page.goto('/');
-  await page.locator('#createEventButton').click();
+  await openCreateEventDialog(page);
   await page.locator('#eventTitle').fill('Weekday standup');
   await page.locator('#eventDate').fill('2026-07-02');
   await page.locator('#eventRepeat').selectOption('weekdays');
@@ -462,7 +576,7 @@ test('read event matching is case-insensitive, colon optional, and preserves cas
   await page.locator('#paperModalInput').fill('Paper A');
   await page.keyboard.press('Enter');
 
-  await page.locator('#createEventButton').click();
+  await openCreateEventDialog(page);
   await page.locator('#eventTitle').fill('READ Paper A');
   await expect(page.locator('#eventPaperAssignment')).toBeVisible();
   await page.locator('.paper-assignment-option').filter({ hasText: 'Paper A' }).locator('input').check();
@@ -477,7 +591,7 @@ test('assigning paper updates non-recurring read event title and removes paper t
   await page.keyboard.press('Enter');
   await expect(page.locator('.paper-task-title')).toHaveText('Paper A');
 
-  await page.locator('#createEventButton').click();
+  await openCreateEventDialog(page);
   await page.locator('#eventTitle').fill('read session');
   await page.locator('.paper-assignment-option').filter({ hasText: 'Paper A' }).locator('input').check();
   await page.getByRole('button', { name: 'Save' }).click();
@@ -495,7 +609,7 @@ test('assigning paper to recurring read event updates only selected instance', a
   await page.locator('#paperModalInput').fill('Paper A');
   await page.keyboard.press('Enter');
 
-  await page.locator('#createEventButton').click();
+  await openCreateEventDialog(page);
   await page.locator('#eventTitle').fill('read session');
   await page.locator('#eventDate').fill('2026-07-02');
   await page.locator('#eventRepeat').selectOption('weekdays');
@@ -520,7 +634,7 @@ test('deleting assigned read event restores paper task', async ({ page }) => {
   await page.locator('#paperModalInput').fill('Paper A');
   await page.keyboard.press('Enter');
 
-  await page.locator('#createEventButton').click();
+  await openCreateEventDialog(page);
   await page.locator('#eventTitle').fill('read session');
   await page.locator('.paper-assignment-option').filter({ hasText: 'Paper A' }).locator('input').check();
   await page.getByRole('button', { name: 'Save' }).click();

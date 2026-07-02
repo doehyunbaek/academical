@@ -79,11 +79,6 @@
             <button class="sidebar-tab" type="button" data-panel="analysis">Time analysis</button>
           </nav>
 
-          <button class="create-button sidebar-create-button" id="createEventButton" type="button">
-            <span aria-hidden="true">＋</span>
-            Create
-          </button>
-
           <div class="sidebar-panel" data-panel="calendar">
             <section class="sidebar-section" aria-labelledby="calendarsTitle">
               <header class="section-title-row">
@@ -128,6 +123,10 @@
               <div class="sidebar-time-analysis-content" id="sidebarTimeAnalysisContent" hidden>
                 <span id="sidebarTimeAnalysisRange"></span>
                 <p id="sidebarTimeAnalysisSummary"></p>
+                <section class="weekly-activity-chart" id="weeklyActivityChart" aria-labelledby="weeklyActivityChartTitle">
+                  <h3 id="weeklyActivityChartTitle">Weekly activity</h3>
+                  <div class="weekly-activity-chart-body" id="weeklyActivityChartBody"></div>
+                </section>
                 <div class="time-analysis-list" id="sidebarTimeAnalysisList"></div>
               </div>
             </section>
@@ -167,6 +166,7 @@
 
         <input id="eventId" type="hidden" />
         <input id="eventOccurrenceDate" type="hidden" />
+        <input id="eventDurationMinutes" type="hidden" />
 
         <label class="field field--title" for="eventTitle">
           <span>Title</span>

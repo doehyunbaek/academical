@@ -27,6 +27,12 @@ const REPEAT_LABELS = {
   weekly: "Weekly",
   weekdays: "Every weekday",
 };
+const ACTIVITY_CATEGORIES = [
+  { key: "read", label: "Read", color: "#8884d8" },
+  { key: "code", label: "Code", color: "#82ca9d" },
+  { key: "write", label: "Write", color: "#ffc658" },
+  { key: "meet", label: "Meet", color: "#d84e4e" },
+];
 
 const defaultCalendars = [
   { id: "teaching", name: "Teaching", color: "#1a73e8", builtIn: true },
@@ -157,7 +163,6 @@ const els = {
   cancelEvent: document.querySelector("#cancelEvent"),
   closeCalendarModal: document.querySelector("#closeCalendarModal"),
   closeModal: document.querySelector("#closeModal"),
-  createEventButton: document.querySelector("#createEventButton"),
   deleteEvent: document.querySelector("#deleteEvent"),
   deleteSeriesEvent: document.querySelector("#deleteSeriesEvent"),
   editCalendarColorInput: document.querySelector("#editCalendarColorInput"),
@@ -170,6 +175,7 @@ const els = {
   closeEditCalendarModal: document.querySelector("#closeEditCalendarModal"),
   eventCalendar: document.querySelector("#eventCalendar"),
   eventDate: document.querySelector("#eventDate"),
+  eventDurationMinutes: document.querySelector("#eventDurationMinutes"),
   eventForm: document.querySelector("#eventForm"),
   eventId: document.querySelector("#eventId"),
   eventModal: document.querySelector("#eventModal"),
@@ -206,6 +212,8 @@ const els = {
   sidebarTimeAnalysisList: document.querySelector("#sidebarTimeAnalysisList"),
   sidebarTimeAnalysisRange: document.querySelector("#sidebarTimeAnalysisRange"),
   sidebarTimeAnalysisSummary: document.querySelector("#sidebarTimeAnalysisSummary"),
+  weeklyActivityChart: document.querySelector("#weeklyActivityChart"),
+  weeklyActivityChartBody: document.querySelector("#weeklyActivityChartBody"),
   sidebarToggle: document.querySelector("#sidebarToggle"),
   todayButton: document.querySelector("#todayButton"),
   toast: document.querySelector("#toast"),
@@ -259,6 +267,9 @@ let sidebarLocation = loadSidebarLocation();
 let activeSidebarPanel = "calendar";
 let paperTasks = loadPaperTasks();
 let searchQuery = "";
+let heatmapDetailsAnchor = null;
+let activeWeekRangeDrag = null;
+let suppressNextWeekSlotClick = false;
 let firebaseSync = createFirebaseSyncState();
 let activeEventPaperSnapshots = [];
 let draggedCalendarId = "";
@@ -293,6 +304,13 @@ function bindEvents() {
     }
   });
 
+  document.addEventListener("click", (event) => {
+    if (currentView !== "heatmap" || !heatmapDetailsAnchor) return;
+    if (event.target.closest(".heatmap-details, .heatmap-day")) return;
+    heatmapDetailsAnchor = null;
+    renderMonthGrid();
+  });
+
   els.sidebarToggle.addEventListener("click", () => {
     document.body.classList.toggle("sidebar-collapsed");
   });
@@ -311,6 +329,7 @@ function bindEvents() {
 
   els.todayButton.addEventListener("click", () => {
     const now = getNow();
+    heatmapDetailsAnchor = null;
     selectedDate = new Date(now);
     viewAnchorDate = new Date(now);
     visibleMonth = startOfMonth(now);
@@ -321,10 +340,6 @@ function bindEvents() {
 
   els.previousMonth.addEventListener("click", () => navigatePeriod(-1));
   els.nextMonth.addEventListener("click", () => navigatePeriod(1));
-
-  els.createEventButton.addEventListener("click", () => {
-    openEventDialog(toDateKey(selectedDate));
-  });
 
   els.searchInput.addEventListener("input", (event) => {
     searchQuery = event.target.value.trim().toLowerCase();
@@ -385,6 +400,12 @@ function bindEvents() {
 
     if (event.key === "Escape" && !els.accountPopover.hidden) {
       closeAccountPopover();
+      return;
+    }
+
+    if (event.key === "Escape" && heatmapDetailsAnchor) {
+      heatmapDetailsAnchor = null;
+      renderMonthGrid();
       return;
     }
 
@@ -472,10 +493,16 @@ function bindEvents() {
 }
 
 function render() {
+  applyViewClass();
   renderHeader();
   renderMonthGrid();
   renderUpcoming();
   if (activeSidebarPanel === "analysis") renderSidebarTimeAnalysis();
+}
+
+function applyViewClass() {
+  document.body.classList.remove("view-week", "view-month", "view-four-week", "view-heatmap");
+  document.body.classList.add(`view-${currentView}`);
 }
 
 function renderHeader() {
@@ -566,6 +593,8 @@ function renderSidebarTimeAnalysis() {
     els.sidebarTimeAnalysisEmpty.hidden = false;
     els.sidebarTimeAnalysisContent.hidden = true;
     els.sidebarTimeAnalysisList.replaceChildren();
+    els.weeklyActivityChart.hidden = true;
+    els.weeklyActivityChartBody.replaceChildren();
     return;
   }
 
@@ -573,6 +602,7 @@ function renderSidebarTimeAnalysis() {
   els.sidebarTimeAnalysisContent.hidden = false;
   els.sidebarTimeAnalysisRange.textContent = analysis.rangeLabel;
   els.sidebarTimeAnalysisSummary.textContent = `${analysis.occurrences.length} occurrence${analysis.occurrences.length === 1 ? "" : "s"} · ${formatHours(analysis.totalHours)}`;
+  renderWeeklyActivityChart(analysis.weeklyActivity);
   els.sidebarTimeAnalysisList.replaceChildren(
     ...analysis.occurrences.map((occurrence) => {
       const item = document.createElement("div");
@@ -1915,7 +1945,10 @@ function getCurrentViewTimeAnalysis() {
       const hours = Math.max(0, (clippedEnd - clippedStart) / 3_600_000);
       if (!hours) return;
       occurrences.push({
+        title: occurrence.title,
         label: `${occurrence.title} · ${compactDateFormatter.format(occurrenceStart)}${occurrence.time ? `, ${formatTime(occurrence.time)}` : ""}`,
+        start: clippedStart,
+        end: clippedEnd,
         hours,
       });
     });
@@ -1925,6 +1958,231 @@ function getCurrentViewTimeAnalysis() {
     rangeLabel: getHeaderTitle(rangeStart, rangeEnd),
     occurrences: occurrences.sort((a, b) => a.label.localeCompare(b.label)),
     totalHours: occurrences.reduce((total, occurrence) => total + occurrence.hours, 0),
+    weeklyActivity: getWeeklyActivityData(occurrences),
+  };
+}
+
+function getWeeklyActivityData(occurrences) {
+  const byWeek = new Map();
+
+  occurrences.forEach((occurrence) => {
+    const category = getActivityCategory(occurrence.title);
+    if (!category || !occurrence.start) return;
+
+    const weekInfo = getIsoWeekInfo(occurrence.start);
+    if (!byWeek.has(weekInfo.key)) {
+      byWeek.set(weekInfo.key, {
+        week: weekInfo.key,
+        label: `W${String(weekInfo.week).padStart(2, "0")}`,
+      });
+    }
+
+    const row = byWeek.get(weekInfo.key);
+    row[category] = (row[category] || 0) + occurrence.hours;
+  });
+
+  const cumulativeTotals = Object.fromEntries(ACTIVITY_CATEGORIES.map(({ key }) => [key, 0]));
+  return [...byWeek.values()]
+    .sort((a, b) => a.week.localeCompare(b.week))
+    .map((row) => {
+      const cumulativeRow = { week: row.week, label: row.label };
+      ACTIVITY_CATEGORIES.forEach(({ key }) => {
+        cumulativeTotals[key] += row[key] || 0;
+        cumulativeRow[key] = cumulativeTotals[key];
+      });
+      return cumulativeRow;
+    });
+}
+
+function getActivityCategory(title = "") {
+  const prefix = title.split(":")[0].trim().toLowerCase();
+  return ACTIVITY_CATEGORIES.some(({ key }) => key === prefix) ? prefix : "";
+}
+
+function renderWeeklyActivityChart(data) {
+  els.weeklyActivityChart.hidden = false;
+  els.weeklyActivityChartBody.replaceChildren();
+
+  if (!data.length) {
+    const empty = document.createElement("p");
+    empty.className = "weekly-activity-chart-empty";
+    empty.textContent = "No read/code/write/meet activity in this range.";
+    els.weeklyActivityChartBody.append(empty);
+    return;
+  }
+
+  els.weeklyActivityChartBody.append(createWeeklyActivityChart(data), createWeeklyActivityLegend());
+}
+
+function createWeeklyActivityChart(data) {
+  const frame = document.createElement("div");
+  frame.className = "weekly-activity-chart-frame";
+
+  const tooltip = document.createElement("div");
+  tooltip.className = "weekly-activity-tooltip";
+  tooltip.hidden = true;
+
+  frame.append(createWeeklyActivityChartSvg(data, tooltip), tooltip);
+  return frame;
+}
+
+function createWeeklyActivityChartSvg(data, tooltip) {
+  const svgNamespace = "http://www.w3.org/2000/svg";
+  const width = 320;
+  const height = 180;
+  const margin = { top: 16, right: 14, bottom: 34, left: 42 };
+  const plotWidth = width - margin.left - margin.right;
+  const plotHeight = height - margin.top - margin.bottom;
+  const maxHours = Math.max(1, ...data.flatMap((row) => ACTIVITY_CATEGORIES.map(({ key }) => row[key] || 0)));
+  const yTicks = Array.from({ length: 4 }, (_, index) => (maxHours * index) / 3);
+  const xForIndex = (index) => margin.left + (data.length === 1 ? plotWidth / 2 : (plotWidth * index) / (data.length - 1));
+  const yForHours = (hours) => margin.top + plotHeight - (plotHeight * hours) / maxHours;
+
+  const svg = document.createElementNS(svgNamespace, "svg");
+  svg.classList.add("weekly-activity-svg");
+  svg.setAttribute("viewBox", `0 0 ${width} ${height}`);
+  svg.setAttribute("role", "img");
+  svg.setAttribute("aria-label", "Weekly cumulative activity chart for read, code, write, and meet events");
+  svg.dataset.weekCount = String(data.length);
+
+  const title = document.createElementNS(svgNamespace, "title");
+  title.textContent = "Weekly cumulative activity chart";
+  svg.append(title);
+
+  yTicks.forEach((tick) => {
+    const y = yForHours(tick);
+    const gridLine = document.createElementNS(svgNamespace, "line");
+    gridLine.classList.add("weekly-activity-grid");
+    gridLine.setAttribute("x1", String(margin.left));
+    gridLine.setAttribute("x2", String(width - margin.right));
+    gridLine.setAttribute("y1", String(y));
+    gridLine.setAttribute("y2", String(y));
+    svg.append(gridLine);
+
+    const label = document.createElementNS(svgNamespace, "text");
+    label.classList.add("weekly-activity-axis-label");
+    label.setAttribute("x", String(margin.left - 8));
+    label.setAttribute("y", String(y + 3));
+    label.setAttribute("text-anchor", "end");
+    label.textContent = formatHours(tick);
+    svg.append(label);
+  });
+
+  const axis = document.createElementNS(svgNamespace, "path");
+  axis.classList.add("weekly-activity-axis");
+  axis.setAttribute("d", `M${margin.left},${margin.top} V${margin.top + plotHeight} H${width - margin.right}`);
+  svg.append(axis);
+
+  data.forEach((row, index) => {
+    const showLabel = data.length <= 6 || index === 0 || index === data.length - 1 || index % Math.ceil(data.length / 4) === 0;
+    if (!showLabel) return;
+    const label = document.createElementNS(svgNamespace, "text");
+    label.classList.add("weekly-activity-axis-label");
+    label.setAttribute("x", String(xForIndex(index)));
+    label.setAttribute("y", String(height - 10));
+    label.setAttribute("text-anchor", "middle");
+    label.textContent = row.label;
+    svg.append(label);
+  });
+
+  ACTIVITY_CATEGORIES.forEach(({ key, label, color }) => {
+    const points = data.map((row, index) => ({
+      x: xForIndex(index),
+      y: yForHours(row[key] || 0),
+      row,
+      hours: row[key] || 0,
+    }));
+    const path = document.createElementNS(svgNamespace, "path");
+    path.classList.add("weekly-activity-line");
+    path.dataset.category = key;
+    path.setAttribute("stroke", color);
+    path.setAttribute("d", points.map((point, index) => `${index ? "L" : "M"}${point.x},${point.y}`).join(" "));
+    svg.append(path);
+
+    points.forEach((point) => {
+      const circle = document.createElementNS(svgNamespace, "circle");
+      circle.classList.add("weekly-activity-point");
+      circle.dataset.category = key;
+      circle.dataset.week = point.row.week;
+      circle.dataset.hours = String(Math.round(point.hours * 100) / 100);
+      circle.setAttribute("cx", String(point.x));
+      circle.setAttribute("cy", String(point.y));
+      circle.setAttribute("r", point.hours ? "3.2" : "2.2");
+      circle.setAttribute("fill", color);
+      circle.setAttribute("tabindex", "0");
+      circle.setAttribute("aria-label", `${label} ${point.row.week}: ${formatHours(point.hours)} cumulative`);
+      circle.addEventListener("mouseenter", () => showWeeklyActivityTooltip(tooltip, svg, point, { key, label, color }));
+      circle.addEventListener("focus", () => showWeeklyActivityTooltip(tooltip, svg, point, { key, label, color }));
+      circle.addEventListener("mouseleave", () => hideWeeklyActivityTooltip(tooltip));
+      circle.addEventListener("blur", () => hideWeeklyActivityTooltip(tooltip));
+      const pointTitle = document.createElementNS(svgNamespace, "title");
+      pointTitle.textContent = `${label} ${point.row.week}: ${formatHours(point.hours)} cumulative`;
+      circle.append(pointTitle);
+      svg.append(circle);
+    });
+  });
+
+  return svg;
+}
+
+function showWeeklyActivityTooltip(tooltip, svg, point, category) {
+  if (!tooltip) return;
+
+  const svgRect = svg.getBoundingClientRect();
+  const viewBox = svg.viewBox.baseVal;
+  const left = viewBox.width ? (point.x / viewBox.width) * svgRect.width : point.x;
+  const top = viewBox.height ? (point.y / viewBox.height) * svgRect.height : point.y;
+
+  tooltip.innerHTML = `
+    <strong>${escapeHtml(point.row.week)}</strong>
+    <span class="weekly-activity-tooltip-focus" style="--activity-color: ${category.color}">${escapeHtml(category.label)}: ${formatHours(point.hours)} cumulative</span>
+    <div class="weekly-activity-tooltip-list">
+      ${ACTIVITY_CATEGORIES.map(({ key, label, color }) => `
+        <span style="--activity-color: ${color}">
+          <i aria-hidden="true"></i>${escapeHtml(label)} <b>${formatHours(point.row[key] || 0)}</b>
+        </span>
+      `).join("")}
+    </div>
+  `;
+  tooltip.style.left = `${left}px`;
+  tooltip.style.top = `${top}px`;
+  tooltip.hidden = false;
+}
+
+function hideWeeklyActivityTooltip(tooltip) {
+  if (tooltip) tooltip.hidden = true;
+}
+
+function createWeeklyActivityLegend() {
+  const legend = document.createElement("div");
+  legend.className = "weekly-activity-legend";
+  legend.replaceChildren(
+    ...ACTIVITY_CATEGORIES.map(({ key, label, color }) => {
+      const item = document.createElement("span");
+      item.className = "weekly-activity-legend-item";
+      item.dataset.category = key;
+      item.innerHTML = `<span class="weekly-activity-legend-swatch" style="--activity-color: ${color}" aria-hidden="true"></span>${label}`;
+      return item;
+    })
+  );
+  return legend;
+}
+
+function getIsoWeekInfo(date) {
+  const thursday = startOfDay(date);
+  const dayIndex = (thursday.getDay() + 6) % 7;
+  thursday.setDate(thursday.getDate() - dayIndex + 3);
+
+  const isoYear = thursday.getFullYear();
+  const firstThursday = new Date(isoYear, 0, 4);
+  const firstDayIndex = (firstThursday.getDay() + 6) % 7;
+  firstThursday.setDate(firstThursday.getDate() - firstDayIndex + 3);
+
+  const week = 1 + Math.round((thursday - firstThursday) / 604_800_000);
+  return {
+    year: isoYear,
+    week,
+    key: `${isoYear}-W${String(week).padStart(2, "0")}`,
   };
 }
 
@@ -1933,12 +2191,23 @@ function getOccurrenceDateTimeRange(event) {
   const start = fromDateKey(getEventDate(event));
   start.setHours(hour, minute, 0, 0);
   const end = new Date(start);
-  end.setMinutes(end.getMinutes() + DEFAULT_EVENT_DURATION_MINUTES);
+  end.setMinutes(end.getMinutes() + getOccurrenceDurationMinutes(event));
   return { start, end };
 }
 
+function getOccurrenceDurationMinutes(event = {}) {
+  event = event || {};
+  const durationMinutes = Number(event.durationMinutes);
+  return Number.isFinite(durationMinutes) && durationMinutes > 0 ? durationMinutes : DEFAULT_EVENT_DURATION_MINUTES;
+}
+
+function getEventDialogDurationMinutes() {
+  const durationMinutes = Number(els.eventDurationMinutes.value);
+  return Number.isFinite(durationMinutes) && durationMinutes > 0 ? durationMinutes : DEFAULT_EVENT_DURATION_MINUTES;
+}
+
 function getOccurrenceDurationHours(event = {}) {
-  return (event.durationMinutes || DEFAULT_EVENT_DURATION_MINUTES) / 60;
+  return getOccurrenceDurationMinutes(event) / 60;
 }
 
 function getWorkedHoursForDate(dateKey) {
@@ -2134,10 +2403,11 @@ function renderHeatmapView() {
     day.dataset.hours = String(hours);
     day.title = `${longDateFormatter.format(date)} · ${formatHours(hours)} worked`;
     day.setAttribute("aria-label", day.title);
-    day.addEventListener("click", () => {
+    day.addEventListener("click", (event) => {
       selectedDate = new Date(date);
       viewAnchorDate = new Date(date);
       visibleMonth = startOfMonth(date);
+      heatmapDetailsAnchor = getHeatmapDetailsAnchor(event);
       render();
     });
     grid.append(day);
@@ -2152,16 +2422,54 @@ function renderHeatmapView() {
   `;
 
   body.append(weekdayLabels, grid);
-  heatmap.append(summary, monthRow, body, legend, createHeatmapDetails(selectedHeatmapDate));
+  heatmap.append(summary, monthRow, body, legend);
+
+  if (heatmapDetailsAnchor) {
+    const details = createHeatmapDetails(selectedHeatmapDate, { popover: true });
+    heatmap.append(details);
+    positionHeatmapDetails(details, heatmapDetailsAnchor);
+  }
+
   els.monthGrid.replaceChildren(heatmap);
 }
 
-function createHeatmapDetails(date) {
+function getHeatmapDetailsAnchor(event) {
+  const targetRect = event.currentTarget.getBoundingClientRect();
+  const x = event.clientX || targetRect.left + targetRect.width / 2;
+  const y = event.clientY || targetRect.top + targetRect.height / 2;
+  return { x, y };
+}
+
+function positionHeatmapDetails(details, anchor) {
+  const viewportMargin = 16;
+  const cursorOffset = 14;
+  const setPosition = () => {
+    const rect = details.getBoundingClientRect();
+    let left = anchor.x + cursorOffset;
+    let top = anchor.y + cursorOffset;
+
+    if (left + rect.width > window.innerWidth - viewportMargin) {
+      left = anchor.x - rect.width - cursorOffset;
+    }
+    if (top + rect.height > window.innerHeight - viewportMargin) {
+      top = anchor.y - rect.height - cursorOffset;
+    }
+
+    details.style.left = `${Math.max(viewportMargin, left)}px`;
+    details.style.top = `${Math.max(viewportMargin, top)}px`;
+  };
+
+  details.style.left = `${anchor.x + cursorOffset}px`;
+  details.style.top = `${anchor.y + cursorOffset}px`;
+  requestAnimationFrame(setPosition);
+}
+
+function createHeatmapDetails(date, { popover = false } = {}) {
   const dateKey = toDateKey(date);
   const dayEvents = getFilteredEventsForDate(dateKey);
   const hours = getWorkedHoursForDate(dateKey);
   const details = document.createElement("section");
-  details.className = "heatmap-details";
+  details.className = ["heatmap-details", popover ? "heatmap-details--popover" : ""].filter(Boolean).join(" ");
   details.setAttribute("aria-label", "Selected heatmap day details");
 
   const header = document.createElement("header");
@@ -2430,15 +2738,117 @@ function createWeekSlot(date, hour) {
   const slot = document.createElement("button");
   slot.className = "week-slot";
   slot.type = "button";
+  slot.dataset.date = dateKey;
+  slot.dataset.hour = String(hour);
   slot.style.top = `${hour * WEEK_HOUR_HEIGHT}px`;
   slot.setAttribute("aria-label", `Create event on ${longDateFormatter.format(date)} at ${formatHourLabel(hour) || "12 AM"}`);
-  slot.addEventListener("click", () => {
+  slot.addEventListener("pointerdown", (event) => startWeekRangeDrag(event, date, hour));
+  slot.addEventListener("click", (event) => {
+    if (suppressNextWeekSlotClick) {
+      event.preventDefault();
+      suppressNextWeekSlotClick = false;
+      return;
+    }
     selectedDate = new Date(date);
     ensureDateVisible(date);
-    openEventDialog(dateKey);
-    els.eventTime.value = formatTimeInput(hour);
+    openEventDialog(dateKey, null, { time: formatTimeInput(hour), durationMinutes: DEFAULT_EVENT_DURATION_MINUTES });
   });
   return slot;
+}
+
+function startWeekRangeDrag(event, date, hour) {
+  if (event.button !== 0 || activeWeekRangeDrag) return;
+
+  const column = event.currentTarget.closest(".week-day-column");
+  if (!column) return;
+
+  const selection = document.createElement("div");
+  selection.className = "week-drag-selection";
+  column.append(selection);
+
+  activeWeekRangeDrag = {
+    date: new Date(date),
+    dateKey: toDateKey(date),
+    column,
+    selection,
+    startHour: hour,
+    endHour: hour,
+    startX: event.clientX,
+    startY: event.clientY,
+    moved: false,
+  };
+  updateWeekRangeDragSelection(activeWeekRangeDrag);
+
+  window.addEventListener("pointermove", handleWeekRangeDragMove);
+  window.addEventListener("pointerup", handleWeekRangeDragEnd);
+  window.addEventListener("pointercancel", cancelWeekRangeDrag);
+}
+
+function handleWeekRangeDragMove(event) {
+  if (!activeWeekRangeDrag) return;
+
+  const nextHour = getWeekRangeDragHour(activeWeekRangeDrag, event);
+  const distance = Math.hypot(event.clientX - activeWeekRangeDrag.startX, event.clientY - activeWeekRangeDrag.startY);
+  activeWeekRangeDrag.moved = activeWeekRangeDrag.moved || distance > 4 || nextHour !== activeWeekRangeDrag.startHour;
+  activeWeekRangeDrag.endHour = nextHour;
+  updateWeekRangeDragSelection(activeWeekRangeDrag);
+}
+
+function handleWeekRangeDragEnd() {
+  if (!activeWeekRangeDrag) return;
+
+  const drag = activeWeekRangeDrag;
+  cleanupWeekRangeDrag();
+
+  if (!drag.moved) return;
+
+  suppressNextWeekSlotClick = true;
+  setTimeout(() => {
+    suppressNextWeekSlotClick = false;
+  }, 0);
+
+  const range = getWeekRangeDragRange(drag);
+  selectedDate = new Date(drag.date);
+  ensureDateVisible(drag.date);
+  openEventDialog(drag.dateKey, null, {
+    time: formatTimeInput(range.startHour),
+    durationMinutes: range.durationMinutes,
+  });
+}
+
+function cancelWeekRangeDrag() {
+  cleanupWeekRangeDrag();
+}
+
+function cleanupWeekRangeDrag() {
+  if (activeWeekRangeDrag?.selection) activeWeekRangeDrag.selection.remove();
+  activeWeekRangeDrag = null;
+  window.removeEventListener("pointermove", handleWeekRangeDragMove);
+  window.removeEventListener("pointerup", handleWeekRangeDragEnd);
+  window.removeEventListener("pointercancel", cancelWeekRangeDrag);
+}
+
+function getWeekRangeDragHour(drag, event) {
+  const rect = drag.column.getBoundingClientRect();
+  const y = Math.min(Math.max(event.clientY - rect.top, 0), rect.height - 1);
+  return Math.min(23, Math.max(0, Math.floor(y / WEEK_HOUR_HEIGHT)));
+}
+
+function getWeekRangeDragRange(drag) {
+  const startHour = Math.min(drag.startHour, drag.endHour);
+  const endHour = Math.max(drag.startHour, drag.endHour) + 1;
+  return {
+    startHour,
+    endHour,
+    durationMinutes: (endHour - startHour) * 60,
+  };
+}
+
+function updateWeekRangeDragSelection(drag) {
+  const range = getWeekRangeDragRange(drag);
+  drag.selection.style.top = `${range.startHour * WEEK_HOUR_HEIGHT + 2}px`;
+  drag.selection.style.height = `${Math.max(32, ((range.durationMinutes / 60) * WEEK_HOUR_HEIGHT) - 4)}px`;
+  drag.selection.textContent = `${formatHourBoundary(range.startHour)} – ${formatHourBoundary(range.endHour)} · ${formatHours(range.durationMinutes / 60)}`;
 }
 
 function createWeekTimedEvent(calendarEvent) {
@@ -2446,7 +2856,7 @@ function createWeekTimedEvent(calendarEvent) {
   const [hour, minute] = calendarEvent.time.split(":").map(Number);
   const startMinutes = hour * 60 + minute;
   const top = (startMinutes / 60) * WEEK_HOUR_HEIGHT;
-  const height = (DEFAULT_EVENT_DURATION_MINUTES / 60) * WEEK_HOUR_HEIGHT;
+  const height = (getOccurrenceDurationMinutes(calendarEvent) / 60) * WEEK_HOUR_HEIGHT;
 
   const eventButton = document.createElement("button");
   eventButton.className = "week-timed-event";
@@ -2537,13 +2947,14 @@ function renderUpcoming() {
   );
 }
 
-function openEventDialog(dateKey, existingEvent = null) {
+function openEventDialog(dateKey, existingEvent = null, options = {}) {
   els.eventForm.reset();
   els.eventId.value = existingEvent?.id ?? "";
   els.eventOccurrenceDate.value = existingEvent ? getEventDate(existingEvent) : dateKey;
+  els.eventDurationMinutes.value = String(options.durationMinutes ?? getOccurrenceDurationMinutes(existingEvent));
   els.eventTitle.value = existingEvent?.title ?? "";
   els.eventDate.value = existingEvent?.date ?? dateKey;
-  els.eventTime.value = existingEvent?.time ?? "";
+  els.eventTime.value = options.time ?? existingEvent?.time ?? "";
   els.eventCalendar.value = existingEvent?.calendar ?? getDefaultEventCalendarId();
   els.eventRepeat.value = existingEvent?.repeat ?? "none";
   els.eventNotes.value = existingEvent?.notes ?? "";
@@ -2584,6 +2995,7 @@ function saveEventFromDialog(event) {
   const repeat = els.eventRepeat.value;
   const isRecurring = repeat !== "none";
   const assignedTitle = selectedPapers.length ? getReadEventTitleForPapers(els.eventTitle.value, selectedPapers) : els.eventTitle.value.trim();
+  const durationMinutes = getEventDialogDurationMinutes();
 
   const formEvent = {
     id,
@@ -2594,6 +3006,7 @@ function saveEventFromDialog(event) {
     repeat,
     paperTaskIds: isRecurring && selectedPapers.length ? existingEvent?.paperTaskIds ?? [] : selectedPapers.map((paper) => paper.id),
     papers: isRecurring && selectedPapers.length ? existingEvent?.papers ?? [] : selectedPapers,
+    durationMinutes,
     instanceOverrides: existingEvent?.instanceOverrides ?? {},
     notes: els.eventNotes.value.trim(),
   };
@@ -2691,6 +3104,7 @@ function deleteRecurringSeries() {
 function setView(view) {
   if (!VIEW_LABELS[view] || currentView === view) return;
   currentView = view;
+  heatmapDetailsAnchor = null;
   viewAnchorDate = new Date(selectedDate);
   visibleMonth = startOfMonth(selectedDate);
   render();
@@ -2698,6 +3112,7 @@ function setView(view) {
 
 function jumpToCurrentTime() {
   const now = getNow();
+  heatmapDetailsAnchor = null;
   currentView = "week";
   selectedDate = new Date(now);
   viewAnchorDate = new Date(now);
@@ -2708,6 +3123,7 @@ function jumpToCurrentTime() {
 }
 
 function navigatePeriod(direction) {
+  heatmapDetailsAnchor = null;
   if (currentView === "month") {
     visibleMonth = addMonths(visibleMonth, direction);
     selectedDate = new Date(
@@ -3201,6 +3617,11 @@ function formatHourLabel(hour) {
   return new Intl.DateTimeFormat("en-US", {
     hour: "numeric",
   }).format(new Date(2026, 0, 1, hour));
+}
+
+function formatHourBoundary(hour) {
+  if (hour === 24) return "12 AM";
+  return formatHourLabel(hour) || "12 AM";
 }
 
 function formatTimeInput(hour) {
