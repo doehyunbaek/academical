@@ -10,8 +10,10 @@ const STORAGE_DELETED_CALENDARS = "academical.deletedCalendars.v1";
 const STORAGE_PAPER_TASKS = "academical.paperTasks.v1";
 const STORAGE_SYNC_UPDATED_AT = "academical.sync.updatedAt.v1";
 const STORAGE_SIDEBAR_LOCATION = "academical.sidebarLocation.v1";
+const STORAGE_DEADLINE_FILTER_TAGS = "academical.deadlineFilterTags.v1";
 
 const VIEW_LABELS = {
+  deadlines: "Deadlines",
   week: "Week",
   month: "Month",
   "four-week": "4 weeks",
@@ -32,6 +34,117 @@ const ACTIVITY_CATEGORIES = [
   { key: "code", label: "Code", color: "#82ca9d" },
   { key: "write", label: "Write", color: "#ffc658" },
   { key: "meet", label: "Meet", color: "#d84e4e" },
+];
+const DEADLINE_TYPES = [
+  { name: "Conference", tag: "CO", type: "venue" },
+  { name: "Journal", tag: "JO", type: "venue" },
+  { name: "Workshop", tag: "WO", type: "venue" },
+  { name: "Research paper track", tag: "RPT", type: "track" },
+  { name: "Short paper track", tag: "SPT", type: "track" },
+  { name: "In practice track", tag: "IPT", type: "track" },
+  { name: "Society track", tag: "SOT", type: "track" },
+  { name: "Education track", tag: "EDT", type: "track" },
+  { name: "Journal first track", tag: "JFT", type: "track" },
+  { name: "Artifact track", tag: "ART", type: "track" },
+  { name: "Tool track", tag: "TOT", type: "track" },
+  { name: "New ideas and emerging results track", tag: "NIER", type: "track" },
+  { name: "Doctoral symposium", tag: "DOS", type: "track" },
+  { name: "New faculty symposium", tag: "NFS", type: "track" },
+  { name: "Student research competition", tag: "SRC", type: "track" },
+  { name: "Late breaking track", tag: "LBT", type: "track" },
+  { name: "Registered reports track", tag: "RRT", type: "track" },
+  { name: "Challenge track", tag: "CHT", type: "track" },
+  { name: "Tutorials and technical briefings track", tag: "TTBT", type: "track" },
+  { name: "Experience papers track", tag: "EXPT", type: "track" },
+  { name: "Replicability studies track", tag: "REST", type: "track" },
+];
+const DEADLINE_CONFERENCES = [
+  {
+    name: "ICSE",
+    description: "International Conference on Software Engineering - Research Track",
+    year: 2027,
+    link: "https://icse2027-research.hotcrp.com/",
+    deadlines: ["2026-06-30 23:59"],
+    date: "TBA",
+    place: "TBA",
+    note: "Mandatory abstract deadline on June 23, 2026. All dates are AoE (UTC-12).",
+  },
+  {
+    name: "ICSE",
+    description: "International Conference on Software Engineering - Research Track",
+    year: 2026,
+    link: "https://conf.researchr.org/track/icse-2026/icse-2026-research-track",
+    deadlines: ["2025-03-14 23:59", "2025-07-18 23:59"],
+    date: "April 12 - 18, 2026",
+    place: "Rio de Janeiro, Brazil",
+    note: "Mandatory abstract deadline on March 7 (first deadline) and July 11 (second deadline) 2024.",
+  },
+  {
+    name: "ICSE",
+    description: "International Conference on Software Engineering - Research Track",
+    year: 2025,
+    link: "https://conf.researchr.org/track/icse-2025/icse-2025-research-track",
+    deadlines: ["2024-03-22 23:59", "2024-08-02 23:59"],
+    date: "April 27 - May 3, 2025",
+    place: "Ottawa, Ontario, Canada",
+    note: "Mandatory abstract deadline on March 15 (first deadline) and July 26 (second deadline) 2024.",
+  },
+  {
+    name: "FSE",
+    description: "International Conference on the Foundations of Software Engineering - Research Papers",
+    year: 2026,
+    link: "https://conf.researchr.org/track/fse-2026/fse-2026-research-papers",
+    deadlines: ["2025-09-11 23:59"],
+    date: "July 6 - 10, 2026",
+    place: "Montreal, Canda",
+    note: "Mandatory abstract deadline on September 4 2024.",
+  },
+  {
+    name: "FSE",
+    description: "International Conference on the Foundations of Software Engineering - Research Papers",
+    year: 2025,
+    link: "https://conf.researchr.org/track/fse-2025/fse-2025-research-papers",
+    deadlines: ["2024-09-12 23:59"],
+    date: "June 23 - 27, 2025",
+    place: "Trondheim, Norway",
+    note: "Mandatory abstract deadline on September 5 2024.",
+  },
+  {
+    name: "ASE",
+    description: "International Conference on Automated Software Engineering - Research Papers",
+    year: 2026,
+    link: "https://conf.researchr.org/track/ase-2026/ase-2026-research-track",
+    deadlines: ["2026-03-26 23:59"],
+    date: "October 12 - 16, 2026",
+    place: "Munich, Germany",
+  },
+  {
+    name: "ASE",
+    description: "International Conference on Automated Software Engineering - Research Papers",
+    year: 2025,
+    link: "https://conf.researchr.org/track/ase-2025/ase-2025-papers",
+    deadlines: ["2025-05-30 23:59"],
+    date: "November 16 - 20, 2025",
+    place: "Seoul, South Korea",
+  },
+  {
+    name: "ISSTA",
+    description: "International Symposium on Software Testing and Analysis",
+    year: 2026,
+    link: "https://conf.researchr.org/track/issta-2026/issta-2026-research-papers",
+    deadlines: ["2026-01-29 23:59"],
+    date: "October 3 - 9, 2026",
+    place: "Oakland, California, United States",
+  },
+  {
+    name: "ISSTA",
+    description: "International Symposium on Software Testing and Analysis",
+    year: 2025,
+    link: "https://conf.researchr.org/track/issta-2025/issta-2025-papers#Call-for-Papers",
+    deadlines: ["2024-10-31 23:59"],
+    date: "June 25 - 28, 2025",
+    place: "Trondheim, Norway",
+  },
 ];
 
 const defaultCalendars = [
@@ -268,6 +381,7 @@ let activeSidebarPanel = "calendar";
 let paperTasks = loadPaperTasks();
 let searchQuery = "";
 let heatmapDetailsAnchor = null;
+let deadlineFilterTags = loadDeadlineFilterTags();
 let activeWeekRangeDrag = null;
 let suppressNextWeekSlotClick = false;
 let firebaseSync = createFirebaseSyncState();
@@ -290,6 +404,7 @@ function init() {
   render();
   initFirebaseSync();
   setInterval(updateNowIndicator, 60_000);
+  setInterval(updateDeadlineTimers, 1_000);
 }
 
 function bindEvents() {
@@ -472,6 +587,9 @@ function bindEvents() {
     } else if (["q", "w", "e", "r"].includes(key)) {
       event.preventDefault();
       soloCalendar(["q", "w", "e", "r"].indexOf(key));
+    } else if (key === "1") {
+      event.preventDefault();
+      setView("deadlines");
     } else if (key === "2") {
       event.preventDefault();
       setView("week");
@@ -501,7 +619,7 @@ function render() {
 }
 
 function applyViewClass() {
-  document.body.classList.remove("view-week", "view-month", "view-four-week", "view-heatmap");
+  document.body.classList.remove("view-deadlines", "view-week", "view-month", "view-four-week", "view-heatmap");
   document.body.classList.add(`view-${currentView}`);
 }
 
@@ -2260,8 +2378,13 @@ function populateCalendarSelect() {
 }
 
 function renderMonthGrid() {
-  els.weekdayRow.hidden = currentView === "week" || currentView === "heatmap";
+  els.weekdayRow.hidden = ["deadlines", "week", "heatmap"].includes(currentView);
   els.monthGrid.className = `month-grid month-grid--${currentView}`;
+
+  if (currentView === "deadlines") {
+    renderDeadlineView();
+    return;
+  }
 
   if (currentView === "week") {
     renderWeekTimeline();
@@ -2276,6 +2399,207 @@ function renderMonthGrid() {
   els.monthGrid.replaceChildren(
     ...getMainCalendarDates().map((date) => createDayCell(date))
   );
+}
+
+function renderDeadlineView() {
+  const allDeadlines = getDeadlineEntries();
+  const deadlines = getFilteredDeadlineEntries(allDeadlines);
+  const upcomingCount = deadlines.filter((entry) => !entry.isPast).length;
+
+  const view = document.createElement("section");
+  view.className = "deadline-view";
+  view.setAttribute("aria-label", "Research venue deadlines");
+
+  const header = document.createElement("header");
+  header.className = "deadline-view-header";
+  header.innerHTML = `
+    <div>
+      <p class="deadline-kicker">Internalized from /deadlines</p>
+      <h2>Research venue deadlines</h2>
+      <p>Countdowns to top Research Venues deadlines.</p>
+    </div>
+    <strong>${upcomingCount} upcoming · ${deadlines.length}/${allDeadlines.length} shown</strong>
+  `;
+
+  const filters = createDeadlineFilters();
+  const list = document.createElement("div");
+  list.className = "deadline-list";
+  if (deadlines.length) {
+    list.replaceChildren(...deadlines.map(createDeadlineCard));
+  } else {
+    const empty = document.createElement("p");
+    empty.className = "deadline-empty";
+    empty.textContent = "No deadlines match the selected filters.";
+    list.replaceChildren(empty);
+  }
+
+  view.append(header, filters, list);
+  els.monthGrid.replaceChildren(view);
+  updateDeadlineTimers();
+}
+
+function createDeadlineFilters() {
+  const form = document.createElement("form");
+  form.className = "deadline-filters";
+  form.setAttribute("aria-label", "Deadline filters");
+  form.addEventListener("change", (event) => {
+    const input = event.target.closest("input[data-deadline-filter-tag]");
+    if (!input) return;
+
+    const selected = new Set(deadlineFilterTags);
+    if (input.checked) {
+      selected.add(input.dataset.deadlineFilterTag);
+    } else {
+      selected.delete(input.dataset.deadlineFilterTag);
+    }
+    deadlineFilterTags = [...selected].filter(isValidDeadlineFilterTag);
+    saveDeadlineFilterTags();
+    renderDeadlineView();
+  });
+
+  const groups = [
+    ["venue", "Venue"],
+    ["track", "Track"],
+  ].map(([type, label]) => {
+    const group = document.createElement("fieldset");
+    group.className = "deadline-filter-group";
+    const legend = document.createElement("legend");
+    legend.textContent = label;
+    group.append(legend, ...DEADLINE_TYPES.filter((item) => item.type === type).map(createDeadlineFilterOption));
+    return group;
+  });
+
+  form.replaceChildren(...groups);
+  return form;
+}
+
+function createDeadlineFilterOption(type) {
+  const label = document.createElement("label");
+  label.className = "deadline-filter-option";
+  label.innerHTML = `
+    <input type="checkbox" data-deadline-filter-tag="${escapeHtml(type.tag)}" ${deadlineFilterTags.includes(type.tag) ? "checked" : ""} />
+    <span>${escapeHtml(type.name)}</span>
+  `;
+  return label;
+}
+
+function getFilteredDeadlineEntries(entries) {
+  if (!deadlineFilterTags.length) return entries;
+  return entries.filter((entry) => deadlineFilterTags.every((tag) => entry.tags.includes(tag)));
+}
+
+function getDeadlineEntries() {
+  const now = getNow();
+  return DEADLINE_CONFERENCES.flatMap((conference) => {
+    const deadlines = Array.isArray(conference.deadlines) ? conference.deadlines : [conference.deadlines];
+    return deadlines.map((rawDeadline, index) => {
+      const date = parseDeadlineDate(rawDeadline, conference.timezone);
+      return {
+        ...conference,
+        id: makeDeadlineId(conference, index),
+        rawDeadline,
+        tags: normalizeDeadlineTags(conference.tags),
+        deadline: date,
+        deadlineIndex: index,
+        deadlineCount: deadlines.length,
+        isPast: date <= now,
+      };
+    });
+  }).sort(compareDeadlineEntries);
+}
+
+function normalizeDeadlineTags(tags) {
+  const normalized = Array.isArray(tags) ? tags.filter(isValidDeadlineFilterTag) : [];
+  return normalized.length ? normalized : ["CO", "RPT"];
+}
+
+function createDeadlineCard(entry) {
+  const card = document.createElement("article");
+  card.className = ["deadline-card", entry.isPast ? "deadline-card--past" : ""].filter(Boolean).join(" ");
+  card.dataset.deadlineAt = entry.deadline.toISOString();
+  card.id = entry.id;
+
+  const deadlineLabel = entry.deadlineCount > 1
+    ? `Deadline (${entry.deadlineIndex + 1} / ${entry.deadlineCount})`
+    : "Deadline";
+  const place = entry.place ? `// ${escapeHtml(entry.place)}` : "";
+  const note = entry.note ? `<p class="deadline-note">${escapeHtml(entry.note)}</p>` : "";
+
+  card.innerHTML = `
+    <div class="deadline-card-main">
+      <h3><a href="${escapeHtml(entry.link)}" target="_blank" rel="noreferrer">${escapeHtml(entry.name)} ${entry.year}</a></h3>
+      <p>${escapeHtml(entry.description)}</p>
+      <p class="deadline-meta">${escapeHtml(String(entry.date)).replace(/ - /g, " – ")} ${place}</p>
+      ${note}
+    </div>
+    <div class="deadline-card-countdown">
+      <strong class="deadline-countdown" data-deadline-at="${entry.deadline.toISOString()}">${formatDeadlineDistance(entry.deadline)}</strong>
+      <p>${deadlineLabel}: <span>${formatDeadlineDate(entry.deadline)}</span></p>
+      <span class="deadline-timezone">AoE / UTC-12</span>
+    </div>
+  `;
+
+  return card;
+}
+
+function updateDeadlineTimers() {
+  if (currentView !== "deadlines") return;
+  document.querySelectorAll(".deadline-countdown[data-deadline-at]").forEach((item) => {
+    const deadline = new Date(item.dataset.deadlineAt);
+    item.textContent = formatDeadlineDistance(deadline);
+  });
+}
+
+function compareDeadlineEntries(a, b) {
+  const now = getNow();
+  const aDiff = now - a.deadline;
+  const bDiff = now - b.deadline;
+  if (aDiff < 0 && bDiff > 0) return -1;
+  if (aDiff > 0 && bDiff < 0) return 1;
+  if (aDiff < 0 && bDiff < 0) return bDiff - aDiff;
+  if (aDiff > 0 && bDiff > 0) return aDiff - bDiff;
+  return a.deadline - b.deadline;
+}
+
+function parseDeadlineDate(rawDeadline, timezone = "") {
+  if (!rawDeadline || rawDeadline === "TBA") return new Date("3000-01-01T00:00:00-12:00");
+  const normalized = String(rawDeadline).trim().replace(" ", "T");
+  const withSeconds = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}$/.test(normalized) ? `${normalized}:59` : normalized;
+  const offset = timezone || "-12:00";
+  return new Date(`${withSeconds}${offset}`);
+}
+
+function formatDeadlineDate(date) {
+  return new Intl.DateTimeFormat("en-US", {
+    month: "short",
+    day: "numeric",
+    year: "numeric",
+    hour: "numeric",
+    minute: "2-digit",
+    second: "2-digit",
+  }).format(date);
+}
+
+function formatDeadlineDistance(date) {
+  const diffMs = date - getNow();
+  const absSeconds = Math.max(0, Math.floor(Math.abs(diffMs) / 1000));
+  const days = Math.floor(absSeconds / 86_400);
+  const hours = Math.floor((absSeconds % 86_400) / 3_600);
+  const minutes = Math.floor((absSeconds % 3_600) / 60);
+  const seconds = absSeconds % 60;
+
+  if (diffMs < 0) {
+    if (days) return `${days} day${days === 1 ? "" : "s"} ago`;
+    if (hours) return `${hours}h ago`;
+    if (minutes) return `${minutes}m ago`;
+    return `${seconds}s ago`;
+  }
+
+  return `${String(days).padStart(2, "0")} days ${String(hours).padStart(2, "0")}h ${String(minutes).padStart(2, "0")}m ${String(seconds).padStart(2, "0")}s`;
+}
+
+function makeDeadlineId(conference, index) {
+  return `deadline-${conference.name}-${conference.year}-${index}`.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "");
 }
 
 function getHeatmapDateRange() {
@@ -3124,6 +3448,7 @@ function jumpToCurrentTime() {
 
 function navigatePeriod(direction) {
   heatmapDetailsAnchor = null;
+  if (currentView === "deadlines") return;
   if (currentView === "month") {
     visibleMonth = addMonths(visibleMonth, direction);
     selectedDate = new Date(
@@ -3184,6 +3509,7 @@ function getVisibleDateRange() {
 }
 
 function getHeaderTitle(start, end) {
+  if (currentView === "deadlines") return "Deadlines";
   if (currentView === "month") return monthFormatter.format(visibleMonth);
   return formatDateRange(start, end);
 }
@@ -3502,6 +3828,23 @@ function loadSidebarLocation() {
 
 function saveSidebarLocation() {
   localStorage.setItem(STORAGE_SIDEBAR_LOCATION, sidebarLocation);
+}
+
+function loadDeadlineFilterTags() {
+  try {
+    const saved = JSON.parse(localStorage.getItem(STORAGE_DEADLINE_FILTER_TAGS) || "[]");
+    return Array.isArray(saved) ? saved.filter(isValidDeadlineFilterTag) : [];
+  } catch {
+    return [];
+  }
+}
+
+function saveDeadlineFilterTags() {
+  localStorage.setItem(STORAGE_DEADLINE_FILTER_TAGS, JSON.stringify(deadlineFilterTags));
+}
+
+function isValidDeadlineFilterTag(tag) {
+  return DEADLINE_TYPES.some((type) => type.tag === tag);
 }
 
 function createReferenceToday() {

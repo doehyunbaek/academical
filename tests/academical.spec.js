@@ -33,6 +33,10 @@ test('weeks start on Monday in month and week views', async ({ page }) => {
 
 test('keyboard shortcuts switch views and navigate periods', async ({ page }) => {
   await page.goto('/');
+  await page.keyboard.press('1');
+  await expect(page.locator('#viewSelect')).toHaveValue('deadlines');
+  await expect(page.locator('#monthTitle')).toHaveText('Deadlines');
+  await expect(page.locator('.deadline-view')).toBeVisible();
   await page.keyboard.press('2');
   await expect(page.locator('#viewSelect')).toHaveValue('week');
   await expect(page.locator('#monthTitle')).toHaveText('Jun 29 – Jul 5, 2026');
@@ -48,6 +52,39 @@ test('keyboard shortcuts switch views and navigate periods', async ({ page }) =>
   await expect(page.locator('#viewSelect')).toHaveValue('month');
 });
 
+
+test('deadline view internalizes deadlines app entries', async ({ page }) => {
+  await page.goto('/');
+  await page.keyboard.press('1');
+
+  await expect(page.locator('#viewSelect')).toHaveValue('deadlines');
+  await expect(page.locator('.weekday-row')).toBeHidden();
+  await expect(page.locator('.deadline-view-header')).toContainText('Research venue deadlines');
+  await expect(page.locator('.deadline-card')).toHaveCount(11);
+  await expect(page.locator('.deadline-card').first()).toContainText('ICSE 2027');
+  await expect(page.locator('.deadline-card').first()).toContainText('Deadline:');
+  await expect(page.locator('.deadline-timezone').first()).toHaveText('AoE / UTC-12');
+  await expect(page.locator('input[data-deadline-filter-tag="CO"]')).not.toBeChecked();
+  await expect(page.locator('input[data-deadline-filter-tag="RPT"]')).not.toBeChecked();
+});
+
+test('deadline view filters by selected tags and persists the selection', async ({ page }) => {
+  await page.goto('/');
+  await page.keyboard.press('1');
+
+  await page.locator('input[data-deadline-filter-tag="JO"]').check();
+  await expect(page.locator('.deadline-card')).toHaveCount(0);
+  await expect(page.locator('.deadline-empty')).toContainText('No deadlines match');
+
+  await page.locator('input[data-deadline-filter-tag="JO"]').uncheck();
+  await page.locator('input[data-deadline-filter-tag="CO"]').check();
+  await expect(page.locator('.deadline-card')).toHaveCount(11);
+
+  await page.reload();
+  await page.keyboard.press('1');
+  await expect(page.locator('input[data-deadline-filter-tag="CO"]')).toBeChecked();
+  await expect(page.locator('.deadline-card')).toHaveCount(11);
+});
 
 test('heatmap view renders one square per day with worked-hour intensity', async ({ page }) => {
   await page.goto('/');
