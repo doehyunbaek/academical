@@ -27,10 +27,10 @@
         <button class="button button--outline" id="todayButton" type="button">Today</button>
 
         <div class="nav-buttons" aria-label="Calendar navigation">
-          <button class="icon-button" id="previousMonth" type="button" aria-label="Previous month">
+          <button class="icon-button" id="previousMonth" type="button" aria-label="Previous period">
             <span aria-hidden="true">‹</span>
           </button>
-          <button class="icon-button" id="nextMonth" type="button" aria-label="Next month">
+          <button class="icon-button" id="nextMonth" type="button" aria-label="Next period">
             <span aria-hidden="true">›</span>
           </button>
         </div>
@@ -45,59 +45,104 @@
         </label>
 
         <select class="view-select" id="viewSelect" aria-label="Calendar view">
-          <option>Day</option>
-          <option>Week</option>
-          <option selected>Month</option>
-          <option>Schedule</option>
+          <option value="week">Week</option>
+          <option value="month" selected>Month</option>
+          <option value="four-week">4 weeks</option>
+          <option value="heatmap">Heatmap</option>
         </select>
 
-        <button class="icon-button icon-button--hide-sm" type="button" aria-label="Settings">
+        <button class="icon-button icon-button--hide-sm" id="settingsButton" type="button" aria-label="Settings">
           <span aria-hidden="true">⚙</span>
         </button>
-        <div class="avatar" aria-label="Signed in as DB">DB</div>
+        <div class="account-menu">
+          <button class="avatar-button" id="accountButton" type="button" aria-label="Account and sync" aria-haspopup="dialog" aria-expanded="false">
+            <span class="avatar" id="userAvatar" aria-hidden="true">
+              <svg viewBox="0 0 24 24" focusable="false" aria-hidden="true">
+                <path d="M12 12c2.21 0 4-1.79 4-4s-1.79-4-4-4-4 1.79-4 4 1.79 4 4 4Zm0 2c-2.67 0-8 1.34-8 4v1.5c0 .28.22.5.5.5h15c.28 0 .5-.22.5-.5V18c0-2.66-5.33-4-8-4Z"></path>
+              </svg>
+            </span>
+          </button>
+          <div class="account-popover" id="accountPopover" role="dialog" aria-labelledby="accountPopoverTitle" hidden>
+            <h2 id="accountPopoverTitle">Account sync</h2>
+            <p class="sync-status" id="syncStatus">Local only</p>
+            <button class="button button--outline sync-button" id="syncAuthButton" type="button">Sign in</button>
+          </div>
+        </div>
       </header>
 
       <div class="workspace">
         <aside class="sidebar" id="sidebar">
-          <button class="create-button" id="createEventButton" type="button">
+          <nav class="sidebar-tabs" id="sidebarTabs" aria-label="Sidebar panels">
+            <button class="sidebar-tab" type="button" data-panel="calendar">Calendar</button>
+            <button class="sidebar-tab" type="button" data-panel="papers">Papers</button>
+            <button class="sidebar-tab" type="button" data-panel="upcoming">Upcoming</button>
+            <button class="sidebar-tab" type="button" data-panel="analysis">Time analysis</button>
+          </nav>
+
+          <button class="create-button sidebar-create-button" id="createEventButton" type="button">
             <span aria-hidden="true">＋</span>
             Create
           </button>
 
-          <section class="sidebar-card mini-calendar-card" aria-labelledby="miniCalendarTitle">
-            <header class="mini-calendar-header">
-              <h2 id="miniCalendarTitle">July 2026</h2>
-              <div>
-                <button class="mini-nav" id="miniPrevious" type="button" aria-label="Previous month">‹</button>
-                <button class="mini-nav" id="miniNext" type="button" aria-label="Next month">›</button>
+          <div class="sidebar-panel" data-panel="calendar">
+            <section class="sidebar-section" aria-labelledby="calendarsTitle">
+              <header class="section-title-row">
+                <h2 id="calendarsTitle">My calendars</h2>
+                <button class="calendar-add-button" id="addCalendarButton" type="button" aria-label="Create calendar" title="Create calendar">＋</button>
+              </header>
+              <div class="calendar-toggles" id="calendarToggles"></div>
+            </section>
+
+            <section class="sidebar-section" id="archivedCalendarsSection" aria-labelledby="archivedCalendarsTitle" hidden>
+              <button class="archive-toggle" id="archivedCalendarsToggle" type="button" aria-expanded="false" aria-controls="archivedCalendarList">
+                <span class="archive-caret" id="archivedCalendarsCaret" aria-hidden="true">›</span>
+                <span id="archivedCalendarsTitle">Archived calendars</span>
+              </button>
+              <div class="archived-calendar-list" id="archivedCalendarList" hidden></div>
+            </section>
+          </div>
+
+          <div class="sidebar-panel" data-panel="papers" hidden>
+            <section class="sidebar-section" aria-labelledby="paperTasksTitle">
+              <h2 id="paperTasksTitle">Paper tasks <span class="section-count" id="paperTaskCount">0</span></h2>
+              <form class="paper-task-form" id="paperTaskForm">
+                <label class="sr-only" for="paperTaskInput">Paper titles</label>
+                <textarea id="paperTaskInput" rows="4" placeholder="Paste paper titles, one per line"></textarea>
+                <button class="button button--primary paper-task-submit" type="submit">Add papers</button>
+              </form>
+              <div class="paper-task-list" id="paperTaskList"></div>
+            </section>
+          </div>
+
+          <div class="sidebar-panel" data-panel="upcoming" hidden>
+            <section class="sidebar-section" aria-labelledby="upcomingTitle">
+              <h2 id="upcomingTitle">Upcoming</h2>
+              <div class="upcoming-list" id="upcomingList"></div>
+            </section>
+          </div>
+
+          <div class="sidebar-panel" data-panel="analysis" hidden>
+            <section class="sidebar-section sidebar-time-analysis" aria-labelledby="sidebarTimeAnalysisTitle">
+              <h2 id="sidebarTimeAnalysisTitle">Time analysis</h2>
+              <p class="empty-state" id="sidebarTimeAnalysisEmpty">No events in the current view.</p>
+              <div class="sidebar-time-analysis-content" id="sidebarTimeAnalysisContent" hidden>
+                <span id="sidebarTimeAnalysisRange"></span>
+                <p id="sidebarTimeAnalysisSummary"></p>
+                <div class="time-analysis-list" id="sidebarTimeAnalysisList"></div>
               </div>
-            </header>
-            <div class="mini-weekdays" aria-hidden="true">
-              <span>S</span><span>M</span><span>T</span><span>W</span><span>T</span><span>F</span><span>S</span>
-            </div>
-            <div class="mini-grid" id="miniCalendar" aria-label="Mini month calendar"></div>
-          </section>
-
-          <section class="sidebar-section" aria-labelledby="calendarsTitle">
-            <h2 id="calendarsTitle">My calendars</h2>
-            <div class="calendar-toggles" id="calendarToggles"></div>
-          </section>
-
-          <section class="sidebar-section" aria-labelledby="upcomingTitle">
-            <h2 id="upcomingTitle">Upcoming</h2>
-            <div class="upcoming-list" id="upcomingList"></div>
-          </section>
+            </section>
+          </div>
         </aside>
 
-        <main class="calendar-panel" aria-label="Month calendar">
+        <main class="calendar-panel" aria-label="Calendar">
           <div class="weekday-row" aria-hidden="true">
-            <span>Sun</span>
             <span>Mon</span>
             <span>Tue</span>
             <span>Wed</span>
             <span>Thu</span>
             <span>Fri</span>
             <span>Sat</span>
+            <span>Sun</span>
           </div>
           <div class="month-grid" id="monthGrid"></div>
         </main>
@@ -113,7 +158,7 @@
     </div>
 
     <div class="modal-backdrop" id="eventModal" aria-hidden="true">
-      <form class="event-dialog" id="eventForm" role="dialog" aria-modal="true" aria-labelledby="eventDialogTitle">
+      <form class="event-dialog" id="eventForm" role="dialog" aria-modal="true" aria-labelledby="eventDialogTitle" tabindex="-1">
         <header class="event-dialog-header">
           <span class="dialog-drag" aria-hidden="true"></span>
           <h2 id="eventDialogTitle">Create event</h2>
@@ -121,6 +166,7 @@
         </header>
 
         <input id="eventId" type="hidden" />
+        <input id="eventOccurrenceDate" type="hidden" />
 
         <label class="field field--title" for="eventTitle">
           <span>Title</span>
@@ -139,10 +185,30 @@
           </label>
         </div>
 
-        <label class="field" for="eventCalendar">
-          <span>Calendar</span>
-          <select id="eventCalendar" name="calendar" required></select>
-        </label>
+        <div class="field-grid">
+          <label class="field" for="eventCalendar">
+            <span>Calendar</span>
+            <select id="eventCalendar" name="calendar" required></select>
+          </label>
+
+          <label class="field" for="eventRepeat">
+            <span>Repeat</span>
+            <select id="eventRepeat" name="repeat">
+              <option value="none">Does not repeat</option>
+              <option value="daily">Daily</option>
+              <option value="weekly">Weekly</option>
+              <option value="weekdays">Every weekday</option>
+            </select>
+          </label>
+        </div>
+
+        <section class="paper-assignment" id="eventPaperAssignment" hidden>
+          <header class="paper-assignment-header">
+            <h3>Assigned papers</h3>
+            <span id="eventPaperAssignmentCount">0 selected</span>
+          </header>
+          <div class="paper-assignment-list" id="eventPaperAssignmentList"></div>
+        </section>
 
         <label class="field" for="eventNotes">
           <span>Notes</span>
@@ -151,6 +217,7 @@
 
         <footer class="event-dialog-footer">
           <button class="button button--danger" id="deleteEvent" type="button">Delete</button>
+          <button class="button button--danger" id="deleteSeriesEvent" type="button" hidden>Delete recurring</button>
           <span class="footer-spacer"></span>
           <button class="button" id="cancelEvent" type="button">Cancel</button>
           <button class="button button--primary" type="submit">Save</button>
@@ -158,8 +225,118 @@
       </form>
     </div>
 
+    <div class="modal-backdrop" id="paperModal" aria-hidden="true">
+      <form class="event-dialog paper-dialog" id="paperModalForm" role="dialog" aria-modal="true" aria-labelledby="paperDialogTitle" tabindex="-1">
+        <header class="event-dialog-header">
+          <span class="dialog-drag" aria-hidden="true"></span>
+          <h2 id="paperDialogTitle">Add paper</h2>
+          <button class="icon-button" id="closePaperModal" type="button" aria-label="Close add paper dialog">×</button>
+        </header>
+
+        <label class="field" for="paperModalInput">
+          <span>Paper titles or arXiv URLs</span>
+          <textarea id="paperModalInput" rows="7" placeholder="Paste paper titles or arXiv URLs, one per line&#10;Enter to add · Shift+Enter for newline&#10;https://arxiv.org/pdf/2505.17716"></textarea>
+        </label>
+
+        <footer class="event-dialog-footer">
+          <span class="footer-spacer"></span>
+          <button class="button" id="cancelPaperModal" type="button">Cancel</button>
+          <button class="button button--primary" type="submit">Add papers</button>
+        </footer>
+      </form>
+    </div>
+
+    <div class="modal-backdrop" id="calendarModal" aria-hidden="true">
+      <form class="event-dialog calendar-dialog" id="calendarModalForm" role="dialog" aria-modal="true" aria-labelledby="calendarDialogTitle" tabindex="-1">
+        <header class="event-dialog-header">
+          <span class="dialog-drag" aria-hidden="true"></span>
+          <h2 id="calendarDialogTitle">Create calendar</h2>
+          <button class="icon-button" id="closeCalendarModal" type="button" aria-label="Close create calendar dialog">×</button>
+        </header>
+
+        <label class="field" for="calendarNameInput">
+          <span>Calendar name</span>
+          <input id="calendarNameInput" type="text" placeholder="New calendar" autocomplete="off" />
+        </label>
+
+        <div class="field">
+          <span>Color</span>
+          <input id="calendarColorInput" type="hidden" value="blue" />
+          <div class="color-palette" id="calendarColorPalette" role="listbox" aria-label="Calendar color"></div>
+        </div>
+
+        <section class="calendar-import-option" aria-labelledby="calendarImportTitle">
+          <h3 id="calendarImportTitle">Import from ICS</h3>
+          <p>Optional: choose one or more <code>.ics</code> files to create imported calendars with events.</p>
+          <input id="calendarFileInput" type="file" accept=".ics,text/calendar" multiple />
+        </section>
+
+        <footer class="event-dialog-footer">
+          <span class="footer-spacer"></span>
+          <button class="button" id="cancelCalendarModal" type="button">Cancel</button>
+          <button class="button button--primary" type="submit">Create</button>
+        </footer>
+      </form>
+    </div>
+
+    <div class="modal-backdrop" id="editCalendarModal" aria-hidden="true">
+      <form class="event-dialog calendar-dialog" id="editCalendarForm" role="dialog" aria-modal="true" aria-labelledby="editCalendarDialogTitle" tabindex="-1">
+        <header class="event-dialog-header">
+          <span class="dialog-drag" aria-hidden="true"></span>
+          <h2 id="editCalendarDialogTitle">Edit calendar</h2>
+          <button class="icon-button" id="closeEditCalendarModal" type="button" aria-label="Close edit calendar dialog">×</button>
+        </header>
+
+        <input id="editCalendarId" type="hidden" />
+
+        <label class="field" for="editCalendarNameInput">
+          <span>Calendar name</span>
+          <input id="editCalendarNameInput" type="text" required autocomplete="off" />
+        </label>
+
+        <div class="field">
+          <span>Color</span>
+          <input id="editCalendarColorInput" type="hidden" value="blue" />
+          <div class="color-palette" id="editCalendarColorPalette" role="listbox" aria-label="Edit calendar color"></div>
+        </div>
+
+        <footer class="event-dialog-footer">
+          <span class="footer-spacer"></span>
+          <button class="button" id="cancelEditCalendarModal" type="button">Cancel</button>
+          <button class="button button--primary" type="submit">Save</button>
+        </footer>
+      </form>
+    </div>
+
+    <div class="modal-backdrop" id="settingsModal" aria-hidden="true">
+      <form class="event-dialog settings-dialog" id="settingsForm" role="dialog" aria-modal="true" aria-labelledby="settingsDialogTitle" tabindex="-1">
+        <header class="event-dialog-header">
+          <span class="dialog-drag" aria-hidden="true"></span>
+          <h2 id="settingsDialogTitle">Settings</h2>
+          <button class="icon-button" id="closeSettingsModal" type="button" aria-label="Close settings dialog">×</button>
+        </header>
+
+        <fieldset class="settings-fieldset">
+          <legend>Sidebar location</legend>
+          <label><input type="radio" name="sidebarLocation" value="left" /> Left</label>
+          <label><input type="radio" name="sidebarLocation" value="bottom" /> Bottom</label>
+          <label><input type="radio" name="sidebarLocation" value="right" /> Right</label>
+        </fieldset>
+
+        <footer class="event-dialog-footer">
+          <span class="footer-spacer"></span>
+          <button class="button" id="cancelSettingsModal" type="button">Cancel</button>
+          <button class="button button--primary" type="submit">Save</button>
+        </footer>
+      </form>
+    </div>
+
     <div class="toast" id="toast" role="status" aria-live="polite"></div>
 
+    <script src="./google-api-config.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/10.12.5/firebase-app-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/10.12.5/firebase-auth-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/10.12.5/firebase-firestore-compat.js"></script>
     <script type="module" src="app.js"></script>
   </body>
 </html>

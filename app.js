@@ -1,14 +1,66 @@
-const TODAY = new Date(2026, 6, 2); // Matches the supplied Google Calendar July 2026 reference.
+const TODAY = createReferenceToday();
 const STORAGE_EVENTS = "academical.events.v1";
+const STORAGE_CUSTOM_CALENDARS = "academical.customCalendars.v1";
+const STORAGE_CALENDAR_ORDER = "academical.calendarOrder.v1";
+const STORAGE_CALENDAR_RENAMES = "academical.calendarRenames.v1";
+const STORAGE_CALENDAR_COLORS = "academical.calendarColors.v1";
 const STORAGE_VISIBLE_CALENDARS = "academical.visibleCalendars.v1";
+const STORAGE_ARCHIVED_CALENDARS = "academical.archivedCalendars.v1";
+const STORAGE_DELETED_CALENDARS = "academical.deletedCalendars.v1";
+const STORAGE_PAPER_TASKS = "academical.paperTasks.v1";
+const STORAGE_SYNC_UPDATED_AT = "academical.sync.updatedAt.v1";
+const STORAGE_SIDEBAR_LOCATION = "academical.sidebarLocation.v1";
 
-const calendars = [
-  { id: "teaching", name: "Teaching", color: "#1a73e8" },
-  { id: "research", name: "Research", color: "#188038" },
-  { id: "deadlines", name: "Deadlines", color: "#d93025" },
-  { id: "personal", name: "Personal", color: "#9334e6" },
-  { id: "tasks", name: "Tasks", color: "#f9ab00" },
+const VIEW_LABELS = {
+  week: "Week",
+  month: "Month",
+  "four-week": "4 weeks",
+  heatmap: "Heatmap",
+};
+const WEEK_START_DAY = 1; // Monday
+const HOURS = Array.from({ length: 24 }, (_, hour) => hour);
+const WEEK_HOUR_HEIGHT = 72;
+const DEFAULT_EVENT_DURATION_MINUTES = 60;
+const REPEAT_LABELS = {
+  none: "Does not repeat",
+  daily: "Daily",
+  weekly: "Weekly",
+  weekdays: "Every weekday",
+};
+
+const defaultCalendars = [
+  { id: "teaching", name: "Teaching", color: "#1a73e8", builtIn: true },
+  { id: "research", name: "Research", color: "#188038", builtIn: true },
+  { id: "deadlines", name: "Deadlines", color: "#d93025", builtIn: true },
+  { id: "personal", name: "Personal", color: "#9334e6", builtIn: true },
+  { id: "tasks", name: "Tasks", color: "#f9ab00", builtIn: true },
 ];
+const importedCalendarColors = ["#1a73e8", "#188038", "#d93025", "#9334e6", "#f9ab00", "#0891b2", "#c026d3", "#ea580c"];
+const basicColorKeywords = [
+  "black",
+  "silver",
+  "gray",
+  "white",
+  "maroon",
+  "red",
+  "purple",
+  "fuchsia",
+  "green",
+  "lime",
+  "olive",
+  "yellow",
+  "navy",
+  "blue",
+  "teal",
+  "aqua",
+  "transparent",
+  "rebeccapurple",
+];
+let customCalendars = loadCustomCalendars();
+let calendarNameOverrides = loadCalendarNameOverrides();
+let calendarColorOverrides = loadCalendarColorOverrides();
+let calendarOrderIds = loadCalendarOrderIds();
+let calendars = getCalendars();
 
 const seedEvents = [
   {
@@ -86,34 +138,83 @@ const seedEvents = [
 ];
 
 const els = {
+  accountButton: document.querySelector("#accountButton"),
+  accountPopover: document.querySelector("#accountPopover"),
+  archivedCalendarList: document.querySelector("#archivedCalendarList"),
+  archivedCalendarsCaret: document.querySelector("#archivedCalendarsCaret"),
+  archivedCalendarsSection: document.querySelector("#archivedCalendarsSection"),
+  archivedCalendarsToggle: document.querySelector("#archivedCalendarsToggle"),
   brandDay: document.querySelector("#brandDay"),
+  addCalendarButton: document.querySelector("#addCalendarButton"),
+  calendarColorInput: document.querySelector("#calendarColorInput"),
+  calendarColorPalette: document.querySelector("#calendarColorPalette"),
+  calendarFileInput: document.querySelector("#calendarFileInput"),
+  calendarModal: document.querySelector("#calendarModal"),
+  calendarModalForm: document.querySelector("#calendarModalForm"),
+  calendarNameInput: document.querySelector("#calendarNameInput"),
   calendarToggles: document.querySelector("#calendarToggles"),
+  cancelCalendarModal: document.querySelector("#cancelCalendarModal"),
   cancelEvent: document.querySelector("#cancelEvent"),
+  closeCalendarModal: document.querySelector("#closeCalendarModal"),
   closeModal: document.querySelector("#closeModal"),
   createEventButton: document.querySelector("#createEventButton"),
   deleteEvent: document.querySelector("#deleteEvent"),
+  deleteSeriesEvent: document.querySelector("#deleteSeriesEvent"),
+  editCalendarColorInput: document.querySelector("#editCalendarColorInput"),
+  editCalendarColorPalette: document.querySelector("#editCalendarColorPalette"),
+  editCalendarForm: document.querySelector("#editCalendarForm"),
+  editCalendarId: document.querySelector("#editCalendarId"),
+  editCalendarModal: document.querySelector("#editCalendarModal"),
+  editCalendarNameInput: document.querySelector("#editCalendarNameInput"),
+  cancelEditCalendarModal: document.querySelector("#cancelEditCalendarModal"),
+  closeEditCalendarModal: document.querySelector("#closeEditCalendarModal"),
   eventCalendar: document.querySelector("#eventCalendar"),
   eventDate: document.querySelector("#eventDate"),
   eventForm: document.querySelector("#eventForm"),
   eventId: document.querySelector("#eventId"),
   eventModal: document.querySelector("#eventModal"),
   eventNotes: document.querySelector("#eventNotes"),
+  eventOccurrenceDate: document.querySelector("#eventOccurrenceDate"),
+  eventPaperAssignment: document.querySelector("#eventPaperAssignment"),
+  eventPaperAssignmentCount: document.querySelector("#eventPaperAssignmentCount"),
+  eventPaperAssignmentList: document.querySelector("#eventPaperAssignmentList"),
+  eventRepeat: document.querySelector("#eventRepeat"),
   eventTime: document.querySelector("#eventTime"),
   eventTitle: document.querySelector("#eventTitle"),
-  miniCalendar: document.querySelector("#miniCalendar"),
-  miniCalendarTitle: document.querySelector("#miniCalendarTitle"),
-  miniNext: document.querySelector("#miniNext"),
-  miniPrevious: document.querySelector("#miniPrevious"),
   monthGrid: document.querySelector("#monthGrid"),
   monthTitle: document.querySelector("#monthTitle"),
   nextMonth: document.querySelector("#nextMonth"),
+  paperModal: document.querySelector("#paperModal"),
+  paperModalForm: document.querySelector("#paperModalForm"),
+  paperModalInput: document.querySelector("#paperModalInput"),
+  paperTaskCount: document.querySelector("#paperTaskCount"),
+  paperTaskForm: document.querySelector("#paperTaskForm"),
+  paperTaskInput: document.querySelector("#paperTaskInput"),
+  paperTaskList: document.querySelector("#paperTaskList"),
   previousMonth: document.querySelector("#previousMonth"),
   searchInput: document.querySelector("#searchInput"),
+  settingsButton: document.querySelector("#settingsButton"),
+  settingsForm: document.querySelector("#settingsForm"),
+  settingsModal: document.querySelector("#settingsModal"),
+  closeSettingsModal: document.querySelector("#closeSettingsModal"),
+  cancelSettingsModal: document.querySelector("#cancelSettingsModal"),
+  closePaperModal: document.querySelector("#closePaperModal"),
+  cancelPaperModal: document.querySelector("#cancelPaperModal"),
+  sidebarTabs: document.querySelector("#sidebarTabs"),
+  sidebarTimeAnalysisContent: document.querySelector("#sidebarTimeAnalysisContent"),
+  sidebarTimeAnalysisEmpty: document.querySelector("#sidebarTimeAnalysisEmpty"),
+  sidebarTimeAnalysisList: document.querySelector("#sidebarTimeAnalysisList"),
+  sidebarTimeAnalysisRange: document.querySelector("#sidebarTimeAnalysisRange"),
+  sidebarTimeAnalysisSummary: document.querySelector("#sidebarTimeAnalysisSummary"),
   sidebarToggle: document.querySelector("#sidebarToggle"),
   todayButton: document.querySelector("#todayButton"),
   toast: document.querySelector("#toast"),
+  syncAuthButton: document.querySelector("#syncAuthButton"),
+  syncStatus: document.querySelector("#syncStatus"),
   upcomingList: document.querySelector("#upcomingList"),
+  userAvatar: document.querySelector("#userAvatar"),
   viewSelect: document.querySelector("#viewSelect"),
+  weekdayRow: document.querySelector(".weekday-row"),
 };
 
 const monthFormatter = new Intl.DateTimeFormat("en-US", {
@@ -130,39 +231,96 @@ const compactDateFormatter = new Intl.DateTimeFormat("en-US", {
   month: "short",
   day: "numeric",
 });
+const shortMonthFormatter = new Intl.DateTimeFormat("en-US", {
+  month: "short",
+});
+const shortWeekdayFormatter = new Intl.DateTimeFormat("en-US", {
+  weekday: "short",
+});
+const rangeMonthDayFormatter = new Intl.DateTimeFormat("en-US", {
+  month: "short",
+  day: "numeric",
+});
+const rangeFullMonthDayFormatter = new Intl.DateTimeFormat("en-US", {
+  month: "long",
+  day: "numeric",
+});
 
+let currentView = "month";
 let visibleMonth = startOfMonth(TODAY);
 let selectedDate = new Date(TODAY);
+let viewAnchorDate = new Date(TODAY);
 let events = loadEvents();
 let visibleCalendars = loadVisibleCalendars();
+let archivedCalendarIds = loadArchivedCalendarIds();
+let deletedCalendarIds = loadDeletedCalendarIds();
+let archivedCalendarsExpanded = false;
+let sidebarLocation = loadSidebarLocation();
+let activeSidebarPanel = "calendar";
+let paperTasks = loadPaperTasks();
 let searchQuery = "";
+let firebaseSync = createFirebaseSyncState();
+let activeEventPaperSnapshots = [];
+let draggedCalendarId = "";
 
 init();
 
 function init() {
   els.brandDay.textContent = TODAY.getDate();
+  applySidebarLocation();
+  setSidebarPanel(activeSidebarPanel);
+  renderColorPalette(els.calendarColorPalette, els.calendarColorInput, "blue");
+  renderColorPalette(els.editCalendarColorPalette, els.editCalendarColorInput, "blue");
   populateCalendarSelect();
   renderCalendarToggles();
+  renderArchivedCalendars();
   bindEvents();
+  renderPaperTasks();
   render();
+  initFirebaseSync();
+  setInterval(updateNowIndicator, 60_000);
 }
 
 function bindEvents() {
+  els.accountButton.addEventListener("click", (event) => {
+    event.stopPropagation();
+    toggleAccountPopover();
+  });
+
+  document.addEventListener("click", (event) => {
+    if (!els.accountPopover.hidden && !event.target.closest(".account-menu")) {
+      closeAccountPopover();
+    }
+  });
+
   els.sidebarToggle.addEventListener("click", () => {
     document.body.classList.toggle("sidebar-collapsed");
   });
+  els.sidebarTabs.addEventListener("click", (event) => {
+    const button = event.target.closest(".sidebar-tab");
+    if (!button) return;
+    setSidebarPanel(button.dataset.panel);
+  });
+  els.settingsButton.addEventListener("click", openSettingsModal);
+  els.settingsForm.addEventListener("submit", saveSettingsFromDialog);
+  els.closeSettingsModal.addEventListener("click", closeSettingsModal);
+  els.cancelSettingsModal.addEventListener("click", closeSettingsModal);
+  els.settingsModal.addEventListener("click", (event) => {
+    if (event.target === els.settingsModal) closeSettingsModal();
+  });
 
   els.todayButton.addEventListener("click", () => {
-    selectedDate = new Date(TODAY);
-    visibleMonth = startOfMonth(TODAY);
+    const now = getNow();
+    selectedDate = new Date(now);
+    viewAnchorDate = new Date(now);
+    visibleMonth = startOfMonth(now);
     render();
+    if (currentView === "week") requestAnimationFrame(centerWeekScrollerOnNow);
     showToast("Jumped to today");
   });
 
-  els.previousMonth.addEventListener("click", () => changeMonth(-1));
-  els.nextMonth.addEventListener("click", () => changeMonth(1));
-  els.miniPrevious.addEventListener("click", () => changeMonth(-1));
-  els.miniNext.addEventListener("click", () => changeMonth(1));
+  els.previousMonth.addEventListener("click", () => navigatePeriod(-1));
+  els.nextMonth.addEventListener("click", () => navigatePeriod(1));
 
   els.createEventButton.addEventListener("click", () => {
     openEventDialog(toDateKey(selectedDate));
@@ -172,13 +330,44 @@ function bindEvents() {
     searchQuery = event.target.value.trim().toLowerCase();
     renderMonthGrid();
     renderUpcoming();
+    renderSidebarTimeAnalysisIfActive();
+  });
+
+  els.eventTitle.addEventListener("input", () => {
+    renderEventPaperAssignment(getSelectedEventPaperIds());
   });
 
   els.viewSelect.addEventListener("change", (event) => {
-    if (event.target.value !== "Month") {
-      showToast(`${event.target.value} view is coming next. Month view is active for now.`);
-      event.target.value = "Month";
+    setView(event.target.value);
+  });
+
+  els.addCalendarButton.addEventListener("click", openCalendarModal);
+  els.calendarModalForm.addEventListener("submit", createCalendarFromDialog);
+  els.closeCalendarModal.addEventListener("click", closeCalendarModal);
+  els.cancelCalendarModal.addEventListener("click", closeCalendarModal);
+  els.calendarModal.addEventListener("click", (event) => {
+    if (event.target === els.calendarModal) closeCalendarModal();
+  });
+  els.editCalendarForm.addEventListener("submit", saveEditedCalendar);
+  els.closeEditCalendarModal.addEventListener("click", closeEditCalendarModal);
+  els.cancelEditCalendarModal.addEventListener("click", closeEditCalendarModal);
+  els.editCalendarModal.addEventListener("click", (event) => {
+    if (event.target === els.editCalendarModal) closeEditCalendarModal();
+  });
+  els.archivedCalendarsToggle.addEventListener("click", toggleArchivedCalendars);
+  els.syncAuthButton.addEventListener("click", toggleFirebaseAuth);
+  els.paperTaskForm.addEventListener("submit", addPaperTasksFromInput);
+  els.paperModalForm.addEventListener("submit", addPaperTasksFromInput);
+  els.paperModalInput.addEventListener("keydown", (event) => {
+    if (event.key === "Enter" && !event.shiftKey) {
+      event.preventDefault();
+      els.paperModalForm.requestSubmit();
     }
+  });
+  els.closePaperModal.addEventListener("click", closePaperModal);
+  els.cancelPaperModal.addEventListener("click", closePaperModal);
+  els.paperModal.addEventListener("click", (event) => {
+    if (event.target === els.paperModal) closePaperModal();
   });
 
   els.closeModal.addEventListener("click", closeEventDialog);
@@ -188,52 +377,1611 @@ function bindEvents() {
   });
 
   document.addEventListener("keydown", (event) => {
-    if (event.key === "Escape" && els.eventModal.classList.contains("is-open")) {
+    const isModalOpen = els.eventModal.classList.contains("is-open");
+    const isPaperModalOpen = els.paperModal.classList.contains("is-open");
+    const isCalendarModalOpen = els.calendarModal.classList.contains("is-open");
+    const isEditCalendarModalOpen = els.editCalendarModal.classList.contains("is-open");
+    const isSettingsModalOpen = els.settingsModal.classList.contains("is-open");
+
+    if (event.key === "Escape" && !els.accountPopover.hidden) {
+      closeAccountPopover();
+      return;
+    }
+
+    if (event.key === "Escape" && isPaperModalOpen) {
+      closePaperModal();
+      return;
+    }
+
+    if (event.key === "Escape" && isCalendarModalOpen) {
+      closeCalendarModal();
+      return;
+    }
+
+    if (event.key === "Escape" && isEditCalendarModalOpen) {
+      closeEditCalendarModal();
+      return;
+    }
+
+    if (event.key === "Escape" && isSettingsModalOpen) {
+      closeSettingsModal();
+      return;
+    }
+
+    if (event.key === "Escape" && isModalOpen) {
       closeEventDialog();
+      return;
+    }
+
+    if (isPaperModalOpen || isCalendarModalOpen || isEditCalendarModalOpen || isSettingsModalOpen) return;
+
+    if (isModalOpen) {
+      if (event.key === "Backspace" && els.eventId.value && !isTypingTarget(event.target)) {
+        event.preventDefault();
+        deleteActiveEvent();
+      }
+      return;
+    }
+
+    if (isTypingTarget(event.target)) return;
+
+    const key = event.key.toLowerCase();
+    if (event.ctrlKey && !event.metaKey && !event.altKey && ["1", "2", "3", "4"].includes(key)) {
+      event.preventDefault();
+      selectSidebarPanelByPosition(Number(key) - 1);
+      return;
+    }
+
+    if (event.metaKey || event.ctrlKey || event.altKey) return;
+    if (key === "j") {
+      event.preventDefault();
+      navigatePeriod(1);
+    } else if (key === "k") {
+      event.preventDefault();
+      navigatePeriod(-1);
+    } else if (key === "t") {
+      event.preventDefault();
+      jumpToCurrentTime();
+    } else if (key === "p") {
+      event.preventDefault();
+      openPaperModal();
+    } else if (key === "a") {
+      event.preventDefault();
+      selectAllCalendars();
+    } else if (["q", "w", "e", "r"].includes(key)) {
+      event.preventDefault();
+      soloCalendar(["q", "w", "e", "r"].indexOf(key));
+    } else if (key === "2") {
+      event.preventDefault();
+      setView("week");
+    } else if (key === "3") {
+      event.preventDefault();
+      setView("month");
+    } else if (key === "4") {
+      event.preventDefault();
+      setView("four-week");
+    } else if (key === "5") {
+      event.preventDefault();
+      setView("heatmap");
     }
   });
 
   els.eventForm.addEventListener("submit", saveEventFromDialog);
   els.deleteEvent.addEventListener("click", deleteActiveEvent);
+  els.deleteSeriesEvent.addEventListener("click", deleteRecurringSeries);
 }
 
 function render() {
   renderHeader();
   renderMonthGrid();
-  renderMiniCalendar();
   renderUpcoming();
+  if (activeSidebarPanel === "analysis") renderSidebarTimeAnalysis();
 }
 
 function renderHeader() {
-  els.monthTitle.textContent = monthFormatter.format(visibleMonth);
-  els.miniCalendarTitle.textContent = monthFormatter.format(visibleMonth);
+  const { start, end } = getVisibleDateRange();
+  els.monthTitle.textContent = getHeaderTitle(start, end);
+  els.viewSelect.value = currentView;
   els.todayButton.setAttribute("aria-label", `Today, ${longDateFormatter.format(TODAY)}`);
+  els.previousMonth.setAttribute("aria-label", `Previous ${VIEW_LABELS[currentView].toLowerCase()}`);
+  els.nextMonth.setAttribute("aria-label", `Next ${VIEW_LABELS[currentView].toLowerCase()}`);
 }
 
-function renderCalendarToggles() {
-  els.calendarToggles.replaceChildren(
-    ...calendars.map((calendar) => {
-      const label = document.createElement("label");
-      label.className = "calendar-toggle";
-      label.innerHTML = `
-        <input type="checkbox" ${visibleCalendars[calendar.id] ? "checked" : ""} data-calendar="${calendar.id}" />
-        <span class="calendar-dot" style="--calendar-color: ${calendar.color}"></span>
-        <span>${calendar.name}</span>
-      `;
-      label.querySelector("input").addEventListener("change", (event) => {
-        visibleCalendars[calendar.id] = event.target.checked;
-        saveVisibleCalendars();
-        renderMonthGrid();
-        renderUpcoming();
-      });
-      return label;
+function toggleAccountPopover() {
+  const isOpen = !els.accountPopover.hidden;
+  if (isOpen) {
+    closeAccountPopover();
+  } else {
+    openAccountPopover();
+  }
+}
+
+function openAccountPopover() {
+  els.accountPopover.hidden = false;
+  els.accountButton.setAttribute("aria-expanded", "true");
+}
+
+function closeAccountPopover() {
+  els.accountPopover.hidden = true;
+  els.accountButton.setAttribute("aria-expanded", "false");
+}
+
+function openSettingsModal() {
+  const selected = els.settingsForm.elements.sidebarLocation;
+  [...selected].forEach((input) => {
+    input.checked = input.value === sidebarLocation;
+  });
+  els.settingsModal.classList.add("is-open");
+  els.settingsModal.setAttribute("aria-hidden", "false");
+}
+
+function closeSettingsModal() {
+  els.settingsModal.classList.remove("is-open");
+  els.settingsModal.setAttribute("aria-hidden", "true");
+}
+
+function saveSettingsFromDialog(event) {
+  event.preventDefault();
+  const selected = new FormData(els.settingsForm).get("sidebarLocation");
+  if (isValidSidebarLocation(selected)) {
+    sidebarLocation = selected;
+    saveSidebarLocation();
+    applySidebarLocation();
+  }
+  closeSettingsModal();
+  showToast("Settings saved");
+}
+
+function applySidebarLocation() {
+  document.body.classList.remove("sidebar-location-left", "sidebar-location-bottom", "sidebar-location-right");
+  document.body.classList.add(`sidebar-location-${sidebarLocation}`);
+}
+
+function setSidebarPanel(panel) {
+  if (!["calendar", "papers", "upcoming", "analysis"].includes(panel)) return;
+  activeSidebarPanel = panel;
+  document.querySelectorAll(".sidebar-panel").forEach((item) => {
+    item.hidden = item.dataset.panel !== activeSidebarPanel;
+  });
+  els.sidebarTabs.querySelectorAll(".sidebar-tab").forEach((button) => {
+    const selected = button.dataset.panel === activeSidebarPanel;
+    button.classList.toggle("is-active", selected);
+    button.setAttribute("aria-selected", String(selected));
+  });
+  if (panel === "analysis") renderSidebarTimeAnalysis();
+}
+
+function selectSidebarPanelByPosition(position) {
+  const tab = els.sidebarTabs.querySelectorAll(".sidebar-tab")[position];
+  if (tab?.dataset.panel) setSidebarPanel(tab.dataset.panel);
+}
+
+function renderSidebarTimeAnalysisIfActive() {
+  if (activeSidebarPanel === "analysis") renderSidebarTimeAnalysis();
+}
+
+function renderSidebarTimeAnalysis() {
+  const analysis = getCurrentViewTimeAnalysis();
+  if (!analysis.occurrences.length) {
+    els.sidebarTimeAnalysisEmpty.hidden = false;
+    els.sidebarTimeAnalysisContent.hidden = true;
+    els.sidebarTimeAnalysisList.replaceChildren();
+    return;
+  }
+
+  els.sidebarTimeAnalysisEmpty.hidden = true;
+  els.sidebarTimeAnalysisContent.hidden = false;
+  els.sidebarTimeAnalysisRange.textContent = analysis.rangeLabel;
+  els.sidebarTimeAnalysisSummary.textContent = `${analysis.occurrences.length} occurrence${analysis.occurrences.length === 1 ? "" : "s"} · ${formatHours(analysis.totalHours)}`;
+  els.sidebarTimeAnalysisList.replaceChildren(
+    ...analysis.occurrences.map((occurrence) => {
+      const item = document.createElement("div");
+      item.className = "time-analysis-item";
+      item.innerHTML = `<span>${escapeHtml(occurrence.label)}</span><strong>${formatHours(occurrence.hours)}</strong>`;
+      return item;
     })
   );
 }
 
+function createFirebaseSyncState() {
+  return {
+    configured: false,
+    busy: false,
+    user: null,
+    app: null,
+    auth: null,
+    firestore: null,
+    provider: null,
+    unsubscribe: null,
+    applyingRemote: false,
+    syncTimer: null,
+  };
+}
+
+function initFirebaseSync() {
+  const config = window.ACADEMICAL_GOOGLE_CONFIG || {};
+
+  if (!config.firebaseConfig?.apiKey || !window.firebase?.initializeApp) {
+    firebaseSync.configured = false;
+    updateFirebaseSyncUi("Cloud sync unavailable");
+    return;
+  }
+
+  try {
+    firebaseSync.app = window.firebase.apps?.length
+      ? window.firebase.app()
+      : window.firebase.initializeApp(config.firebaseConfig);
+    firebaseSync.auth = window.firebase.auth(firebaseSync.app);
+    firebaseSync.firestore = window.firebase.firestore(firebaseSync.app);
+    firebaseSync.provider = new window.firebase.auth.GoogleAuthProvider();
+    (config.scopes || ["profile", "email"]).forEach((scope) => firebaseSync.provider.addScope(scope));
+    firebaseSync.auth.setPersistence(window.firebase.auth.Auth.Persistence.LOCAL);
+    firebaseSync.configured = true;
+
+    firebaseSync.auth.onAuthStateChanged((user) => {
+      firebaseSync.user = user ? getFirebaseUserProfile(user) : null;
+      if (firebaseSync.user) {
+        startCloudSync().catch(handleFirebaseSyncError);
+      } else {
+        stopCloudListener();
+      }
+      updateFirebaseSyncUi();
+    });
+  } catch (error) {
+    firebaseSync.configured = false;
+    handleFirebaseSyncError(error);
+  }
+
+  updateFirebaseSyncUi();
+}
+
+function getFirebaseUserProfile(user) {
+  return {
+    id: user.uid,
+    email: user.email || "",
+    name: user.displayName || user.email || "Google user",
+    picture: user.photoURL || "",
+  };
+}
+
+async function toggleFirebaseAuth() {
+  if (!firebaseSync.configured || !firebaseSync.auth) return;
+
+  firebaseSync.busy = true;
+  updateFirebaseSyncUi(firebaseSync.user ? "Signing out..." : "Opening Google sign-in...");
+
+  try {
+    if (firebaseSync.user) {
+      await firebaseSync.auth.signOut();
+      showToast("Signed out of cloud sync");
+    } else {
+      await firebaseSync.auth.signInWithPopup(firebaseSync.provider);
+      showToast("Signed in with Firebase sync");
+    }
+  } catch (error) {
+    handleFirebaseSyncError(error);
+  } finally {
+    firebaseSync.busy = false;
+    updateFirebaseSyncUi();
+  }
+}
+
+function updateFirebaseSyncUi(message = "") {
+  if (!els.syncAuthButton || !els.syncStatus) return;
+
+  if (!firebaseSync.configured) {
+    els.syncAuthButton.textContent = "Sync off";
+    els.syncAuthButton.disabled = true;
+    els.syncAuthButton.classList.remove("connected");
+    els.accountButton.classList.remove("connected");
+    els.accountButton.setAttribute("aria-label", "Account and sync unavailable");
+    els.syncStatus.textContent = message || "Cloud sync unavailable";
+    return;
+  }
+
+  els.syncAuthButton.disabled = firebaseSync.busy;
+  els.syncAuthButton.textContent = firebaseSync.user ? "Sign out" : "Sign in";
+  els.syncAuthButton.classList.toggle("connected", Boolean(firebaseSync.user));
+  els.accountButton.classList.toggle("connected", Boolean(firebaseSync.user));
+  els.accountButton.setAttribute(
+    "aria-label",
+    firebaseSync.user ? `Account and sync, signed in as ${firebaseSync.user.name || firebaseSync.user.email}` : "Account and sync, not signed in"
+  );
+  els.syncStatus.textContent = message || (firebaseSync.user ? `Synced as ${firebaseSync.user.email || firebaseSync.user.name}` : "Local only");
+}
+
+function userStateDocRef() {
+  if (!firebaseSync.user || !firebaseSync.firestore) throw new Error("Sign in to sync.");
+  return firebaseSync.firestore.collection("users").doc(firebaseSync.user.id).collection("academical").doc("state");
+}
+
+function getCloudStatePayload() {
+  const updatedAt = getLocalSyncUpdatedAt() || touchLocalSyncUpdatedAt();
+  return {
+    updatedAt,
+    events,
+    paperTasks,
+    customCalendars,
+    calendarNameOverrides,
+    calendarColorOverrides,
+    calendarOrderIds,
+    visibleCalendars,
+    archivedCalendarIds,
+    deletedCalendarIds,
+  };
+}
+
+async function startCloudSync() {
+  if (!firebaseSync.user) return;
+  updateFirebaseSyncUi("Checking Firestore...");
+
+  const docRef = userStateDocRef();
+  const snapshot = await docRef.get();
+  const remote = snapshot.exists ? snapshot.data() : null;
+  const localUpdatedAt = getLocalSyncUpdatedAt();
+
+  if (remote?.updatedAt && isRemoteNewer(remote.updatedAt, localUpdatedAt)) {
+    applyRemoteState(remote);
+    updateFirebaseSyncUi("Downloaded from Firestore");
+  } else {
+    await docRef.set(getCloudStatePayload(), { merge: true });
+    updateFirebaseSyncUi("Uploaded local data to Firestore");
+  }
+
+  stopCloudListener();
+  firebaseSync.unsubscribe = docRef.onSnapshot((nextSnapshot) => {
+    if (!nextSnapshot.exists || firebaseSync.applyingRemote) return;
+    const remoteState = nextSnapshot.data();
+    if (remoteState?.updatedAt && isRemoteNewer(remoteState.updatedAt, getLocalSyncUpdatedAt())) {
+      applyRemoteState(remoteState);
+      renderCalendarToggles();
+      renderArchivedCalendars();
+      renderPaperTasks();
+      populateCalendarSelect();
+      render();
+      updateFirebaseSyncUi("Synced from Firestore");
+    }
+  }, handleFirebaseSyncError);
+}
+
+function stopCloudListener() {
+  if (firebaseSync.unsubscribe) {
+    firebaseSync.unsubscribe();
+    firebaseSync.unsubscribe = null;
+  }
+}
+
+function applyRemoteState(remoteState) {
+  firebaseSync.applyingRemote = true;
+  events = Array.isArray(remoteState.events) ? remoteState.events : events;
+  paperTasks = Array.isArray(remoteState.paperTasks) ? remoteState.paperTasks : paperTasks;
+  customCalendars = normalizeCustomCalendars(remoteState.customCalendars);
+  calendarNameOverrides = normalizeCalendarNameOverrides(remoteState.calendarNameOverrides);
+  calendarColorOverrides = normalizeCalendarColorOverrides(remoteState.calendarColorOverrides);
+  calendarOrderIds = normalizeCalendarOrderIds(remoteState.calendarOrderIds);
+  calendars = getCalendars();
+  visibleCalendars = { ...loadVisibleCalendars(), ...(remoteState.visibleCalendars || {}) };
+  archivedCalendarIds = normalizeCalendarIdList(remoteState.archivedCalendarIds);
+  deletedCalendarIds = normalizeCalendarIdList(remoteState.deletedCalendarIds);
+  setLocalSyncUpdatedAt(remoteState.updatedAt || new Date().toISOString());
+  saveEvents({ sync: false, touch: false });
+  savePaperTasks({ sync: false, touch: false });
+  saveCustomCalendars({ sync: false, touch: false });
+  saveCalendarNameOverrides({ sync: false, touch: false });
+  saveCalendarColorOverrides({ sync: false, touch: false });
+  saveCalendarOrderIds({ sync: false, touch: false });
+  saveVisibleCalendars({ sync: false, touch: false });
+  saveArchivedCalendarIds({ sync: false, touch: false });
+  saveDeletedCalendarIds({ sync: false, touch: false });
+  firebaseSync.applyingRemote = false;
+}
+
+function queueCloudSync() {
+  if (!firebaseSync.user || !firebaseSync.firestore || firebaseSync.applyingRemote) return;
+  clearTimeout(firebaseSync.syncTimer);
+  firebaseSync.syncTimer = setTimeout(syncCloudStateNow, 600);
+}
+
+async function syncCloudStateNow() {
+  if (!firebaseSync.user || !firebaseSync.firestore || firebaseSync.applyingRemote) return;
+  try {
+    await userStateDocRef().set(getCloudStatePayload(), { merge: true });
+    updateFirebaseSyncUi("Synced to Firestore");
+  } catch (error) {
+    handleFirebaseSyncError(error);
+  }
+}
+
+function handleFirebaseSyncError(error) {
+  console.error(error);
+  updateFirebaseSyncUi(getFirebaseErrorMessage(error));
+}
+
+function getFirebaseErrorMessage(error) {
+  const code = String(error?.code || error?.message || "").toLowerCase();
+  if (code.includes("popup-closed-by-user")) return "Sign-in popup closed";
+  if (code.includes("popup-blocked")) return "Popup blocked";
+  if (code.includes("unauthorized-domain")) return "Firebase unauthorized domain";
+  if (code.includes("permission-denied")) return "Firestore permission denied";
+  return error?.message || "Firebase sync failed";
+}
+
+function isRemoteNewer(remoteUpdatedAt, localUpdatedAt) {
+  const remoteTime = Date.parse(remoteUpdatedAt || "");
+  const localTime = Date.parse(localUpdatedAt || "");
+  if (!Number.isFinite(remoteTime)) return false;
+  if (!Number.isFinite(localTime)) return true;
+  return remoteTime > localTime;
+}
+
+function touchLocalSyncUpdatedAt() {
+  const updatedAt = new Date().toISOString();
+  setLocalSyncUpdatedAt(updatedAt);
+  return updatedAt;
+}
+
+function getLocalSyncUpdatedAt() {
+  return localStorage.getItem(STORAGE_SYNC_UPDATED_AT) || "";
+}
+
+function setLocalSyncUpdatedAt(updatedAt) {
+  localStorage.setItem(STORAGE_SYNC_UPDATED_AT, updatedAt);
+}
+
+function renderColorPalette(container, input, selectedColor = "blue") {
+  container.replaceChildren(
+    ...basicColorKeywords.map((color) => {
+      const button = document.createElement("button");
+      button.className = "color-swatch";
+      button.type = "button";
+      button.setAttribute("role", "option");
+      button.dataset.color = color;
+      button.title = color;
+      button.setAttribute("aria-label", color);
+      button.style.setProperty("--swatch-color", color);
+      button.addEventListener("click", () => setColorPaletteValue(container, input, color));
+      return button;
+    })
+  );
+  setColorPaletteValue(container, input, selectedColor, { silent: true });
+}
+
+function setColorPaletteValue(container, input, color, { silent = false } = {}) {
+  input.value = color;
+  container.querySelectorAll(".color-swatch").forEach((button) => {
+    const selected = button.dataset.color === color;
+    button.classList.toggle("is-selected", selected);
+    button.setAttribute("aria-selected", String(selected));
+  });
+  if (!silent) input.dispatchEvent(new Event("change", { bubbles: true }));
+}
+
+function renderCalendarToggles() {
+  const activeCalendars = getActiveCalendars();
+
+  if (!activeCalendars.length) {
+    const empty = document.createElement("p");
+    empty.className = "calendar-empty";
+    empty.textContent = "No active calendars.";
+    els.calendarToggles.replaceChildren(empty);
+    return;
+  }
+
+  els.calendarToggles.replaceChildren(
+    ...activeCalendars.map((calendar) => createCalendarToggleRow(calendar))
+  );
+}
+
+function createCalendarToggleRow(calendar) {
+  const row = document.createElement("div");
+  row.className = "calendar-toggle-row";
+  row.draggable = true;
+  row.dataset.calendar = calendar.id;
+  row.setAttribute("aria-label", `${calendar.name} calendar row`);
+
+  const dragHandle = document.createElement("span");
+  dragHandle.className = "calendar-drag-handle";
+  dragHandle.textContent = "⋮⋮";
+  dragHandle.title = "Drag to reorder";
+  dragHandle.setAttribute("aria-hidden", "true");
+
+  const label = document.createElement("label");
+  label.className = "calendar-toggle";
+  label.innerHTML = `
+    <input type="checkbox" ${visibleCalendars[calendar.id] ? "checked" : ""} data-calendar="${calendar.id}" />
+    <span class="calendar-dot" style="--calendar-color: ${calendar.color}"></span>
+    <span class="calendar-name" title="Double-click to rename">${escapeHtml(calendar.name)}</span>
+  `;
+  label.querySelector("input").addEventListener("change", (event) => {
+    visibleCalendars[calendar.id] = event.target.checked;
+    persistCalendarVisibility();
+  });
+  label.querySelector(".calendar-name").addEventListener("dblclick", (event) => {
+    event.preventDefault();
+    openEditCalendarModal(calendar.id);
+  });
+
+  const renameButton = document.createElement("button");
+  renameButton.className = "calendar-rename-button";
+  renameButton.type = "button";
+  renameButton.textContent = "✎";
+  renameButton.setAttribute("aria-label", `Rename ${calendar.name} calendar`);
+  renameButton.title = `Rename ${calendar.name} calendar`;
+  renameButton.addEventListener("click", () => openEditCalendarModal(calendar.id));
+
+  const archiveButton = document.createElement("button");
+  archiveButton.className = "calendar-archive-button";
+  archiveButton.type = "button";
+  archiveButton.textContent = "×";
+  archiveButton.setAttribute("aria-label", `Archive ${calendar.name} calendar`);
+  archiveButton.title = `Archive ${calendar.name} calendar`;
+  archiveButton.addEventListener("click", () => archiveCalendar(calendar.id));
+
+  row.addEventListener("dragstart", (event) => handleCalendarDragStart(event, calendar.id));
+  row.addEventListener("dragover", handleCalendarDragOver);
+  row.addEventListener("dragleave", handleCalendarDragLeave);
+  row.addEventListener("drop", (event) => handleCalendarDrop(event, calendar.id));
+  row.addEventListener("dragend", handleCalendarDragEnd);
+
+  row.append(dragHandle, label, renameButton, archiveButton);
+  return row;
+}
+
+function renderArchivedCalendars() {
+  const archivedCalendars = getArchivedCalendars();
+  els.archivedCalendarsSection.hidden = archivedCalendars.length === 0;
+  els.archivedCalendarList.hidden = !archivedCalendarsExpanded;
+  els.archivedCalendarsToggle.setAttribute("aria-expanded", String(archivedCalendarsExpanded));
+  els.archivedCalendarsCaret.textContent = archivedCalendarsExpanded ? "⌄" : "›";
+
+  els.archivedCalendarList.replaceChildren(
+    ...archivedCalendars.map((calendar) => {
+      const item = document.createElement("div");
+      item.className = "archived-calendar-item";
+
+      const label = document.createElement("label");
+      label.className = "calendar-toggle archived-calendar-toggle";
+      label.innerHTML = `
+        <input type="checkbox" ${visibleCalendars[calendar.id] ? "checked" : ""} data-calendar="${calendar.id}" />
+        <span class="calendar-dot" style="--calendar-color: ${calendar.color}"></span>
+        <span class="calendar-name">${escapeHtml(calendar.name)}</span>
+      `;
+      label.querySelector("input").addEventListener("change", (event) => {
+        visibleCalendars[calendar.id] = event.target.checked;
+        persistCalendarVisibility();
+      });
+
+      const restoreButton = document.createElement("button");
+      restoreButton.className = "restore-calendar-button";
+      restoreButton.type = "button";
+      restoreButton.textContent = "↩";
+      restoreButton.title = `Restore ${calendar.name} calendar`;
+      restoreButton.setAttribute("aria-label", `Restore ${calendar.name} calendar`);
+      restoreButton.addEventListener("click", () => restoreArchivedCalendar(calendar.id));
+
+      const deleteButton = document.createElement("button");
+      deleteButton.className = "delete-calendar-button";
+      deleteButton.type = "button";
+      deleteButton.textContent = "🗑️";
+      deleteButton.setAttribute("aria-label", `Delete ${calendar.name} calendar`);
+      deleteButton.title = `Delete ${calendar.name} calendar`;
+      deleteButton.addEventListener("click", () => deleteArchivedCalendar(calendar.id));
+
+      item.append(label, restoreButton, deleteButton);
+      return item;
+    })
+  );
+}
+
+function toggleArchivedCalendars() {
+  archivedCalendarsExpanded = !archivedCalendarsExpanded;
+  renderArchivedCalendars();
+}
+
+function handleCalendarDragStart(event, calendarId) {
+  if (event.target.closest("button, input")) {
+    event.preventDefault();
+    return;
+  }
+  draggedCalendarId = calendarId;
+  event.dataTransfer.effectAllowed = "move";
+  event.dataTransfer.setData("text/plain", calendarId);
+  event.currentTarget.classList.add("is-dragging");
+}
+
+function handleCalendarDragOver(event) {
+  if (!draggedCalendarId) return;
+  const targetId = event.currentTarget.dataset.calendar;
+  if (!targetId || targetId === draggedCalendarId) return;
+  event.preventDefault();
+  event.dataTransfer.dropEffect = "move";
+  event.currentTarget.classList.add("is-drag-over");
+}
+
+function handleCalendarDragLeave(event) {
+  event.currentTarget.classList.remove("is-drag-over");
+}
+
+function handleCalendarDrop(event, targetCalendarId) {
+  event.preventDefault();
+  event.currentTarget.classList.remove("is-drag-over");
+  const sourceCalendarId = draggedCalendarId || event.dataTransfer.getData("text/plain");
+  if (!sourceCalendarId || sourceCalendarId === targetCalendarId) return;
+  reorderCalendars(sourceCalendarId, targetCalendarId);
+}
+
+function handleCalendarDragEnd() {
+  draggedCalendarId = "";
+  els.calendarToggles.querySelectorAll(".calendar-toggle-row").forEach((row) => {
+    row.classList.remove("is-dragging", "is-drag-over");
+  });
+}
+
+function reorderCalendars(sourceCalendarId, targetCalendarId) {
+  const orderedIds = calendars.map((calendar) => calendar.id);
+  const sourceIndex = orderedIds.indexOf(sourceCalendarId);
+  const targetIndex = orderedIds.indexOf(targetCalendarId);
+  if (sourceIndex < 0 || targetIndex < 0) return;
+
+  const [movedId] = orderedIds.splice(sourceIndex, 1);
+  orderedIds.splice(targetIndex, 0, movedId);
+  calendarOrderIds = normalizeCalendarOrderIds(orderedIds);
+  calendars = getCalendars();
+  saveCalendarOrderIds();
+  renderCalendarToggles();
+  renderArchivedCalendars();
+  populateCalendarSelect();
+  showToast("Calendar reordered");
+}
+
+function openEditCalendarModal(calendarId) {
+  const calendar = getCalendar(calendarId);
+  els.editCalendarId.value = calendarId;
+  els.editCalendarNameInput.value = calendar.name;
+  setColorPaletteValue(els.editCalendarColorPalette, els.editCalendarColorInput, calendar.color, { silent: true });
+  els.editCalendarModal.classList.add("is-open");
+  els.editCalendarModal.setAttribute("aria-hidden", "false");
+  requestAnimationFrame(() => els.editCalendarNameInput.focus());
+}
+
+function closeEditCalendarModal() {
+  els.editCalendarModal.classList.remove("is-open");
+  els.editCalendarModal.setAttribute("aria-hidden", "true");
+}
+
+function saveEditedCalendar(event) {
+  event.preventDefault();
+  const calendarId = els.editCalendarId.value;
+  const calendar = getCalendar(calendarId);
+  const nextName = els.editCalendarNameInput.value.trim();
+  const nextColor = els.editCalendarColorInput.value || calendar.color;
+  if (!calendarId || !nextName) return;
+
+  calendarNameOverrides[calendarId] = nextName;
+  calendarColorOverrides[calendarId] = nextColor;
+  calendars = getCalendars();
+  persistCalendarManagement("Calendar updated");
+  renderMonthGrid();
+  closeEditCalendarModal();
+}
+
+function selectAllCalendars() {
+  const activeIds = new Set(getActiveCalendars().map((calendar) => calendar.id));
+  visibleCalendars = Object.fromEntries(calendars.map((calendar) => [calendar.id, activeIds.has(calendar.id)]));
+  persistCalendarVisibility("All active calendars selected");
+}
+
+function soloCalendar(index) {
+  const activeCalendars = getActiveCalendars();
+  const calendar = activeCalendars[index];
+  if (!calendar) return;
+  visibleCalendars = Object.fromEntries(calendars.map((item) => [item.id, item.id === calendar.id]));
+  persistCalendarVisibility(`${calendar.name} calendar selected`);
+}
+
+function archiveCalendar(calendarId) {
+  const calendar = calendars.find((item) => item.id === calendarId);
+  if (!calendar) return;
+
+  const archivedSet = new Set(archivedCalendarIds);
+  archivedSet.add(calendarId);
+  archivedCalendarIds = [...archivedSet];
+  visibleCalendars[calendarId] = false;
+  persistCalendarArchive(`${calendar.name} calendar archived`);
+}
+
+function restoreArchivedCalendar(calendarId) {
+  archivedCalendarIds = archivedCalendarIds.filter((id) => id !== calendarId);
+  visibleCalendars[calendarId] = true;
+  persistCalendarArchive(`${getCalendar(calendarId).name} calendar restored`);
+}
+
+function deleteArchivedCalendar(calendarId) {
+  const calendar = getCalendar(calendarId);
+  const removedEvents = events.filter((event) => event.calendar === calendarId);
+  const restoredPapers = removedEvents.flatMap(getAllAssignedPapersInSeries);
+  const paperTasksChanged = restorePapersToTasks(restoredPapers);
+
+  archivedCalendarIds = archivedCalendarIds.filter((id) => id !== calendarId);
+  if (defaultCalendars.some((item) => item.id === calendarId)) {
+    deletedCalendarIds = [...new Set([...deletedCalendarIds, calendarId])];
+  }
+  customCalendars = customCalendars.filter((item) => item.id !== calendarId);
+  calendarOrderIds = calendarOrderIds.filter((id) => id !== calendarId);
+  delete calendarNameOverrides[calendarId];
+  delete calendarColorOverrides[calendarId];
+  calendars = getCalendars();
+  delete visibleCalendars[calendarId];
+  events = events.filter((event) => event.calendar !== calendarId);
+
+  if (paperTasksChanged) {
+    savePaperTasks();
+    renderPaperTasks();
+  }
+  persistCalendarArchive(`${calendar.name} calendar deleted`);
+}
+
+function persistCalendarVisibility(message = "") {
+  saveVisibleCalendars();
+  renderCalendarToggles();
+  renderArchivedCalendars();
+  renderMonthGrid();
+  renderUpcoming();
+  renderSidebarTimeAnalysisIfActive();
+  if (message) showToast(message);
+}
+
+function persistCalendarArchive(message = "") {
+  saveCustomCalendars();
+  saveCalendarNameOverrides();
+  saveCalendarColorOverrides();
+  saveCalendarOrderIds();
+  saveArchivedCalendarIds();
+  saveDeletedCalendarIds();
+  saveVisibleCalendars();
+  saveEvents();
+  renderCalendarToggles();
+  renderArchivedCalendars();
+  populateCalendarSelect();
+  renderMonthGrid();
+  renderUpcoming();
+  renderSidebarTimeAnalysisIfActive();
+  if (message) showToast(message);
+}
+
+function getAvailableCalendars() {
+  return calendars.filter((calendar) => !deletedCalendarIds.includes(calendar.id));
+}
+
+function getActiveCalendars() {
+  return getAvailableCalendars().filter((calendar) => !archivedCalendarIds.includes(calendar.id));
+}
+
+function getArchivedCalendars() {
+  return getAvailableCalendars().filter((calendar) => archivedCalendarIds.includes(calendar.id));
+}
+
+function isCalendarArchived(calendarId) {
+  return archivedCalendarIds.includes(calendarId);
+}
+
+function isCalendarDeleted(calendarId) {
+  return deletedCalendarIds.includes(calendarId);
+}
+
+function openCalendarModal() {
+  els.calendarNameInput.value = "";
+  setColorPaletteValue(els.calendarColorPalette, els.calendarColorInput, "blue", { silent: true });
+  els.calendarFileInput.value = "";
+  els.calendarModal.classList.add("is-open");
+  els.calendarModal.setAttribute("aria-hidden", "false");
+  requestAnimationFrame(() => els.calendarNameInput.focus());
+}
+
+function closeCalendarModal() {
+  els.calendarModal.classList.remove("is-open");
+  els.calendarModal.setAttribute("aria-hidden", "true");
+}
+
+async function createCalendarFromDialog(event) {
+  event.preventDefault();
+  const calendarName = els.calendarNameInput.value.trim();
+  const color = els.calendarColorInput.value || "blue";
+  const files = [...els.calendarFileInput.files].filter((file) => file.name.toLowerCase().endsWith(".ics") || file.type === "text/calendar");
+
+  if (files.length) {
+    const importedEvents = await importCalendarFiles(files, files.length === 1 ? calendarName : "", color);
+    if (!importedEvents) return;
+    closeCalendarModal();
+    showToast(`Imported ${importedEvents} event${importedEvents === 1 ? "" : "s"}`);
+    return;
+  }
+
+  createBlankCalendar(calendarName || "New calendar", color);
+  closeCalendarModal();
+  showToast("Calendar created");
+}
+
+function createBlankCalendar(name, color) {
+  const calendar = {
+    id: makeCustomCalendarId(name),
+    name,
+    color,
+    imported: false,
+  };
+  customCalendars.push(calendar);
+  calendarOrderIds = normalizeCalendarOrderIds([...calendarOrderIds, calendar.id]);
+  calendars = getCalendars();
+  visibleCalendars[calendar.id] = true;
+  persistCalendarManagement();
+}
+
+async function importCalendarFiles(files, nameOverride = "", colorOverride = "") {
+  let importedEvents = 0;
+  for (const file of files) {
+    try {
+      const text = await file.text();
+      const imported = parseIcsCalendar(text, file.name, { name: nameOverride, color: colorOverride });
+      if (!imported.events.length) continue;
+      customCalendars.push(imported.calendar);
+      calendarOrderIds = normalizeCalendarOrderIds([...calendarOrderIds, imported.calendar.id]);
+      calendars = getCalendars();
+      visibleCalendars[imported.calendar.id] = true;
+      events.push(...imported.events);
+      importedEvents += imported.events.length;
+    } catch (error) {
+      console.error(error);
+      showToast(`Could not import ${file.name}`);
+    }
+  }
+
+  if (!importedEvents) {
+    showToast("No events found in ICS file");
+    return 0;
+  }
+
+  persistCalendarManagement();
+  saveEvents();
+  render();
+  return importedEvents;
+}
+
+function persistCalendarManagement(message = "") {
+  saveCustomCalendars();
+  saveCalendarNameOverrides();
+  saveCalendarColorOverrides();
+  saveCalendarOrderIds();
+  saveVisibleCalendars();
+  renderCalendarToggles();
+  renderArchivedCalendars();
+  populateCalendarSelect();
+  renderUpcoming();
+  renderSidebarTimeAnalysisIfActive();
+  if (message) showToast(message);
+}
+
+function parseIcsCalendar(text, fileName, options = {}) {
+  const lines = unfoldIcsLines(text);
+  const calendarName = options.name || getIcsPropertyValue(lines, "X-WR-CALNAME") || fileName.replace(/\.ics$/i, "") || "Imported calendar";
+  const calendar = {
+    id: makeCustomCalendarId(calendarName),
+    name: calendarName,
+    color: options.color || importedCalendarColors[customCalendars.length % importedCalendarColors.length],
+    imported: true,
+  };
+
+  const parsedEvents = [];
+  let block = null;
+  for (const line of lines) {
+    if (line === "BEGIN:VEVENT") {
+      block = [];
+    } else if (line === "END:VEVENT" && block) {
+      const parsedEvent = parseIcsEvent(block, calendar.id);
+      if (parsedEvent) parsedEvents.push(parsedEvent);
+      block = null;
+    } else if (block) {
+      block.push(line);
+    }
+  }
+
+  return { calendar, events: normalizeIcsEvents(parsedEvents) };
+}
+
+function normalizeIcsEvents(parsedEvents) {
+  const baseByUid = new Map();
+  parsedEvents
+    .filter((event) => !event.recurrenceId && event.status !== "CANCELLED")
+    .forEach((event) => baseByUid.set(event.uid, { ...event, instanceOverrides: { ...(event.instanceOverrides ?? {}) } }));
+
+  const standaloneEvents = [];
+  parsedEvents
+    .filter((event) => event.recurrenceId)
+    .forEach((event) => {
+      const baseEvent = baseByUid.get(event.uid);
+      if (!baseEvent) return;
+
+      const recurrenceDate = event.recurrenceId.date;
+
+      if (event.status === "CANCELLED") {
+        const excludedDates = new Set(baseEvent.excludedDates ?? []);
+        excludedDates.add(recurrenceDate);
+        baseEvent.excludedDates = [...excludedDates].sort();
+        return;
+      }
+
+      if (event.date === recurrenceDate) {
+        baseEvent.instanceOverrides[recurrenceDate] = {
+          title: event.title,
+          time: event.time,
+          notes: event.notes,
+          durationMinutes: event.durationMinutes,
+        };
+      } else {
+        const excludedDates = new Set(baseEvent.excludedDates ?? []);
+        excludedDates.add(recurrenceDate);
+        baseEvent.excludedDates = [...excludedDates].sort();
+        standaloneEvents.push({
+          ...event,
+          id: `${event.id}-${recurrenceDate}`.replace(/[^a-zA-Z0-9_-]/g, "-"),
+          repeat: "none",
+          excludedDates: [],
+          instanceOverrides: {},
+        });
+      }
+    });
+
+  return [...baseByUid.values(), ...standaloneEvents].map(cleanImportedIcsEvent);
+}
+
+function cleanImportedIcsEvent(event) {
+  const { uid, recurrenceId, status, ...cleanEvent } = event;
+  if (!Object.keys(cleanEvent.instanceOverrides ?? {}).length) delete cleanEvent.instanceOverrides;
+  if (!(cleanEvent.excludedDates ?? []).length) delete cleanEvent.excludedDates;
+  if (!cleanEvent.repeatUntil) delete cleanEvent.repeatUntil;
+  if (!cleanEvent.durationMinutes) delete cleanEvent.durationMinutes;
+  return cleanEvent;
+}
+
+function unfoldIcsLines(text) {
+  return text
+    .replace(/\r\n/g, "\n")
+    .replace(/\n[ \t]/g, "")
+    .split("\n")
+    .map((line) => line.trimEnd())
+    .filter(Boolean);
+}
+
+function getIcsPropertyValue(lines, propertyName) {
+  const property = lines.map(parseIcsLine).find((item) => item.name === propertyName);
+  return property ? unescapeIcsText(property.value) : "";
+}
+
+function parseIcsEvent(lines, calendarId) {
+  const properties = lines.map(parseIcsLine);
+  const getProperty = (name) => properties.find((property) => property.name === name);
+  const getProperties = (name) => properties.filter((property) => property.name === name);
+  const startProperty = getProperty("DTSTART");
+  if (!startProperty) return null;
+
+  const start = parseIcsDate(startProperty.value, startProperty.params);
+  if (!start) return null;
+
+  const endProperty = getProperty("DTEND");
+  const end = endProperty ? parseIcsDate(endProperty.value, endProperty.params) : null;
+  const recurrenceIdProperty = getProperty("RECURRENCE-ID");
+  const recurrenceId = recurrenceIdProperty ? parseIcsDate(recurrenceIdProperty.value, recurrenceIdProperty.params) : null;
+  const summary = unescapeIcsText(getProperty("SUMMARY")?.value || "Untitled event");
+  const description = unescapeIcsText(getProperty("DESCRIPTION")?.value || "");
+  const uid = getProperty("UID")?.value || makeId();
+  const { repeat, repeatUntil } = parseIcsRepeat(getProperty("RRULE")?.value || "");
+  const excludedDates = getProperties("EXDATE").flatMap((property) => parseIcsDateList(property.value, property.params));
+  const durationMinutes = getIcsDurationMinutes(start, end);
+
+  return {
+    id: `ics-${calendarId}-${uid}`.replace(/[^a-zA-Z0-9_-]/g, "-"),
+    uid,
+    recurrenceId,
+    status: (getProperty("STATUS")?.value || "").toUpperCase(),
+    title: summary,
+    date: start.date,
+    time: start.time,
+    calendar: calendarId,
+    repeat,
+    repeatUntil,
+    excludedDates,
+    durationMinutes,
+    notes: description,
+  };
+}
+
+function parseIcsLine(line) {
+  const separator = line.indexOf(":");
+  const head = separator >= 0 ? line.slice(0, separator) : line;
+  const value = separator >= 0 ? line.slice(separator + 1) : "";
+  const [rawName, ...paramParts] = head.split(";");
+  const params = Object.fromEntries(
+    paramParts.map((part) => {
+      const [key, ...rest] = part.split("=");
+      return [key.toUpperCase(), rest.join("=")];
+    })
+  );
+  return { name: rawName.toUpperCase(), params, value };
+}
+
+function parseIcsDate(value, params = {}) {
+  const isDateOnly = params.VALUE === "DATE" || /^\d{8}$/.test(value);
+  const match = value.match(/^(\d{4})(\d{2})(\d{2})(?:T(\d{2})(\d{2})(\d{2})?)?(Z)?$/);
+  if (!match) return null;
+
+  const [, year, month, day, hour = "00", minute = "00", second = "00", utc] = match;
+  const date = utc
+    ? new Date(Date.UTC(Number(year), Number(month) - 1, Number(day), Number(hour), Number(minute), Number(second)))
+    : new Date(Number(year), Number(month) - 1, Number(day), Number(hour), Number(minute), Number(second));
+
+  return {
+    date: isDateOnly ? `${year}-${month}-${day}` : toDateKey(date),
+    time: isDateOnly ? "" : `${String(date.getHours()).padStart(2, "0")}:${String(date.getMinutes()).padStart(2, "0")}`,
+    dateObject: date,
+  };
+}
+
+function parseIcsDateList(value, params = {}) {
+  return value
+    .split(",")
+    .map((item) => parseIcsDate(item.trim(), params)?.date)
+    .filter(Boolean);
+}
+
+function getIcsDurationMinutes(start, end) {
+  if (!start?.dateObject || !end?.dateObject) return DEFAULT_EVENT_DURATION_MINUTES;
+  const duration = Math.round((end.dateObject - start.dateObject) / 60_000);
+  return duration > 0 ? duration : DEFAULT_EVENT_DURATION_MINUTES;
+}
+
+function parseIcsRepeat(value) {
+  if (!value) return { repeat: "none", repeatUntil: "" };
+  const fields = Object.fromEntries(value.split(";").map((part) => {
+    const [key, rest] = part.split("=");
+    return [key, rest];
+  }));
+  let repeat = "none";
+  if (fields.FREQ === "DAILY") repeat = "daily";
+  if (fields.FREQ === "WEEKLY" && fields.BYDAY === "MO,TU,WE,TH,FR") repeat = "weekdays";
+  else if (fields.FREQ === "WEEKLY") repeat = "weekly";
+  return {
+    repeat,
+    repeatUntil: fields.UNTIL ? parseIcsUntilDate(fields.UNTIL) : "",
+  };
+}
+
+function parseIcsUntilDate(value) {
+  const match = value.match(/^(\d{4})(\d{2})(\d{2})/);
+  return match ? `${match[1]}-${match[2]}-${match[3]}` : "";
+}
+
+function unescapeIcsText(value) {
+  return value
+    .replace(/\\n/gi, "\n")
+    .replace(/\\,/g, ",")
+    .replace(/\\;/g, ";")
+    .replace(/\\\\/g, "\\");
+}
+
+function makeCustomCalendarId(name) {
+  const slug = name.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "").slice(0, 32) || "calendar";
+  return `custom-${slug}-${Date.now()}-${Math.random().toString(16).slice(2, 8)}`;
+}
+
+function openPaperModal() {
+  els.paperModal.classList.add("is-open");
+  els.paperModal.setAttribute("aria-hidden", "false");
+  requestAnimationFrame(() => els.paperModalInput.focus());
+}
+
+function closePaperModal() {
+  els.paperModal.classList.remove("is-open");
+  els.paperModal.setAttribute("aria-hidden", "true");
+}
+
+function renderPaperTasks() {
+  const activeCount = paperTasks.filter((task) => !task.done).length;
+  els.paperTaskCount.textContent = activeCount;
+
+  if (!paperTasks.length) {
+    const empty = document.createElement("p");
+    empty.className = "empty-state";
+    empty.textContent = "No papers queued.";
+    els.paperTaskList.replaceChildren(empty);
+    return;
+  }
+
+  const sortedTasks = [...paperTasks].sort((a, b) => Number(a.done) - Number(b.done) || b.createdAt.localeCompare(a.createdAt));
+  els.paperTaskList.replaceChildren(...sortedTasks.map(createPaperTaskItem));
+}
+
+function createPaperTaskItem(task) {
+  const item = document.createElement("article");
+  item.className = ["paper-task-item", task.done ? "paper-task-item--done" : ""].filter(Boolean).join(" ");
+
+  const checkbox = document.createElement("input");
+  checkbox.type = "checkbox";
+  checkbox.checked = task.done;
+  checkbox.setAttribute("aria-label", `Mark ${task.title} as ${task.done ? "not done" : "done"}`);
+  checkbox.addEventListener("change", () => togglePaperTask(task.id));
+
+  const body = document.createElement("div");
+  body.className = "paper-task-body";
+
+  const title = document.createElement("div");
+  title.className = "paper-task-title";
+  title.title = task.title;
+  title.textContent = task.title;
+
+  if (task.metadata) {
+    const meta = document.createElement("div");
+    meta.className = "paper-task-meta";
+    meta.textContent = formatPaperMetadata(task.metadata);
+    body.append(title, meta);
+
+    if (task.metadata.summary) {
+      const summary = document.createElement("p");
+      summary.className = "paper-task-summary";
+      summary.textContent = task.metadata.summary;
+      body.append(summary);
+    }
+  } else {
+    body.append(title);
+  }
+
+  const actions = document.createElement("div");
+  actions.className = "paper-task-actions";
+
+  const pullButton = document.createElement("button");
+  pullButton.className = "paper-task-action";
+  pullButton.type = "button";
+  pullButton.textContent = "Pull";
+  pullButton.setAttribute("aria-label", `Pull ${task.title} into selected date`);
+  pullButton.addEventListener("click", () => pullPaperTaskToCalendar(task));
+
+  const removeButton = document.createElement("button");
+  removeButton.className = "paper-task-action";
+  removeButton.type = "button";
+  removeButton.textContent = "Remove";
+  removeButton.setAttribute("aria-label", `Remove ${task.title}`);
+  removeButton.addEventListener("click", () => removePaperTask(task.id));
+
+  if (task.metadata?.absUrl) {
+    actions.append(createPaperLink("Abs", task.metadata.absUrl));
+  }
+
+  if (task.metadata?.pdfUrl) {
+    actions.append(createPaperLink("PDF", task.metadata.pdfUrl));
+  }
+
+  actions.append(pullButton, removeButton);
+  body.append(actions);
+  item.append(checkbox, body);
+  return item;
+}
+
+function createPaperLink(label, href) {
+  const link = document.createElement("a");
+  link.className = "paper-task-action";
+  link.href = href;
+  link.target = "_blank";
+  link.rel = "noreferrer";
+  link.textContent = label;
+  return link;
+}
+
+function formatPaperMetadata(metadata) {
+  const authors = metadata.authors?.length ? ` · ${metadata.authors.slice(0, 3).join(", ")}${metadata.authors.length > 3 ? " et al." : ""}` : "";
+  const published = metadata.published ? ` · ${metadata.published.slice(0, 10)}` : "";
+  const source = metadata.source === "semantic-scholar" ? `S2:${metadata.semanticScholarId?.slice(0, 8)}` : `arXiv:${metadata.arxivId}`;
+  return `${source}${authors}${published}`;
+}
+
+async function addPaperTasksFromInput(event) {
+  event.preventDefault();
+  const form = event.currentTarget;
+  const input = form.querySelector("textarea");
+  const inputs = input.value
+    .split("\n")
+    .map((title) => title.trim())
+    .filter(Boolean);
+
+  if (!inputs.length) return;
+
+  const submitButton = form.querySelector("button[type='submit']");
+  submitButton.disabled = true;
+  submitButton.textContent = "Adding...";
+
+  const existingKeys = new Set(paperTasks.map((task) => getPaperTaskKey(task)));
+  const createdAt = new Date().toISOString();
+  const newTasks = [];
+
+  for (const paperInput of inputs) {
+    const metadata = createStaticPaperMetadata(paperInput);
+    const title = metadata?.title ?? paperInput;
+    const task = {
+      id: makeId(),
+      title,
+      done: false,
+      createdAt: `${createdAt}-${newTasks.length}`,
+      ...(metadata ? { metadata } : {}),
+    };
+
+    const key = getPaperTaskKey(task);
+    if (!existingKeys.has(key)) {
+      existingKeys.add(key);
+      newTasks.push(task);
+    }
+  }
+
+  submitButton.disabled = false;
+  submitButton.textContent = "Add papers";
+
+  if (!newTasks.length) {
+    showToast("Those papers are already queued");
+    return;
+  }
+
+  paperTasks = [...paperTasks, ...newTasks];
+  input.value = "";
+  if (form === els.paperModalForm) closePaperModal();
+  savePaperTasks();
+  renderPaperTasks();
+  setSidebarPanel("papers");
+  showToast(`${newTasks.length} paper${newTasks.length === 1 ? "" : "s"} added`);
+}
+
+function getPaperTaskKey(task) {
+  if (task.metadata?.arxivId) return `arxiv:${task.metadata.arxivId.toLowerCase()}`;
+  if (task.metadata?.semanticScholarId) return `s2:${task.metadata.semanticScholarId.toLowerCase()}`;
+  return `title:${task.title.toLowerCase()}`;
+}
+
+function extractArxivId(input) {
+  const value = input.trim();
+  const urlMatch = value.match(/arxiv\.org\/(?:abs|pdf|e-print)\/([^?#\s]+)/i);
+  if (urlMatch) return normalizeArxivId(urlMatch[1]);
+
+  const idMatch = value.match(/\b(\d{4}\.\d{4,5}(?:v\d+)?|[a-z-]+(?:\.[A-Z]{2})?\/\d{7}(?:v\d+)?)\b/i);
+  return idMatch ? normalizeArxivId(idMatch[1]) : null;
+}
+
+function normalizeArxivId(value) {
+  return value.replace(/\.pdf$/i, "").replace(/^arxiv:/i, "");
+}
+
+function extractSemanticScholarPaperId(input) {
+  const value = input.trim();
+  const urlMatch = value.match(/semanticscholar\.org\/paper\/(?:[^/]+\/)?([a-f0-9]{40})(?:[/?#]|$)/i);
+  if (urlMatch) return urlMatch[1];
+
+  const hashMatch = value.match(/\b([a-f0-9]{40})\b/i);
+  return hashMatch ? hashMatch[1] : null;
+}
+
+function createStaticPaperMetadata(input) {
+  const arxivId = extractArxivId(input);
+  if (arxivId) {
+    return {
+      source: "arxiv",
+      arxivId,
+      title: `arXiv:${arxivId}`,
+      authors: [],
+      summary: "",
+      published: "",
+      absUrl: `https://arxiv.org/abs/${arxivId}`,
+      pdfUrl: `https://arxiv.org/pdf/${arxivId}`,
+    };
+  }
+
+  const semanticScholarId = extractSemanticScholarPaperId(input);
+  if (semanticScholarId) {
+    return {
+      source: "semantic-scholar",
+      semanticScholarId,
+      title: getSemanticScholarTitleFallback(input, semanticScholarId),
+      authors: [],
+      summary: "",
+      published: "",
+      absUrl: input.includes("semanticscholar.org") ? input : `https://www.semanticscholar.org/paper/${semanticScholarId}`,
+      pdfUrl: "",
+    };
+  }
+
+  return null;
+}
+
+function getSemanticScholarTitleFallback(input, paperId) {
+  const slug = input.match(/semanticscholar\.org\/paper\/([^/]+)\//i)?.[1];
+  if (!slug) return `Semantic Scholar:${paperId.slice(0, 8)}`;
+  return slug.replace(/-/g, " ");
+}
+
+function cleanPaperText(value) {
+  return value.replace(/\s+/g, " ").trim();
+}
+
+function togglePaperTask(id) {
+  paperTasks = paperTasks.map((task) => (task.id === id ? { ...task, done: !task.done } : task));
+  savePaperTasks();
+  renderPaperTasks();
+}
+
+function removePaperTask(id) {
+  paperTasks = paperTasks.filter((task) => task.id !== id);
+  savePaperTasks();
+  renderPaperTasks();
+}
+
+function pullPaperTaskToCalendar(task) {
+  const paper = getPaperSnapshot(task);
+  const metadata = task.metadata;
+  const notes = [
+    "Paper task",
+    task.title,
+    metadata?.authors?.length ? `Authors: ${metadata.authors.join(", ")}` : "",
+    metadata?.arxivId ? `arXiv: ${metadata.arxivId}` : "",
+    metadata?.semanticScholarId ? `Semantic Scholar: ${metadata.semanticScholarId}` : "",
+    metadata?.absUrl ? `Abstract: ${metadata.absUrl}` : "",
+    metadata?.pdfUrl ? `PDF: ${metadata.pdfUrl}` : "",
+    metadata?.summary ? `Summary: ${metadata.summary}` : "",
+  ]
+    .filter(Boolean)
+    .join("\n");
+
+  events.push({
+    id: makeId(),
+    title: `Read: ${task.title}`,
+    date: toDateKey(selectedDate),
+    time: "",
+    calendar: "tasks",
+    repeat: "none",
+    paperTaskIds: [task.id],
+    papers: [paper],
+    notes,
+  });
+  paperTasks = paperTasks.filter((paperTask) => paperTask.id !== task.id);
+  savePaperTasks();
+  saveEvents();
+  renderPaperTasks();
+  render();
+  showToast("Paper pulled into Tasks calendar");
+}
+
+function isReadEventTitle(title) {
+  return title.trim().slice(0, 4).toLowerCase() === "read";
+}
+
+function getReadEventPaperQuery(title) {
+  if (!isReadEventTitle(title)) return "";
+  return title.trim().slice(4).replace(/^[:\s-]+/, "").trim().toLowerCase();
+}
+
+function inferPaperTaskIdsFromEvent(event) {
+  if (!event?.title) return [];
+  const readTitle = getReadEventPaperQuery(event.title);
+  if (!readTitle) return [];
+  return paperTasks
+    .filter((task) => task.title.trim().toLowerCase() === readTitle)
+    .map((task) => task.id);
+}
+
+function getPaperSnapshot(task) {
+  return {
+    id: task.id,
+    title: task.title,
+    metadata: task.metadata ?? null,
+  };
+}
+
+function getExistingEventPaperSnapshots(event) {
+  const snapshots = Array.isArray(event?.papers) ? event.papers : [];
+  const snapshotIds = new Set(snapshots.map((paper) => paper.id));
+  const idMatches = (event?.paperTaskIds ?? [])
+    .filter((id) => !snapshotIds.has(id))
+    .map((id) => paperTasks.find((task) => task.id === id))
+    .filter(Boolean)
+    .map(getPaperSnapshot);
+  return [...snapshots, ...idMatches];
+}
+
+function getEventPaperAssignmentCandidates() {
+  const assignedById = new Map(activeEventPaperSnapshots.map((paper) => [paper.id, paper]));
+  paperTasks.forEach((task) => assignedById.set(task.id, getPaperSnapshot(task)));
+  return [...assignedById.values()];
+}
+
+function renderEventPaperAssignment(selectedIds = []) {
+  const selectedSet = new Set(selectedIds);
+  const showAssignment = isReadEventTitle(els.eventTitle.value);
+  els.eventPaperAssignment.hidden = !showAssignment;
+
+  if (!showAssignment) {
+    els.eventPaperAssignmentList.replaceChildren();
+    els.eventPaperAssignmentCount.textContent = "0 selected";
+    return;
+  }
+
+  const candidates = getEventPaperAssignmentCandidates();
+  if (!candidates.length) {
+    const empty = document.createElement("p");
+    empty.className = "empty-state";
+    empty.textContent = "No paper tasks yet. Press P to add papers.";
+    els.eventPaperAssignmentList.replaceChildren(empty);
+    els.eventPaperAssignmentCount.textContent = "0 selected";
+    return;
+  }
+
+  els.eventPaperAssignmentList.replaceChildren(
+    ...candidates.map((paper) => createEventPaperAssignmentOption(paper, selectedSet.has(paper.id)))
+  );
+  updateEventPaperAssignmentCount();
+}
+
+function createEventPaperAssignmentOption(task, checked) {
+  const label = document.createElement("label");
+  label.className = "paper-assignment-option";
+
+  const checkbox = document.createElement("input");
+  checkbox.type = "checkbox";
+  checkbox.value = task.id;
+  checkbox.checked = checked;
+  checkbox.addEventListener("change", updateEventPaperAssignmentCount);
+
+  const text = document.createElement("span");
+  text.textContent = task.title;
+  text.title = task.title;
+
+  label.append(checkbox, text);
+  return label;
+}
+
+function getSelectedEventPaperIds() {
+  return [...els.eventPaperAssignmentList.querySelectorAll("input[type='checkbox']:checked")].map((input) => input.value);
+}
+
+function getSelectedEventPapers() {
+  const selectedIds = new Set(getSelectedEventPaperIds());
+  return getEventPaperAssignmentCandidates().filter((paper) => selectedIds.has(paper.id));
+}
+
+function getReadEventTitleForPapers(currentTitle, papers) {
+  if (!papers.length) return currentTitle.trim();
+  const readPrefix = currentTitle.trim().slice(0, 4);
+  if (papers.length === 1) return `${readPrefix}: ${papers[0].title}`;
+  return `${readPrefix}: ${papers[0].title} + ${papers.length - 1} more`;
+}
+
+function removeAssignedPapersFromTasks(papers) {
+  const selectedIds = new Set(papers.map((paper) => paper.id));
+  const beforeCount = paperTasks.length;
+  paperTasks = paperTasks.filter((task) => !selectedIds.has(task.id));
+  return paperTasks.length !== beforeCount;
+}
+
+function restorePapersToTasks(papers) {
+  const existingIds = new Set(paperTasks.map((task) => task.id));
+  const restored = papers
+    .filter((paper) => paper?.id && !existingIds.has(paper.id))
+    .map((paper, index) => ({
+      id: paper.id,
+      title: paper.title,
+      metadata: paper.metadata ?? null,
+      done: false,
+      createdAt: `${new Date().toISOString()}-restored-${index}`,
+    }));
+
+  if (!restored.length) return false;
+  paperTasks = [...paperTasks, ...restored];
+  return true;
+}
+
+function getAssignedPapersForOccurrence(event, occurrenceDate = event.date) {
+  const occurrence = createEventOccurrence(event, occurrenceDate);
+  return Array.isArray(occurrence.papers) ? occurrence.papers : [];
+}
+
+function getAllAssignedPapersInSeries(event) {
+  const byId = new Map();
+  (event.papers ?? []).forEach((paper) => byId.set(paper.id, paper));
+  Object.values(event.instanceOverrides ?? {}).forEach((override) => {
+    (override.papers ?? []).forEach((paper) => byId.set(paper.id, paper));
+  });
+  return [...byId.values()];
+}
+
+function updateEventPaperAssignmentCount() {
+  const count = getSelectedEventPaperIds().length;
+  els.eventPaperAssignmentCount.textContent = `${count} selected`;
+}
+
+function getCurrentViewTimeAnalysis() {
+  const { start, end } = getVisibleDateRange();
+  const rangeStart = new Date(start);
+  const rangeEnd = new Date(end);
+  const days = Math.max(1, Math.round((startOfDay(rangeEnd) - startOfDay(rangeStart)) / 86_400_000) + 1);
+  const occurrences = [];
+
+  makeDateRange(startOfDay(rangeStart), days).forEach((date) => {
+    const dateKey = toDateKey(date);
+    getFilteredEventsForDate(dateKey).forEach((occurrence) => {
+      const { start: occurrenceStart, end: occurrenceEnd } = getOccurrenceDateTimeRange(occurrence);
+      const clippedStart = occurrenceStart < rangeStart ? rangeStart : occurrenceStart;
+      const clippedEnd = occurrenceEnd > rangeEnd ? rangeEnd : occurrenceEnd;
+      const hours = Math.max(0, (clippedEnd - clippedStart) / 3_600_000);
+      if (!hours) return;
+      occurrences.push({
+        label: `${occurrence.title} · ${compactDateFormatter.format(occurrenceStart)}${occurrence.time ? `, ${formatTime(occurrence.time)}` : ""}`,
+        hours,
+      });
+    });
+  });
+
+  return {
+    rangeLabel: getHeaderTitle(rangeStart, rangeEnd),
+    occurrences: occurrences.sort((a, b) => a.label.localeCompare(b.label)),
+    totalHours: occurrences.reduce((total, occurrence) => total + occurrence.hours, 0),
+  };
+}
+
+function getOccurrenceDateTimeRange(event) {
+  const [hour = 0, minute = 0] = (event.time || "00:00").split(":").map(Number);
+  const start = fromDateKey(getEventDate(event));
+  start.setHours(hour, minute, 0, 0);
+  const end = new Date(start);
+  end.setMinutes(end.getMinutes() + DEFAULT_EVENT_DURATION_MINUTES);
+  return { start, end };
+}
+
+function getOccurrenceDurationHours(event = {}) {
+  return (event.durationMinutes || DEFAULT_EVENT_DURATION_MINUTES) / 60;
+}
+
+function getWorkedHoursForDate(dateKey) {
+  return getFilteredEventsForDate(dateKey).reduce((total, event) => total + getOccurrenceDurationHours(event), 0);
+}
+
+function getHeatmapIntensityLevel(hours) {
+  if (hours <= 0) return 0;
+  if (hours <= 1) return 1;
+  if (hours <= 2) return 2;
+  if (hours <= 4) return 3;
+  return 4;
+}
+
+function formatHours(hours) {
+  const rounded = Math.round(hours * 100) / 100;
+  return `${Number.isInteger(rounded) ? rounded : rounded.toFixed(2).replace(/0+$/, "").replace(/\.$/, "")}h`;
+}
+
+function startOfDay(date) {
+  const start = new Date(date);
+  start.setHours(0, 0, 0, 0);
+  return start;
+}
+
+function getDefaultEventCalendarId() {
+  return getActiveCalendars().find((calendar) => visibleCalendars[calendar.id])?.id ?? getActiveCalendars()[0]?.id ?? "";
+}
+
 function populateCalendarSelect() {
+  const activeCalendars = getActiveCalendars();
+  els.eventCalendar.disabled = activeCalendars.length === 0;
+
+  if (!activeCalendars.length) {
+    const option = document.createElement("option");
+    option.value = "";
+    option.textContent = "No active calendars";
+    els.eventCalendar.replaceChildren(option);
+    return;
+  }
+
   els.eventCalendar.replaceChildren(
-    ...calendars.map((calendar) => {
+    ...activeCalendars.map((calendar) => {
       const option = document.createElement("option");
       option.value = calendar.id;
       option.textContent = calendar.name;
@@ -243,18 +1991,225 @@ function populateCalendarSelect() {
 }
 
 function renderMonthGrid() {
+  els.weekdayRow.hidden = currentView === "week" || currentView === "heatmap";
+  els.monthGrid.className = `month-grid month-grid--${currentView}`;
+
+  if (currentView === "week") {
+    renderWeekTimeline();
+    return;
+  }
+
+  if (currentView === "heatmap") {
+    renderHeatmapView();
+    return;
+  }
+
   els.monthGrid.replaceChildren(
-    ...getVisibleMonthDates().map((date) => createDayCell(date))
+    ...getMainCalendarDates().map((date) => createDayCell(date))
   );
+}
+
+function getHeatmapDateRange() {
+  const visibleEventDates = events
+    .filter((event) => isEventVisible(event))
+    .flatMap((event) => [event.date, getEventRangeEndDateKey(event)]);
+
+  if (!visibleEventDates.length) {
+    return { start: startOfDay(selectedDate), end: startOfDay(selectedDate), hasEvents: false };
+  }
+
+  let rangeStart = fromDateKey(visibleEventDates.reduce((min, date) => (date < min ? date : min)));
+  let rangeEnd = fromDateKey(visibleEventDates.reduce((max, date) => (date > max ? date : max)));
+  if (rangeEnd < rangeStart) rangeEnd = new Date(rangeStart);
+  if (Math.round((rangeEnd - rangeStart) / 86_400_000) > 3660) rangeEnd = addDays(rangeStart, 3660);
+
+  let firstEventDate = null;
+  let lastEventDate = null;
+  const days = Math.round((startOfDay(rangeEnd) - startOfDay(rangeStart)) / 86_400_000) + 1;
+  makeDateRange(rangeStart, days).forEach((date) => {
+    if (!getFilteredEventsForDate(toDateKey(date)).length) return;
+    if (!firstEventDate) firstEventDate = new Date(date);
+    lastEventDate = new Date(date);
+  });
+
+  return firstEventDate
+    ? { start: firstEventDate, end: lastEventDate, hasEvents: true }
+    : { start: startOfDay(selectedDate), end: startOfDay(selectedDate), hasEvents: false };
+}
+
+function getEventRangeEndDateKey(event) {
+  const repeat = event.repeat ?? "none";
+  if (repeat === "none") return event.date;
+  if (event.repeatUntil) return event.repeatUntil;
+  return toDateKey(addDays(fromDateKey(event.date), 365));
+}
+
+function getMonthStartsBetween(start, end) {
+  const monthStarts = [];
+  let cursor = startOfMonth(start);
+  while (cursor <= end) {
+    monthStarts.push(new Date(cursor));
+    cursor = addMonths(cursor, 1);
+  }
+  return monthStarts;
+}
+
+function renderHeatmapView() {
+  const { start: rangeStart, end: rangeEnd, hasEvents } = getHeatmapDateRange();
+  const dayCount = Math.max(1, Math.round((startOfDay(rangeEnd) - startOfDay(rangeStart)) / 86_400_000) + 1);
+  const leadingBlankDays = (rangeStart.getDay() - WEEK_START_DAY + 7) % 7;
+  const weekCount = Math.max(1, Math.ceil((leadingBlankDays + dayCount) / 7));
+  const dates = makeDateRange(rangeStart, dayCount);
+  const hoursByDate = new Map(dates.map((date) => {
+    const dateKey = toDateKey(date);
+    return [dateKey, hasEvents ? getWorkedHoursForDate(dateKey) : 0];
+  }));
+  const totalHours = [...hoursByDate.values()].reduce((total, hours) => total + hours, 0);
+  const activeDays = [...hoursByDate.values()].filter(Boolean).length;
+  const maxHours = Math.max(0, ...hoursByDate.values());
+  const selectedHeatmapDate = selectedDate >= rangeStart && selectedDate <= rangeEnd ? selectedDate : rangeStart;
+
+  const heatmap = document.createElement("section");
+  heatmap.className = "heatmap-view";
+  heatmap.setAttribute("aria-label", `${formatDateRange(rangeStart, rangeEnd)} worked-hours heatmap`);
+
+  const summary = document.createElement("div");
+  summary.className = "heatmap-summary";
+  summary.innerHTML = `
+    <strong>${formatHours(totalHours)}</strong>
+    <span>${activeDays} active day${activeDays === 1 ? "" : "s"} · ${formatDateRange(rangeStart, rangeEnd)}${maxHours ? ` · max ${formatHours(maxHours)}/day` : ""}</span>
+  `;
+
+  const monthRow = document.createElement("div");
+  monthRow.className = "heatmap-month-row";
+  const monthSpacer = document.createElement("span");
+  monthSpacer.className = "heatmap-weekday-spacer";
+  monthSpacer.setAttribute("aria-hidden", "true");
+  const monthLabels = document.createElement("div");
+  monthLabels.className = "heatmap-month-labels";
+  monthLabels.style.setProperty("--heatmap-week-count", weekCount);
+  getMonthStartsBetween(rangeStart, rangeEnd).forEach((monthStart) => {
+    const labelDate = monthStart < rangeStart ? rangeStart : monthStart;
+    const offsetDays = leadingBlankDays + Math.round((startOfDay(labelDate) - startOfDay(rangeStart)) / 86_400_000);
+    const weekIndex = Math.floor(offsetDays / 7);
+    const label = document.createElement("span");
+    label.textContent = shortMonthFormatter.format(monthStart);
+    label.style.gridColumn = `${weekIndex + 1} / span 4`;
+    monthLabels.append(label);
+  });
+  monthRow.append(monthSpacer, monthLabels);
+
+  const body = document.createElement("div");
+  body.className = "heatmap-body";
+
+  const weekdayLabels = document.createElement("div");
+  weekdayLabels.className = "heatmap-weekdays";
+  ["M", "T", "W", "T", "F", "S", "S"].forEach((label) => {
+    const item = document.createElement("span");
+    item.textContent = label;
+    weekdayLabels.append(item);
+  });
+
+  const grid = document.createElement("div");
+  grid.className = "heatmap-grid";
+  grid.style.setProperty("--heatmap-week-count", weekCount);
+  Array.from({ length: leadingBlankDays }).forEach(() => {
+    const blank = document.createElement("span");
+    blank.className = "heatmap-day-spacer";
+    blank.setAttribute("aria-hidden", "true");
+    grid.append(blank);
+  });
+  dates.forEach((date) => {
+    const dateKey = toDateKey(date);
+    const hours = hoursByDate.get(dateKey) ?? 0;
+    const day = document.createElement("button");
+    day.className = [
+      "heatmap-day",
+      isSameDay(date, selectedHeatmapDate) ? "heatmap-day--selected" : "",
+      isSameDay(date, TODAY) ? "heatmap-day--today" : "",
+    ].filter(Boolean).join(" ");
+    day.type = "button";
+    day.dataset.date = dateKey;
+    day.dataset.level = String(getHeatmapIntensityLevel(hours));
+    day.dataset.hours = String(hours);
+    day.title = `${longDateFormatter.format(date)} · ${formatHours(hours)} worked`;
+    day.setAttribute("aria-label", day.title);
+    day.addEventListener("click", () => {
+      selectedDate = new Date(date);
+      viewAnchorDate = new Date(date);
+      visibleMonth = startOfMonth(date);
+      render();
+    });
+    grid.append(day);
+  });
+
+  const legend = document.createElement("div");
+  legend.className = "heatmap-legend";
+  legend.innerHTML = `
+    <span>Less</span>
+    ${[0, 1, 2, 3, 4].map((level) => `<span class="heatmap-legend-box" data-level="${level}" aria-hidden="true"></span>`).join("")}
+    <span>More</span>
+  `;
+
+  body.append(weekdayLabels, grid);
+  heatmap.append(summary, monthRow, body, legend, createHeatmapDetails(selectedHeatmapDate));
+  els.monthGrid.replaceChildren(heatmap);
+}
+
+function createHeatmapDetails(date) {
+  const dateKey = toDateKey(date);
+  const dayEvents = getFilteredEventsForDate(dateKey);
+  const hours = getWorkedHoursForDate(dateKey);
+  const details = document.createElement("section");
+  details.className = "heatmap-details";
+  details.setAttribute("aria-label", "Selected heatmap day details");
+
+  const header = document.createElement("header");
+  header.className = "heatmap-details-header";
+  header.innerHTML = `
+    <h2>${longDateFormatter.format(date)}</h2>
+    <strong>${formatHours(hours)} worked</strong>
+  `;
+
+  if (!dayEvents.length) {
+    const empty = document.createElement("p");
+    empty.className = "empty-state";
+    empty.textContent = "No visible events on this day.";
+    details.append(header, empty);
+    return details;
+  }
+
+  const list = document.createElement("div");
+  list.className = "heatmap-details-list";
+  list.replaceChildren(
+    ...dayEvents.map((event) => {
+      const calendar = getCalendar(event.calendar);
+      const item = document.createElement("article");
+      item.className = "heatmap-details-event";
+      item.style.setProperty("--event-color", calendar.color);
+      item.innerHTML = `
+        <span class="heatmap-details-event-dot" aria-hidden="true"></span>
+        <div>
+          <h3>${escapeHtml(event.title)}</h3>
+          <p>${event.time ? formatTime(event.time) : "All day"} · ${escapeHtml(calendar.name)} · ${formatHours(getOccurrenceDurationHours(event))}</p>
+          ${event.notes ? `<p class="heatmap-details-event-notes">${escapeHtml(event.notes)}</p>` : ""}
+        </div>
+      `;
+      return item;
+    })
+  );
+
+  details.append(header, list);
+  return details;
 }
 
 function createDayCell(date) {
   const dateKey = toDateKey(date);
   const dayEvents = getFilteredEventsForDate(dateKey);
-  const isCurrentMonth = date.getMonth() === visibleMonth.getMonth();
+  const isCurrentMonth = currentView !== "month" || date.getMonth() === visibleMonth.getMonth();
   const isSelected = isSameDay(date, selectedDate);
   const isToday = isSameDay(date, TODAY);
-  const maxVisibleEvents = 3;
+  const maxVisibleEvents = getMaxVisibleEvents();
 
   const cell = document.createElement("section");
   cell.className = [
@@ -285,7 +2240,7 @@ function createDayCell(date) {
   addButton.addEventListener("click", (event) => {
     event.stopPropagation();
     selectedDate = new Date(date);
-    ensureMonthVisible(date);
+    ensureDateVisible(date);
     openEventDialog(dateKey);
   });
 
@@ -307,6 +2262,7 @@ function createDayCell(date) {
     moreButton.addEventListener("click", (event) => {
       event.stopPropagation();
       selectedDate = new Date(date);
+      ensureDateVisible(date);
       showToast(`${dayEvents.length} events on ${compactDateFormatter.format(date)}`);
     });
     eventList.append(moreButton);
@@ -316,29 +2272,207 @@ function createDayCell(date) {
 
   cell.addEventListener("click", () => {
     selectedDate = new Date(date);
-    ensureMonthVisible(date);
+    ensureDateVisible(date);
     render();
   });
 
   cell.addEventListener("dblclick", () => {
     selectedDate = new Date(date);
+    ensureDateVisible(date);
     openEventDialog(dateKey);
   });
 
   cell.addEventListener("keydown", (event) => {
     if (event.key === "Enter") {
       selectedDate = new Date(date);
-      ensureMonthVisible(date);
+      ensureDateVisible(date);
       render();
     }
     if (event.key === " ") {
       event.preventDefault();
       selectedDate = new Date(date);
+      ensureDateVisible(date);
       openEventDialog(dateKey);
     }
   });
 
   return cell;
+}
+
+function renderWeekTimeline() {
+  const weekDates = getMainCalendarDates();
+  const timeline = document.createElement("section");
+  timeline.className = "week-timeline";
+  timeline.setAttribute("aria-label", `${getHeaderTitle(weekDates[0], weekDates[6])} weekly schedule`);
+
+  const header = document.createElement("header");
+  header.className = "week-timeline-header";
+
+  const timezone = document.createElement("div");
+  timezone.className = "week-timezone";
+  timezone.textContent = getTimezoneLabel();
+  header.append(timezone, ...weekDates.map(createWeekHeaderDay));
+
+  const scroller = document.createElement("div");
+  scroller.className = "week-timeline-scroll";
+  scroller.style.setProperty("--hour-height", `${WEEK_HOUR_HEIGHT}px`);
+
+  const timeColumn = document.createElement("div");
+  timeColumn.className = "week-time-column";
+  HOURS.forEach((hour) => {
+    const label = document.createElement("div");
+    label.className = "week-time-label";
+    label.textContent = hour === 0 ? "" : formatHourLabel(hour);
+    timeColumn.append(label);
+  });
+
+  const daysGrid = document.createElement("div");
+  daysGrid.className = "week-days-grid";
+  weekDates.forEach((date) => daysGrid.append(createWeekDayColumn(date)));
+
+  scroller.append(timeColumn, daysGrid);
+  timeline.append(header, scroller);
+  els.monthGrid.replaceChildren(timeline);
+}
+
+function createWeekHeaderDay(date) {
+  const dateKey = toDateKey(date);
+  const dayEvents = getFilteredEventsForDate(dateKey).filter((event) => !event.time);
+  const headerButton = document.createElement("button");
+  headerButton.className = [
+    "week-day-header",
+    isSameDay(date, TODAY) ? "week-day-header--today" : "",
+    isSameDay(date, selectedDate) ? "week-day-header--selected" : "",
+  ]
+    .filter(Boolean)
+    .join(" ");
+  headerButton.type = "button";
+  headerButton.setAttribute("aria-label", longDateFormatter.format(date));
+
+  const weekday = document.createElement("span");
+  weekday.className = "week-day-header-weekday";
+  weekday.textContent = shortWeekdayFormatter.format(date);
+
+  const dayNumber = document.createElement("span");
+  dayNumber.className = "week-day-header-number";
+  dayNumber.textContent = date.getDate();
+
+  headerButton.append(weekday, dayNumber);
+
+  if (dayEvents.length) {
+    const allDayList = document.createElement("span");
+    allDayList.className = "week-all-day-list";
+    dayEvents.slice(0, 2).forEach((calendarEvent) => {
+      const chip = document.createElement("span");
+      chip.className = "week-all-day-chip";
+      chip.style.setProperty("--event-color", getCalendar(calendarEvent.calendar).color);
+      chip.textContent = calendarEvent.title;
+      allDayList.append(chip);
+    });
+    headerButton.append(allDayList);
+  }
+
+  headerButton.addEventListener("click", () => {
+    selectedDate = new Date(date);
+    ensureDateVisible(date);
+    render();
+  });
+
+  return headerButton;
+}
+
+function createWeekDayColumn(date) {
+  const dateKey = toDateKey(date);
+  const column = document.createElement("div");
+  column.className = [
+    "week-day-column",
+    isSameDay(date, selectedDate) ? "week-day-column--selected" : "",
+    isSameDay(date, TODAY) ? "week-day-column--today" : "",
+  ]
+    .filter(Boolean)
+    .join(" ");
+  column.dataset.date = dateKey;
+
+  HOURS.forEach((hour) => column.append(createWeekSlot(date, hour)));
+
+  getFilteredEventsForDate(dateKey)
+    .filter((calendarEvent) => calendarEvent.time)
+    .forEach((calendarEvent) => column.append(createWeekTimedEvent(calendarEvent)));
+
+  if (isSameDay(date, getNow())) {
+    column.append(createNowIndicator());
+  }
+
+  return column;
+}
+
+function createNowIndicator() {
+  const now = getNow();
+  const indicator = document.createElement("div");
+  indicator.className = "week-now-indicator";
+  indicator.dataset.date = toDateKey(now);
+  indicator.style.top = `${getNowOffsetPixels(now)}px`;
+  indicator.setAttribute("aria-label", `Current time ${formatClockTime(now)}`);
+
+  const dot = document.createElement("span");
+  dot.className = "week-now-dot";
+
+  const label = document.createElement("span");
+  label.className = "week-now-time";
+  label.textContent = formatClockTime(now);
+
+  indicator.append(dot, label);
+  return indicator;
+}
+
+function createWeekSlot(date, hour) {
+  const dateKey = toDateKey(date);
+  const slot = document.createElement("button");
+  slot.className = "week-slot";
+  slot.type = "button";
+  slot.style.top = `${hour * WEEK_HOUR_HEIGHT}px`;
+  slot.setAttribute("aria-label", `Create event on ${longDateFormatter.format(date)} at ${formatHourLabel(hour) || "12 AM"}`);
+  slot.addEventListener("click", () => {
+    selectedDate = new Date(date);
+    ensureDateVisible(date);
+    openEventDialog(dateKey);
+    els.eventTime.value = formatTimeInput(hour);
+  });
+  return slot;
+}
+
+function createWeekTimedEvent(calendarEvent) {
+  const calendar = getCalendar(calendarEvent.calendar);
+  const [hour, minute] = calendarEvent.time.split(":").map(Number);
+  const startMinutes = hour * 60 + minute;
+  const top = (startMinutes / 60) * WEEK_HOUR_HEIGHT;
+  const height = (DEFAULT_EVENT_DURATION_MINUTES / 60) * WEEK_HOUR_HEIGHT;
+
+  const eventButton = document.createElement("button");
+  eventButton.className = "week-timed-event";
+  eventButton.type = "button";
+  eventButton.style.setProperty("--event-color", calendar.color);
+  eventButton.style.top = `${top + 2}px`;
+  eventButton.style.height = `${Math.max(34, height - 4)}px`;
+  eventButton.setAttribute("aria-label", `${formatTime(calendarEvent.time)} ${calendarEvent.title}, ${calendar.name}`);
+
+  const time = document.createElement("span");
+  time.className = "week-timed-event-time";
+  time.textContent = formatTime(calendarEvent.time);
+
+  const title = document.createElement("span");
+  title.className = "week-timed-event-title";
+  title.textContent = calendarEvent.title;
+
+  eventButton.append(title, time);
+  eventButton.addEventListener("click", (event) => {
+    event.stopPropagation();
+    selectedDate = fromDateKey(getEventDate(calendarEvent));
+    ensureDateVisible(selectedDate);
+    openEventDialog(getEventDate(calendarEvent), calendarEvent);
+  });
+
+  return eventButton;
 }
 
 function createEventChip(calendarEvent) {
@@ -361,45 +2495,16 @@ function createEventChip(calendarEvent) {
   chip.append(time, title);
   chip.addEventListener("click", (event) => {
     event.stopPropagation();
-    selectedDate = fromDateKey(calendarEvent.date);
-    openEventDialog(calendarEvent.date, calendarEvent);
+    selectedDate = fromDateKey(getEventDate(calendarEvent));
+    openEventDialog(getEventDate(calendarEvent), calendarEvent);
   });
 
   return chip;
 }
 
-function renderMiniCalendar() {
-  els.miniCalendar.replaceChildren(
-    ...getVisibleMonthDates().map((date) => {
-      const button = document.createElement("button");
-      button.className = [
-        "mini-day",
-        date.getMonth() === visibleMonth.getMonth() ? "" : "mini-day--muted",
-        isSameDay(date, TODAY) ? "mini-day--today" : "",
-        isSameDay(date, selectedDate) ? "mini-day--selected" : "",
-      ]
-        .filter(Boolean)
-        .join(" ");
-      button.type = "button";
-      button.textContent = date.getDate();
-      button.setAttribute("aria-label", longDateFormatter.format(date));
-      button.addEventListener("click", () => {
-        selectedDate = new Date(date);
-        ensureMonthVisible(date);
-        render();
-      });
-      return button;
-    })
-  );
-}
-
 function renderUpcoming() {
   const selectedKey = toDateKey(selectedDate);
-  const upcoming = events
-    .filter((event) => event.date >= selectedKey)
-    .filter((event) => isEventVisible(event))
-    .sort(compareEvents)
-    .slice(0, 5);
+  const upcoming = getUpcomingOccurrences(selectedKey, 5);
 
   if (!upcoming.length) {
     const empty = document.createElement("p");
@@ -417,14 +2522,15 @@ function renderUpcoming() {
       item.type = "button";
       item.style.setProperty("--event-color", calendar.color);
       item.innerHTML = `
-        <span class="upcoming-date">${compactDateFormatter.format(fromDateKey(event.date))}</span>
+        <span class="upcoming-date">${compactDateFormatter.format(fromDateKey(getEventDate(event)))}</span>
         <span class="upcoming-title">${escapeHtml(event.title)}</span>
-        <span class="upcoming-meta">${event.time ? formatTime(event.time) : "All day"} · ${calendar.name}</span>
+        <span class="upcoming-meta">${event.time ? formatTime(event.time) : "All day"} · ${calendar.name}${event.repeat && event.repeat !== "none" ? ` · ${REPEAT_LABELS[event.repeat]}` : ""}</span>
       `;
       item.addEventListener("click", () => {
-        selectedDate = fromDateKey(event.date);
+        selectedDate = fromDateKey(getEventDate(event));
+        viewAnchorDate = new Date(selectedDate);
         visibleMonth = startOfMonth(selectedDate);
-        openEventDialog(event.date, event);
+        openEventDialog(getEventDate(event), event);
       });
       return item;
     })
@@ -434,16 +2540,31 @@ function renderUpcoming() {
 function openEventDialog(dateKey, existingEvent = null) {
   els.eventForm.reset();
   els.eventId.value = existingEvent?.id ?? "";
+  els.eventOccurrenceDate.value = existingEvent ? getEventDate(existingEvent) : dateKey;
   els.eventTitle.value = existingEvent?.title ?? "";
   els.eventDate.value = existingEvent?.date ?? dateKey;
   els.eventTime.value = existingEvent?.time ?? "";
-  els.eventCalendar.value = existingEvent?.calendar ?? calendars[0].id;
+  els.eventCalendar.value = existingEvent?.calendar ?? getDefaultEventCalendarId();
+  els.eventRepeat.value = existingEvent?.repeat ?? "none";
   els.eventNotes.value = existingEvent?.notes ?? "";
+  activeEventPaperSnapshots = getExistingEventPaperSnapshots(existingEvent);
+  const selectedPaperIds = existingEvent?.paperTaskIds ?? activeEventPaperSnapshots.map((paper) => paper.id);
+  renderEventPaperAssignment(selectedPaperIds.length ? selectedPaperIds : inferPaperTaskIdsFromEvent(existingEvent));
+  if (existingEvent?.id) setSidebarPanel("analysis");
+  const isRecurringEvent = existingEvent && (existingEvent.repeat ?? "none") !== "none";
   els.deleteEvent.hidden = !existingEvent;
+  els.deleteEvent.textContent = isRecurringEvent ? "Delete instance" : "Delete";
+  els.deleteSeriesEvent.hidden = !isRecurringEvent;
   document.querySelector("#eventDialogTitle").textContent = existingEvent ? "Edit event" : "Create event";
   els.eventModal.classList.add("is-open");
   els.eventModal.setAttribute("aria-hidden", "false");
-  requestAnimationFrame(() => els.eventTitle.focus());
+  requestAnimationFrame(() => {
+    if (existingEvent) {
+      els.eventForm.focus();
+    } else {
+      els.eventTitle.focus();
+    }
+  });
 }
 
 function closeEventDialog() {
@@ -454,28 +2575,58 @@ function closeEventDialog() {
 function saveEventFromDialog(event) {
   event.preventDefault();
 
+  const id = els.eventId.value || makeId();
+  const existingIndex = events.findIndex((item) => item.id === id);
+  const existingEvent = existingIndex >= 0 ? events[existingIndex] : null;
+  const selectedPapers = isReadEventTitle(els.eventTitle.value) ? getSelectedEventPapers() : [];
+  const paperTasksChanged = selectedPapers.length ? removeAssignedPapersFromTasks(selectedPapers) : false;
+  const occurrenceDate = els.eventOccurrenceDate.value || els.eventDate.value;
+  const repeat = els.eventRepeat.value;
+  const isRecurring = repeat !== "none";
+  const assignedTitle = selectedPapers.length ? getReadEventTitleForPapers(els.eventTitle.value, selectedPapers) : els.eventTitle.value.trim();
+
   const formEvent = {
-    id: els.eventId.value || makeId(),
-    title: els.eventTitle.value.trim(),
+    id,
+    title: isRecurring && selectedPapers.length ? existingEvent?.title ?? els.eventTitle.value.trim() : assignedTitle,
     date: els.eventDate.value,
     time: els.eventTime.value,
     calendar: els.eventCalendar.value,
+    repeat,
+    paperTaskIds: isRecurring && selectedPapers.length ? existingEvent?.paperTaskIds ?? [] : selectedPapers.map((paper) => paper.id),
+    papers: isRecurring && selectedPapers.length ? existingEvent?.papers ?? [] : selectedPapers,
+    instanceOverrides: existingEvent?.instanceOverrides ?? {},
     notes: els.eventNotes.value.trim(),
   };
 
-  if (!formEvent.title || !formEvent.date) return;
+  if (isRecurring && selectedPapers.length) {
+    formEvent.instanceOverrides = {
+      ...formEvent.instanceOverrides,
+      [occurrenceDate]: {
+        title: assignedTitle,
+        paperTaskIds: selectedPapers.map((paper) => paper.id),
+        papers: selectedPapers,
+      },
+    };
+  }
 
-  const existingIndex = events.findIndex((item) => item.id === formEvent.id);
+  if (!formEvent.title || !formEvent.date || !formEvent.calendar) return;
+
   if (existingIndex >= 0) {
+    formEvent.excludedDates = existingEvent.excludedDates ?? [];
     events.splice(existingIndex, 1, formEvent);
-    showToast("Event updated");
+    showToast(isRecurring && selectedPapers.length ? "Event instance updated" : "Event updated");
   } else {
     events.push(formEvent);
-    showToast("Event created");
+    showToast(isRecurring && selectedPapers.length ? "Event instance created" : "Event created");
   }
 
   selectedDate = fromDateKey(formEvent.date);
+  viewAnchorDate = new Date(selectedDate);
   visibleMonth = startOfMonth(selectedDate);
+  if (paperTasksChanged) {
+    savePaperTasks();
+    renderPaperTasks();
+  }
   saveEvents();
   closeEventDialog();
   render();
@@ -484,45 +2635,234 @@ function saveEventFromDialog(event) {
 function deleteActiveEvent() {
   const id = els.eventId.value;
   if (!id) return;
-  events = events.filter((event) => event.id !== id);
+
+  const existingIndex = events.findIndex((event) => event.id === id);
+  if (existingIndex < 0) return;
+
+  const event = events[existingIndex];
+  const repeat = event.repeat ?? "none";
+
+  let paperTasksChanged = false;
+
+  if (repeat !== "none") {
+    const occurrenceDate = els.eventOccurrenceDate.value || event.date;
+    paperTasksChanged = restorePapersToTasks(getAssignedPapersForOccurrence(event, occurrenceDate));
+    const excludedDates = new Set(event.excludedDates ?? []);
+    excludedDates.add(occurrenceDate);
+    events.splice(existingIndex, 1, {
+      ...event,
+      excludedDates: [...excludedDates].sort(),
+    });
+    showToast("Event instance deleted");
+  } else {
+    paperTasksChanged = restorePapersToTasks(getAssignedPapersForOccurrence(event, event.date));
+    events.splice(existingIndex, 1);
+    showToast("Event deleted");
+  }
+
+  if (paperTasksChanged) {
+    savePaperTasks();
+    renderPaperTasks();
+  }
   saveEvents();
   closeEventDialog();
   render();
-  showToast("Event deleted");
 }
 
-function changeMonth(direction) {
-  visibleMonth = addMonths(visibleMonth, direction);
-  selectedDate = new Date(visibleMonth.getFullYear(), visibleMonth.getMonth(), Math.min(selectedDate.getDate(), daysInMonth(visibleMonth)));
+function deleteRecurringSeries() {
+  const id = els.eventId.value;
+  if (!id) return;
+
+  const existingIndex = events.findIndex((event) => event.id === id);
+  if (existingIndex < 0) return;
+
+  const paperTasksChanged = restorePapersToTasks(getAllAssignedPapersInSeries(events[existingIndex]));
+  events.splice(existingIndex, 1);
+  if (paperTasksChanged) {
+    savePaperTasks();
+    renderPaperTasks();
+  }
+  saveEvents();
+  closeEventDialog();
+  render();
+  showToast("Recurring event deleted");
+}
+
+function setView(view) {
+  if (!VIEW_LABELS[view] || currentView === view) return;
+  currentView = view;
+  viewAnchorDate = new Date(selectedDate);
+  visibleMonth = startOfMonth(selectedDate);
   render();
 }
 
-function ensureMonthVisible(date) {
-  if (date.getMonth() !== visibleMonth.getMonth() || date.getFullYear() !== visibleMonth.getFullYear()) {
-    visibleMonth = startOfMonth(date);
-  }
+function jumpToCurrentTime() {
+  const now = getNow();
+  currentView = "week";
+  selectedDate = new Date(now);
+  viewAnchorDate = new Date(now);
+  visibleMonth = startOfMonth(now);
+  render();
+  requestAnimationFrame(centerWeekScrollerOnNow);
+  showToast("Centered on current time");
 }
 
-function getVisibleMonthDates() {
-  const firstDay = startOfMonth(visibleMonth);
-  const gridStart = new Date(firstDay);
-  gridStart.setDate(firstDay.getDate() - firstDay.getDay());
+function navigatePeriod(direction) {
+  if (currentView === "month") {
+    visibleMonth = addMonths(visibleMonth, direction);
+    selectedDate = new Date(
+      visibleMonth.getFullYear(),
+      visibleMonth.getMonth(),
+      Math.min(selectedDate.getDate(), daysInMonth(visibleMonth))
+    );
+    viewAnchorDate = new Date(selectedDate);
+  } else if (currentView === "heatmap") {
+    selectedDate = addYears(selectedDate, direction);
+    viewAnchorDate = addYears(viewAnchorDate, direction);
+    visibleMonth = startOfMonth(viewAnchorDate);
+  } else {
+    const step = currentView === "week" ? 7 : 28;
+    selectedDate = addDays(selectedDate, direction * step);
+    viewAnchorDate = addDays(viewAnchorDate, direction * step);
+    visibleMonth = startOfMonth(viewAnchorDate);
+  }
 
-  return Array.from({ length: 42 }, (_, index) => {
-    const date = new Date(gridStart);
-    date.setDate(gridStart.getDate() + index);
-    return date;
-  });
+  render();
+}
+
+function ensureDateVisible(date) {
+  if (currentView === "month") {
+    visibleMonth = startOfMonth(date);
+    viewAnchorDate = new Date(date);
+    return;
+  }
+
+  const { start, end } = getVisibleDateRange();
+  if (date < start || date > end) {
+    viewAnchorDate = new Date(date);
+  }
+  visibleMonth = startOfMonth(date);
+}
+
+function getVisibleDateRange() {
+  if (currentView === "month") {
+    return {
+      start: startOfMonth(visibleMonth),
+      end: endOfDay(endOfMonth(visibleMonth)),
+    };
+  }
+
+  if (currentView === "heatmap") {
+    const { start, end } = getHeatmapDateRange();
+    return {
+      start,
+      end: endOfDay(end),
+    };
+  }
+
+  const start = startOfWeek(viewAnchorDate);
+  return {
+    start,
+    end: endOfDay(addDays(start, currentView === "week" ? 6 : 27)),
+  };
+}
+
+function getHeaderTitle(start, end) {
+  if (currentView === "month") return monthFormatter.format(visibleMonth);
+  return formatDateRange(start, end);
+}
+
+function formatDateRange(start, end) {
+  if (start.getFullYear() === end.getFullYear() && start.getMonth() === end.getMonth()) {
+    return `${rangeFullMonthDayFormatter.format(start)} – ${end.getDate()}, ${end.getFullYear()}`;
+  }
+
+  if (start.getFullYear() === end.getFullYear()) {
+    return `${rangeMonthDayFormatter.format(start)} – ${rangeMonthDayFormatter.format(end)}, ${end.getFullYear()}`;
+  }
+
+  return `${rangeMonthDayFormatter.format(start)}, ${start.getFullYear()} – ${rangeMonthDayFormatter.format(end)}, ${end.getFullYear()}`;
+}
+
+function getMainCalendarDates() {
+  if (currentView === "month") {
+    const firstDay = startOfMonth(visibleMonth);
+    const gridStart = startOfWeek(firstDay);
+    return makeDateRange(gridStart, 42);
+  }
+
+  const { start } = getVisibleDateRange();
+  return makeDateRange(start, currentView === "week" ? 7 : 28);
+}
+
+function makeDateRange(start, length) {
+  return Array.from({ length }, (_, index) => addDays(start, index));
+}
+
+function getMaxVisibleEvents() {
+  if (currentView === "week") return 8;
+  if (currentView === "four-week") return 4;
+  return 3;
 }
 
 function getFilteredEventsForDate(dateKey) {
   return events
-    .filter((event) => event.date === dateKey)
+    .filter((event) => doesEventOccurOnDate(event, dateKey))
+    .map((event) => createEventOccurrence(event, dateKey))
     .filter((event) => isEventVisible(event))
     .sort(compareEvents);
 }
 
+function doesEventOccurOnDate(event, dateKey) {
+  const repeat = event.repeat ?? "none";
+  if ((event.excludedDates ?? []).includes(dateKey)) return false;
+  if (dateKey < event.date) return false;
+  if (event.repeatUntil && dateKey > event.repeatUntil) return false;
+  if (repeat === "none") return event.date === dateKey;
+  if (repeat === "daily") return true;
+  if (repeat === "weekly") return fromDateKey(dateKey).getDay() === fromDateKey(event.date).getDay();
+  if (repeat === "weekdays") return isWeekday(fromDateKey(dateKey));
+  return event.date === dateKey;
+}
+
+function createEventOccurrence(event, dateKey) {
+  const override = event.instanceOverrides?.[dateKey] ?? {};
+  return {
+    ...event,
+    ...override,
+    id: event.id,
+    repeat: event.repeat ?? "none",
+    sourceDate: event.date,
+    occurrenceDate: dateKey,
+    instanceOverride: override,
+  };
+}
+
+function getEventDate(event) {
+  return event.occurrenceDate ?? event.date;
+}
+
+function isWeekday(date) {
+  const day = date.getDay();
+  return day >= 1 && day <= 5;
+}
+
+function getUpcomingOccurrences(startKey, limit = 5) {
+  const start = fromDateKey(startKey);
+  const occurrences = [];
+
+  for (let offset = 0; offset < 366 && occurrences.length < limit; offset += 1) {
+    const date = addDays(start, offset);
+    const dateKey = toDateKey(date);
+    occurrences.push(...getFilteredEventsForDate(dateKey));
+    occurrences.sort(compareEvents);
+  }
+
+  return occurrences.slice(0, limit);
+}
+
 function isEventVisible(event) {
+  if (isCalendarDeleted(event.calendar)) return false;
   if (!visibleCalendars[event.calendar]) return false;
   if (!searchQuery) return true;
   const haystack = `${event.title} ${event.notes ?? ""} ${getCalendar(event.calendar).name}`.toLowerCase();
@@ -530,12 +2870,14 @@ function isEventVisible(event) {
 }
 
 function compareEvents(a, b) {
-  if (a.date !== b.date) return a.date.localeCompare(b.date);
+  const dateA = getEventDate(a);
+  const dateB = getEventDate(b);
+  if (dateA !== dateB) return dateA.localeCompare(dateB);
   return (a.time || "24:00").localeCompare(b.time || "24:00");
 }
 
 function getCalendar(id) {
-  return calendars.find((calendar) => calendar.id === id) ?? calendars[0];
+  return calendars.find((calendar) => calendar.id === id) ?? defaultCalendars[0];
 }
 
 function loadEvents() {
@@ -547,8 +2889,126 @@ function loadEvents() {
   }
 }
 
-function saveEvents() {
+function saveEvents({ sync = true, touch = true } = {}) {
   localStorage.setItem(STORAGE_EVENTS, JSON.stringify(events));
+  if (touch) touchLocalSyncUpdatedAt();
+  if (sync) queueCloudSync();
+}
+
+function getCalendars() {
+  const combined = [...defaultCalendars, ...customCalendars].map((calendar) => ({
+    ...calendar,
+    name: calendarNameOverrides?.[calendar.id] || calendar.name,
+    color: calendarColorOverrides?.[calendar.id] || calendar.color,
+  }));
+  return orderCalendars(combined);
+}
+
+function orderCalendars(calendarList) {
+  const byId = new Map(calendarList.map((calendar) => [calendar.id, calendar]));
+  const ordered = calendarOrderIds?.map((id) => byId.get(id)).filter(Boolean) ?? [];
+  const orderedIds = new Set(ordered.map((calendar) => calendar.id));
+  return [...ordered, ...calendarList.filter((calendar) => !orderedIds.has(calendar.id))];
+}
+
+function normalizeCustomCalendars(value) {
+  if (!Array.isArray(value)) return [];
+  const builtInIds = new Set(defaultCalendars.map((calendar) => calendar.id));
+  const seen = new Set();
+  return value
+    .filter((calendar) => calendar?.id && calendar?.name && !builtInIds.has(calendar.id) && !seen.has(calendar.id))
+    .map((calendar) => {
+      seen.add(calendar.id);
+      return {
+        id: String(calendar.id),
+        name: String(calendar.name),
+        color: calendar.color || importedCalendarColors[seen.size % importedCalendarColors.length],
+        imported: true,
+      };
+    });
+}
+
+function loadCustomCalendars() {
+  try {
+    return normalizeCustomCalendars(JSON.parse(localStorage.getItem(STORAGE_CUSTOM_CALENDARS) || "[]"));
+  } catch {
+    return [];
+  }
+}
+
+function saveCustomCalendars({ sync = true, touch = true } = {}) {
+  localStorage.setItem(STORAGE_CUSTOM_CALENDARS, JSON.stringify(customCalendars));
+  if (touch) touchLocalSyncUpdatedAt();
+  if (sync) queueCloudSync();
+}
+
+function normalizeCalendarOrderIds(value) {
+  if (!Array.isArray(value)) return [];
+  const validIds = new Set([...defaultCalendars, ...customCalendars].map((calendar) => calendar.id));
+  return [...new Set(value.filter((id) => validIds.has(id)))];
+}
+
+function loadCalendarOrderIds() {
+  try {
+    return normalizeCalendarOrderIds(JSON.parse(localStorage.getItem(STORAGE_CALENDAR_ORDER) || "[]"));
+  } catch {
+    return [];
+  }
+}
+
+function saveCalendarOrderIds({ sync = true, touch = true } = {}) {
+  localStorage.setItem(STORAGE_CALENDAR_ORDER, JSON.stringify(calendarOrderIds));
+  if (touch) touchLocalSyncUpdatedAt();
+  if (sync) queueCloudSync();
+}
+
+function normalizeCalendarNameOverrides(value) {
+  if (!value || typeof value !== "object" || Array.isArray(value)) return {};
+  const validIds = new Set([...defaultCalendars, ...customCalendars].map((calendar) => calendar.id));
+  return Object.fromEntries(
+    Object.entries(value)
+      .filter(([id, name]) => validIds.has(id) && typeof name === "string" && name.trim())
+      .map(([id, name]) => [id, name.trim()])
+  );
+}
+
+function loadCalendarNameOverrides() {
+  try {
+    return normalizeCalendarNameOverrides(JSON.parse(localStorage.getItem(STORAGE_CALENDAR_RENAMES) || "{}"));
+  } catch {
+    return {};
+  }
+}
+
+function saveCalendarNameOverrides({ sync = true, touch = true } = {}) {
+  localStorage.setItem(STORAGE_CALENDAR_RENAMES, JSON.stringify(calendarNameOverrides));
+  if (touch) touchLocalSyncUpdatedAt();
+  if (sync) queueCloudSync();
+}
+
+function normalizeCalendarColorOverrides(value) {
+  if (!value || typeof value !== "object" || Array.isArray(value)) return {};
+  const validIds = new Set([...defaultCalendars, ...customCalendars].map((calendar) => calendar.id));
+  const validColors = new Set(basicColorKeywords);
+  return Object.fromEntries(
+    Object.entries(value)
+      .filter(([id, color]) => validIds.has(id) && validColors.has(color))
+      .map(([id, color]) => [id, color])
+  );
+}
+
+function loadCalendarColorOverrides() {
+  try {
+    return normalizeCalendarColorOverrides(JSON.parse(localStorage.getItem(STORAGE_CALENDAR_COLORS) || "{}"));
+  } catch {
+    return {};
+  }
+}
+
+function saveCalendarColorOverrides({ sync = true, touch = true } = {}) {
+  localStorage.setItem(STORAGE_CALENDAR_COLORS, JSON.stringify(calendarColorOverrides));
+  if (touch) touchLocalSyncUpdatedAt();
+  if (sync) queueCloudSync();
 }
 
 function loadVisibleCalendars() {
@@ -560,16 +3020,120 @@ function loadVisibleCalendars() {
   }
 }
 
-function saveVisibleCalendars() {
+function saveVisibleCalendars({ sync = true, touch = true } = {}) {
   localStorage.setItem(STORAGE_VISIBLE_CALENDARS, JSON.stringify(visibleCalendars));
+  if (touch) touchLocalSyncUpdatedAt();
+  if (sync) queueCloudSync();
+}
+
+function normalizeCalendarIdList(value) {
+  if (!Array.isArray(value)) return [];
+  const validIds = new Set(calendars.map((calendar) => calendar.id));
+  return [...new Set(value.filter((id) => validIds.has(id)))];
+}
+
+function loadArchivedCalendarIds() {
+  try {
+    return normalizeCalendarIdList(JSON.parse(localStorage.getItem(STORAGE_ARCHIVED_CALENDARS) || "[]"));
+  } catch {
+    return [];
+  }
+}
+
+function saveArchivedCalendarIds({ sync = true, touch = true } = {}) {
+  localStorage.setItem(STORAGE_ARCHIVED_CALENDARS, JSON.stringify(archivedCalendarIds));
+  if (touch) touchLocalSyncUpdatedAt();
+  if (sync) queueCloudSync();
+}
+
+function loadDeletedCalendarIds() {
+  try {
+    return normalizeCalendarIdList(JSON.parse(localStorage.getItem(STORAGE_DELETED_CALENDARS) || "[]"));
+  } catch {
+    return [];
+  }
+}
+
+function saveDeletedCalendarIds({ sync = true, touch = true } = {}) {
+  localStorage.setItem(STORAGE_DELETED_CALENDARS, JSON.stringify(deletedCalendarIds));
+  if (touch) touchLocalSyncUpdatedAt();
+  if (sync) queueCloudSync();
+}
+
+function loadPaperTasks() {
+  try {
+    const saved = JSON.parse(localStorage.getItem(STORAGE_PAPER_TASKS) || "[]");
+    return Array.isArray(saved) ? saved : [];
+  } catch {
+    return [];
+  }
+}
+
+function savePaperTasks({ sync = true, touch = true } = {}) {
+  localStorage.setItem(STORAGE_PAPER_TASKS, JSON.stringify(paperTasks));
+  if (touch) touchLocalSyncUpdatedAt();
+  if (sync) queueCloudSync();
+}
+
+function isValidSidebarLocation(value) {
+  return ["left", "bottom", "right"].includes(value);
+}
+
+function loadSidebarLocation() {
+  const saved = localStorage.getItem(STORAGE_SIDEBAR_LOCATION);
+  return isValidSidebarLocation(saved) ? saved : "left";
+}
+
+function saveSidebarLocation() {
+  localStorage.setItem(STORAGE_SIDEBAR_LOCATION, sidebarLocation);
+}
+
+function createReferenceToday() {
+  const clock = new Date();
+  return new Date(2026, 6, 2, clock.getHours(), clock.getMinutes(), clock.getSeconds());
+}
+
+function getNow() {
+  return createReferenceToday();
 }
 
 function startOfMonth(date) {
   return new Date(date.getFullYear(), date.getMonth(), 1);
 }
 
+function endOfMonth(date) {
+  return new Date(date.getFullYear(), date.getMonth() + 1, 0);
+}
+
+function endOfDay(date) {
+  const end = new Date(date);
+  end.setHours(23, 59, 59, 999);
+  return end;
+}
+
+function startOfWeek(date) {
+  const start = new Date(date);
+  const daysSinceWeekStart = (start.getDay() - WEEK_START_DAY + 7) % 7;
+  start.setDate(start.getDate() - daysSinceWeekStart);
+  start.setHours(0, 0, 0, 0);
+  return start;
+}
+
+function addDays(date, amount) {
+  const next = new Date(date);
+  next.setDate(next.getDate() + amount);
+  return next;
+}
+
 function addMonths(date, amount) {
   return new Date(date.getFullYear(), date.getMonth() + amount, 1);
+}
+
+function addYears(date, amount) {
+  const next = new Date(date);
+  next.setFullYear(next.getFullYear() + amount);
+  if (next.getMonth() !== date.getMonth()) next.setDate(0);
+  return next;
 }
 
 function daysInMonth(date) {
@@ -592,6 +3156,57 @@ function fromDateKey(dateKey) {
   return new Date(year, month - 1, day);
 }
 
+function centerWeekScrollerOnNow() {
+  const scroller = els.monthGrid.querySelector(".week-timeline-scroll");
+  if (!scroller) return;
+  const top = getNowOffsetPixels(getNow());
+  const centeredTop = Math.max(0, top - scroller.clientHeight / 2);
+  scroller.scrollTo({ top: centeredTop, behavior: "auto" });
+}
+
+function updateNowIndicator() {
+  if (currentView !== "week") return;
+  const indicator = els.monthGrid.querySelector(".week-now-indicator");
+  const now = getNow();
+
+  if (!indicator) {
+    const { start, end } = getVisibleDateRange();
+    if (now >= start && now <= end) renderMonthGrid();
+    return;
+  }
+
+  if (indicator.dataset.date !== toDateKey(now)) {
+    renderMonthGrid();
+    return;
+  }
+
+  indicator.style.top = `${getNowOffsetPixels(now)}px`;
+  indicator.setAttribute("aria-label", `Current time ${formatClockTime(now)}`);
+  indicator.querySelector(".week-now-time").textContent = formatClockTime(now);
+}
+
+function getNowOffsetPixels(date) {
+  return ((date.getHours() * 60 + date.getMinutes()) / 60) * WEEK_HOUR_HEIGHT;
+}
+
+function formatClockTime(date) {
+  return new Intl.DateTimeFormat("en-US", {
+    hour: "numeric",
+    minute: "2-digit",
+  }).format(date);
+}
+
+function formatHourLabel(hour) {
+  if (hour === 0) return "";
+  return new Intl.DateTimeFormat("en-US", {
+    hour: "numeric",
+  }).format(new Date(2026, 0, 1, hour));
+}
+
+function formatTimeInput(hour) {
+  return `${String(hour).padStart(2, "0")}:00`;
+}
+
 function formatTime(time) {
   if (!time) return "";
   const [hour, minute] = time.split(":").map(Number);
@@ -601,8 +3216,21 @@ function formatTime(time) {
   }).format(new Date(2026, 0, 1, hour, minute));
 }
 
+function getTimezoneLabel() {
+  const offsetMinutes = -new Date().getTimezoneOffset();
+  const sign = offsetMinutes >= 0 ? "+" : "-";
+  const hours = Math.floor(Math.abs(offsetMinutes) / 60);
+  const minutes = Math.abs(offsetMinutes) % 60;
+  return `GMT${sign}${String(hours).padStart(2, "0")}${minutes ? `:${String(minutes).padStart(2, "0")}` : ""}`;
+}
+
 function makeId() {
   return globalThis.crypto?.randomUUID?.() ?? `event-${Date.now()}-${Math.random().toString(16).slice(2)}`;
+}
+
+function isTypingTarget(target) {
+  if (!(target instanceof Element)) return false;
+  return Boolean(target.closest("input, textarea, select, [contenteditable='true']"));
 }
 
 function showToast(message) {

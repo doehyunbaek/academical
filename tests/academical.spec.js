@@ -1,0 +1,533 @@
+const { test, expect } = require('@playwright/test');
+
+test('calendar loads with Firebase sync UI', async ({ page }) => {
+  await page.goto('/');
+  await expect(page.locator('#monthTitle')).toBeVisible();
+  await expect(page.locator('#accountButton')).toBeVisible();
+  await expect(page.locator('#syncStatus')).toBeHidden();
+});
+
+test('account avatar opens sync dropdown and uses generic icon', async ({ page }) => {
+  await page.goto('/');
+  await expect(page.locator('#accountPopover')).toBeHidden();
+  await page.locator('#accountButton').click();
+  await expect(page.locator('#accountPopover')).toBeVisible();
+  await expect(page.locator('#syncAuthButton')).toBeVisible();
+  await expect(page.locator('#userAvatar svg')).toBeVisible();
+  await expect(page.locator('#userAvatar')).not.toContainText('DB');
+});
+
+test('weeks start on Monday in month and week views', async ({ page }) => {
+  await page.goto('/');
+  await expect(page.locator('.weekday-row span').first()).toHaveText('Mon');
+  await expect(page.locator('.day-cell').first().locator('.day-number')).toHaveText('29');
+  await page.keyboard.press('2');
+  await expect(page.locator('#monthTitle')).toHaveText('Jun 29 – Jul 5, 2026');
+  await expect(page.locator('.week-day-header').first().locator('.week-day-header-weekday')).toHaveText('Mon');
+});
+
+test('keyboard shortcuts switch views and navigate periods', async ({ page }) => {
+  await page.goto('/');
+  await page.keyboard.press('2');
+  await expect(page.locator('#viewSelect')).toHaveValue('week');
+  await expect(page.locator('#monthTitle')).toHaveText('Jun 29 – Jul 5, 2026');
+  await page.keyboard.press('j');
+  await expect(page.locator('#monthTitle')).toHaveText('July 6 – 12, 2026');
+  await page.keyboard.press('4');
+  await expect(page.locator('#viewSelect')).toHaveValue('four-week');
+  await page.keyboard.press('5');
+  await expect(page.locator('#viewSelect')).toHaveValue('heatmap');
+  await expect(page.locator('#monthTitle')).toHaveText('July 1 – 31, 2026');
+  await page.keyboard.press('3');
+  await expect(page.locator('#viewSelect')).toHaveValue('month');
+});
+
+
+test('heatmap view renders one square per day with worked-hour intensity', async ({ page }) => {
+  await page.goto('/');
+  await page.keyboard.press('5');
+
+  await expect(page.locator('#viewSelect')).toHaveValue('heatmap');
+  await expect(page.locator('.weekday-row')).toBeHidden();
+  await expect(page.locator('#monthTitle')).toHaveText('July 1 – 31, 2026');
+  await expect(page.locator('.heatmap-day')).toHaveCount(31);
+  await expect(page.locator('.heatmap-day[data-date="2026-07-01"]')).toHaveAttribute('data-hours', '1');
+  await expect(page.locator('.heatmap-day[data-date="2026-07-01"]')).toHaveAttribute('data-level', '1');
+  await expect(page.locator('.heatmap-day[data-date="2026-07-03"]')).toHaveAttribute('data-hours', '0');
+  await expect(page.locator('.heatmap-day[data-date="2026-07-03"]')).toHaveAttribute('data-level', '0');
+
+  await page.locator('.heatmap-day[data-date="2026-07-01"]').click();
+  await expect(page.locator('.heatmap-details')).toContainText('Wednesday, July 1, 2026');
+  await expect(page.locator('.heatmap-details')).toContainText('1h worked');
+  await expect(page.locator('.heatmap-details')).toContainText('CS seminar prep');
+  await expect(page.locator('.heatmap-details')).toContainText('9 AM · Teaching · 1h');
+});
+
+test('calendar filter shortcuts select all or solo first four calendars', async ({ page }) => {
+  await page.goto('/');
+
+  await page.keyboard.press('q');
+  await expect(page.locator('input[data-calendar="teaching"]')).toBeChecked();
+  await expect(page.locator('input[data-calendar="research"]')).not.toBeChecked();
+  await expect(page.locator('.event-chip').filter({ hasText: 'CS seminar prep' })).toBeVisible();
+  await expect(page.locator('.event-chip').filter({ hasText: 'Reading group' })).toHaveCount(0);
+
+  await page.keyboard.press('w');
+  await expect(page.locator('input[data-calendar="teaching"]')).not.toBeChecked();
+  await expect(page.locator('input[data-calendar="research"]')).toBeChecked();
+  await expect(page.locator('.event-chip').filter({ hasText: 'Reading group' })).toBeVisible();
+
+  await page.keyboard.press('e');
+  await expect(page.locator('input[data-calendar="deadlines"]')).toBeChecked();
+  await expect(page.locator('input[data-calendar="research"]')).not.toBeChecked();
+  await expect(page.locator('.event-chip').filter({ hasText: 'Grant draft due' })).toBeVisible();
+
+  await page.keyboard.press('r');
+  await expect(page.locator('input[data-calendar="personal"]')).toBeChecked();
+  await expect(page.locator('input[data-calendar="deadlines"]')).not.toBeChecked();
+
+  await page.keyboard.press('a');
+  await expect(page.locator('#calendarToggles input[type="checkbox"]')).toHaveCount(5);
+  for (const id of ['teaching', 'research', 'deadlines', 'personal', 'tasks']) {
+    await expect(page.locator(`input[data-calendar="${id}"]`)).toBeChecked();
+  }
+});
+
+test('hover cross button archives one calendar and collapsed archive section can restore it', async ({ page }) => {
+  await page.goto('/');
+
+  const teachingRow = page.locator('.calendar-toggle-row').filter({ hasText: 'Teaching' });
+  const archiveTeaching = page.getByRole('button', { name: 'Archive Teaching calendar' });
+  await expect(archiveTeaching).toBeHidden();
+  await teachingRow.hover();
+  await expect(archiveTeaching).toBeVisible();
+  await archiveTeaching.click();
+
+  await expect(page.locator('#calendarToggles input[data-calendar="teaching"]')).toHaveCount(0);
+  await expect(page.locator('#calendarToggles input[data-calendar="research"]')).toBeChecked();
+  await expect(page.locator('#archivedCalendarsSection')).toBeVisible();
+  await expect(page.locator('#archivedCalendarList')).toBeHidden();
+  await expect(page.locator('.event-chip').filter({ hasText: 'CS seminar prep' })).toHaveCount(0);
+  await expect(page.locator('.event-chip').filter({ hasText: 'Reading group' })).toBeVisible();
+
+  await page.locator('#archivedCalendarsToggle').click();
+  await expect(page.locator('#archivedCalendarList')).toBeVisible();
+  await expect(page.locator('.archived-calendar-item')).toHaveCount(1);
+  await expect(page.locator('#archivedCalendarList input[data-calendar="teaching"]')).not.toBeChecked();
+  await page.locator('#archivedCalendarList input[data-calendar="teaching"]').check();
+  await expect(page.locator('.event-chip').filter({ hasText: 'CS seminar prep' })).toBeVisible();
+  await page.locator('#archivedCalendarList input[data-calendar="teaching"]').uncheck();
+  await expect(page.locator('.event-chip').filter({ hasText: 'CS seminar prep' })).toHaveCount(0);
+  await page.getByRole('button', { name: 'Restore Teaching calendar' }).click();
+  await expect(page.locator('input[data-calendar="teaching"]')).toBeChecked();
+  await expect(page.locator('#archivedCalendarsSection')).toBeHidden();
+  await expect(page.locator('.event-chip').filter({ hasText: 'CS seminar prep' })).toBeVisible();
+});
+
+test('trash button in archived calendars permanently deletes the calendar and its events', async ({ page }) => {
+  await page.goto('/');
+
+  await page.locator('.calendar-toggle-row').filter({ hasText: 'Teaching' }).hover();
+  await page.getByRole('button', { name: 'Archive Teaching calendar' }).click();
+  await page.locator('#archivedCalendarsToggle').click();
+  await page.getByRole('button', { name: 'Delete Teaching calendar' }).click();
+
+  await expect(page.locator('input[data-calendar="teaching"]')).toHaveCount(0);
+  await expect(page.locator('#archivedCalendarsSection')).toBeHidden();
+  await expect(page.locator('.event-chip').filter({ hasText: 'CS seminar prep' })).toHaveCount(0);
+});
+
+test('plus button opens create calendar modal and imports an ICS file', async ({ page }) => {
+  await page.goto('/');
+  await expect(page.locator('#addCalendarButton')).toBeVisible();
+  await page.locator('#addCalendarButton').click();
+  await expect(page.locator('#calendarDialogTitle')).toHaveText('Create calendar');
+  await expect(page.locator('#calendarImportTitle')).toHaveText('Import from ICS');
+  await expect(page.locator('#calendarColorPalette .color-swatch')).toHaveCount(18);
+  await expect(page.locator('#calendarColorPalette .color-swatch[data-color="rebeccapurple"]')).toBeVisible();
+
+  const ics = `BEGIN:VCALENDAR\nVERSION:2.0\nX-WR-CALNAME:Imported Talks\nBEGIN:VEVENT\nUID:talk-1\nDTSTART:20260703T130000\nSUMMARY:Imported seminar\nDESCRIPTION:From ICS\nEND:VEVENT\nEND:VCALENDAR`;
+  await page.locator('#calendarFileInput').setInputFiles({
+    name: 'talks.ics',
+    mimeType: 'text/calendar',
+    buffer: Buffer.from(ics),
+  });
+  await page.locator('#calendarModalForm').getByRole('button', { name: 'Create', exact: true }).click();
+
+  await expect(page.locator('#calendarModal')).not.toHaveClass(/is-open/);
+  await expect(page.locator('.calendar-toggle-row').filter({ hasText: 'Imported Talks' })).toBeVisible();
+  await expect(page.locator('input[data-calendar^="custom-"]')).toBeChecked();
+  await expect(page.locator('.day-cell[data-date="2026-07-03"] .event-chip').filter({ hasText: 'Imported seminar' })).toBeVisible();
+});
+
+test('ICS import handles Google recurring UNTIL EXDATE and RECURRENCE-ID overrides', async ({ page }) => {
+  await page.goto('/');
+  await page.locator('#addCalendarButton').click();
+
+  const ics = `BEGIN:VCALENDAR
+VERSION:2.0
+X-WR-CALNAME:Recurring Import
+BEGIN:VEVENT
+UID:series-1@google.com
+DTSTART:20260706T140000
+DTEND:20260706T150000
+RRULE:FREQ=WEEKLY;UNTIL=20260720T235959Z;BYDAY=MO
+EXDATE:20260713T140000
+SUMMARY:weekly sync
+END:VEVENT
+BEGIN:VEVENT
+UID:series-1@google.com
+RECURRENCE-ID:20260720T140000
+DTSTART:20260720T150000
+DTEND:20260720T160000
+SUMMARY:moved sync
+DESCRIPTION:Moved by Google Calendar override
+END:VEVENT
+END:VCALENDAR`;
+  await page.locator('#calendarFileInput').setInputFiles({
+    name: 'recurring.ics',
+    mimeType: 'text/calendar',
+    buffer: Buffer.from(ics),
+  });
+  await page.locator('#calendarModalForm').getByRole('button', { name: 'Create', exact: true }).click();
+
+  await expect(page.locator('.day-cell[data-date="2026-07-06"] .event-chip').filter({ hasText: 'weekly sync' })).toBeVisible();
+  await expect(page.locator('.day-cell[data-date="2026-07-13"] .event-chip').filter({ hasText: 'weekly sync' })).toHaveCount(0);
+  await expect(page.locator('.day-cell[data-date="2026-07-20"] .event-chip').filter({ hasText: 'moved sync' })).toBeVisible();
+  await expect(page.locator('.day-cell[data-date="2026-07-27"] .event-chip').filter({ hasText: /sync/ })).toHaveCount(0);
+});
+
+test('heatmap spans first to last visible selected-calendar event', async ({ page }) => {
+  await page.goto('/');
+  await page.locator('#addCalendarButton').click();
+
+  const ics = `BEGIN:VCALENDAR
+VERSION:2.0
+X-WR-CALNAME:README Bugs
+BEGIN:VEVENT
+UID:first
+DTSTART:20251013T140000
+DTEND:20251013T150000
+SUMMARY:first README bug
+END:VEVENT
+BEGIN:VEVENT
+UID:last
+DTSTART:20260701T090000
+DTEND:20260701T100000
+SUMMARY:last README bug
+END:VEVENT
+END:VCALENDAR`;
+  await page.locator('#calendarFileInput').setInputFiles({
+    name: 'readme-bugs.ics',
+    mimeType: 'text/calendar',
+    buffer: Buffer.from(ics),
+  });
+  await page.locator('#calendarModalForm').getByRole('button', { name: 'Create', exact: true }).click();
+
+  for (const id of ['teaching', 'research', 'deadlines', 'personal', 'tasks']) {
+    await page.locator(`#calendarToggles input[data-calendar="${id}"]`).uncheck();
+  }
+  await page.keyboard.press('5');
+
+  await expect(page.locator('#monthTitle')).toHaveText('Oct 13, 2025 – Jul 1, 2026');
+  await expect(page.locator('.heatmap-day').first()).toHaveAttribute('data-date', '2025-10-13');
+  await expect(page.locator('.heatmap-day').last()).toHaveAttribute('data-date', '2026-07-01');
+});
+
+test('create calendar modal can create a blank calendar', async ({ page }) => {
+  await page.goto('/');
+  await page.locator('#addCalendarButton').click();
+  await page.locator('#calendarNameInput').fill('New Course');
+  await page.locator('#calendarModalForm').getByRole('button', { name: 'Create', exact: true }).click();
+
+  await expect(page.locator('.calendar-toggle-row').filter({ hasText: 'New Course' })).toBeVisible();
+  await expect(page.locator('input[data-calendar^="custom-"]')).toBeChecked();
+});
+
+test('calendar rows can be reordered with drag and drop and shortcuts follow order', async ({ page }) => {
+  await page.goto('/');
+
+  const rows = page.locator('.calendar-toggle-row');
+  await expect(rows.nth(0)).toContainText('Teaching');
+  await expect(rows.nth(1)).toContainText('Research');
+
+  await rows.nth(0).dragTo(rows.nth(1));
+  await expect(rows.nth(0)).toContainText('Research');
+  await expect(rows.nth(1)).toContainText('Teaching');
+
+  await page.keyboard.press('q');
+  await expect(page.locator('input[data-calendar="research"]')).toBeChecked();
+  await expect(page.locator('input[data-calendar="teaching"]')).not.toBeChecked();
+});
+
+test('calendar rows can be edited for name and color', async ({ page }) => {
+  await page.goto('/');
+  const teachingRow = page.locator('.calendar-toggle-row').filter({ hasText: 'Teaching' });
+  await teachingRow.hover();
+  await page.getByRole('button', { name: 'Rename Teaching calendar' }).click();
+
+  await expect(page.locator('#editCalendarDialogTitle')).toHaveText('Edit calendar');
+  await page.locator('#editCalendarNameInput').fill('Lectures');
+  await page.locator('#editCalendarColorPalette .color-swatch[data-color="rebeccapurple"]').click();
+  await page.locator('#editCalendarForm').getByRole('button', { name: 'Save' }).click();
+
+  await expect(page.locator('#editCalendarModal')).not.toHaveClass(/is-open/);
+  await expect(page.locator('.calendar-toggle-row').filter({ hasText: 'Lectures' })).toBeVisible();
+  await expect(page.locator('.calendar-toggle-row').filter({ hasText: 'Lectures' }).locator('.calendar-dot')).toHaveCSS('background-color', 'rgb(102, 51, 153)');
+
+  await page.reload();
+  await expect(page.locator('.calendar-toggle-row').filter({ hasText: 'Lectures' })).toBeVisible();
+  await expect(page.locator('.calendar-toggle-row').filter({ hasText: 'Lectures' }).locator('.calendar-dot')).toHaveCSS('background-color', 'rgb(102, 51, 153)');
+});
+
+test('create event modal selects earliest currently visible calendar', async ({ page }) => {
+  await page.goto('/');
+  await page.locator('input[data-calendar="teaching"]').uncheck();
+  await page.locator('#createEventButton').click();
+  await expect(page.locator('#eventCalendar')).toHaveValue('research');
+  await page.locator('#cancelEvent').click();
+
+  await page.locator('input[data-calendar="research"]').uncheck();
+  await page.locator('#createEventButton').click();
+  await expect(page.locator('#eventCalendar')).toHaveValue('deadlines');
+});
+
+test('time analysis panel shows current view events filtered by calendar selection', async ({ page }) => {
+  await page.goto('/');
+  await page.keyboard.press('2');
+  await page.locator('.sidebar-tab[data-panel="analysis"]').click();
+
+  await expect(page.locator('#eventTimeAnalysis')).toHaveCount(0);
+  await expect(page.locator('.sidebar-tab[data-panel="analysis"]')).toHaveClass(/is-active/);
+  await expect(page.locator('#sidebarTimeAnalysisRange')).toHaveText('Jun 29 – Jul 5, 2026');
+  await expect(page.locator('#sidebarTimeAnalysisSummary')).toHaveText('2 occurrences · 2h');
+  await expect(page.locator('#sidebarTimeAnalysisList')).toContainText('CS seminar prep');
+  await expect(page.locator('#sidebarTimeAnalysisList')).toContainText('Reading group');
+
+  await page.keyboard.press('q');
+  await expect(page.locator('#sidebarTimeAnalysisSummary')).toHaveText('1 occurrence · 1h');
+  await expect(page.locator('#sidebarTimeAnalysisList')).toContainText('CS seminar prep');
+  await expect(page.locator('#sidebarTimeAnalysisList')).not.toContainText('Reading group');
+});
+
+test('sidebar panels can switch by click and Control-number shortcuts', async ({ page }) => {
+  await page.goto('/');
+  await expect(page.locator('.sidebar-tab[data-panel="calendar"]')).toHaveClass(/is-active/);
+  await page.locator('.sidebar-tab[data-panel="papers"]').click();
+  await expect(page.locator('.sidebar-panel[data-panel="papers"]')).toBeVisible();
+  await page.locator('.sidebar-tab[data-panel="upcoming"]').click();
+  await expect(page.locator('.sidebar-panel[data-panel="upcoming"]')).toBeVisible();
+  await page.locator('.sidebar-tab[data-panel="analysis"]').click();
+  await expect(page.locator('#sidebarTimeAnalysisContent')).toBeVisible();
+  await expect(page.locator('#sidebarTimeAnalysisSummary')).toContainText('occurrence');
+
+  await page.keyboard.press('Control+1');
+  await expect(page.locator('.sidebar-panel[data-panel="calendar"]')).toBeVisible();
+  await page.keyboard.press('Control+2');
+  await expect(page.locator('.sidebar-panel[data-panel="papers"]')).toBeVisible();
+  await page.keyboard.press('Control+3');
+  await expect(page.locator('.sidebar-panel[data-panel="upcoming"]')).toBeVisible();
+  await page.keyboard.press('Control+4');
+  await expect(page.locator('.sidebar-panel[data-panel="analysis"]')).toBeVisible();
+});
+
+test('settings can change and persist sidebar location', async ({ page }) => {
+  await page.goto('/');
+  await page.locator('#settingsButton').click();
+  await expect(page.locator('#settingsDialogTitle')).toHaveText('Settings');
+  await page.locator('input[name="sidebarLocation"][value="right"]').check();
+  await page.locator('#settingsForm').getByRole('button', { name: 'Save' }).click();
+  await expect(page.locator('body')).toHaveClass(/sidebar-location-right/);
+
+  await page.reload();
+  await expect(page.locator('body')).toHaveClass(/sidebar-location-right/);
+
+  await page.locator('#settingsButton').click();
+  await expect(page.locator('input[name="sidebarLocation"][value="right"]')).toBeChecked();
+  await page.locator('input[name="sidebarLocation"][value="bottom"]').check();
+  await page.locator('#settingsForm').getByRole('button', { name: 'Save' }).click();
+  await expect(page.locator('body')).toHaveClass(/sidebar-location-bottom/);
+});
+
+test('week view renders hourly grid and t centers current-time indicator', async ({ page }) => {
+  await page.goto('/');
+  await page.keyboard.press('t');
+  await expect(page.locator('#viewSelect')).toHaveValue('week');
+  await expect(page.locator('.week-timeline')).toBeVisible();
+  await expect(page.locator('.week-now-indicator')).toBeVisible();
+  await expect(page.locator('.week-now-time')).toBeVisible();
+});
+
+test('p opens Add paper modal and Enter submits', async ({ page }) => {
+  await page.goto('/');
+  await page.keyboard.press('p');
+  await expect(page.locator('#paperDialogTitle')).toHaveText('Add paper');
+  await expect(page.locator('#paperModalInput')).toBeFocused();
+  await page.locator('#paperModalInput').fill('A paper title');
+  await page.keyboard.press('Enter');
+  await expect(page.locator('#paperModal')).not.toHaveClass(/is-open/);
+  await expect(page.locator('.paper-task-title')).toHaveText('A paper title');
+});
+
+test('paper URLs are stored as static source links without external API calls', async ({ page }) => {
+  let externalCalled = false;
+  await page.route('https://api.semanticscholar.org/**', async (route) => {
+    externalCalled = true;
+    await route.abort('failed');
+  });
+  await page.route('https://export.arxiv.org/**', async (route) => {
+    externalCalled = true;
+    await route.abort('failed');
+  });
+
+  await page.goto('/');
+  await page.keyboard.press('p');
+  await page.locator('#paperModalInput').fill(
+    'https://arxiv.org/pdf/2505.17716\n' +
+      'https://www.semanticscholar.org/paper/On-the-Security-of-Research-Artifacts-Rani-Rossow/206e3b192dec3bff1f4d41335ac5399840066f64'
+  );
+  await page.locator('#paperModalForm').getByRole('button', { name: 'Add papers' }).click();
+
+  await expect(page.locator('.paper-task-title')).toHaveCount(2);
+  await expect(page.locator('.paper-task-meta').filter({ hasText: 'arXiv:2505.17716' })).toBeVisible();
+  await expect(page.locator('.paper-task-meta').filter({ hasText: 'S2:206e3b19' })).toBeVisible();
+  expect(externalCalled).toBe(false);
+});
+
+test('creating every weekday recurring event skips weekends', async ({ page }) => {
+  await page.goto('/');
+  await page.locator('#createEventButton').click();
+  await page.locator('#eventTitle').fill('Weekday standup');
+  await page.locator('#eventDate').fill('2026-07-02');
+  await page.locator('#eventTime').fill('10:00');
+  await page.locator('#eventRepeat').selectOption('weekdays');
+  await page.getByRole('button', { name: 'Save' }).click();
+
+  await expect(page.locator('.day-cell[data-date="2026-07-02"] .event-chip').filter({ hasText: 'Weekday standup' })).toBeVisible();
+  await expect(page.locator('.day-cell[data-date="2026-07-03"] .event-chip').filter({ hasText: 'Weekday standup' })).toBeVisible();
+  await expect(page.locator('.day-cell[data-date="2026-07-04"] .event-chip').filter({ hasText: 'Weekday standup' })).toHaveCount(0);
+});
+
+test('deleting recurring event removes only selected instance', async ({ page }) => {
+  await page.goto('/');
+  await page.locator('#createEventButton').click();
+  await page.locator('#eventTitle').fill('Weekday standup');
+  await page.locator('#eventDate').fill('2026-07-02');
+  await page.locator('#eventTime').fill('10:00');
+  await page.locator('#eventRepeat').selectOption('weekdays');
+  await page.getByRole('button', { name: 'Save' }).click();
+
+  const thu = page.locator('.day-cell[data-date="2026-07-02"] .event-chip').filter({ hasText: 'Weekday standup' });
+  const fri = page.locator('.day-cell[data-date="2026-07-03"] .event-chip').filter({ hasText: 'Weekday standup' });
+  const mon = page.locator('.day-cell[data-date="2026-07-06"] .event-chip').filter({ hasText: 'Weekday standup' });
+
+  await fri.click();
+  await expect(page.locator('#deleteEvent')).toHaveText('Delete instance');
+  await expect(page.locator('#deleteSeriesEvent')).toBeVisible();
+  await page.keyboard.press('Backspace');
+  await expect(thu).toBeVisible();
+  await expect(fri).toHaveCount(0);
+  await expect(mon).toBeVisible();
+});
+
+test('delete recurring button removes the entire recurring series', async ({ page }) => {
+  await page.goto('/');
+  await page.locator('#createEventButton').click();
+  await page.locator('#eventTitle').fill('Weekday standup');
+  await page.locator('#eventDate').fill('2026-07-02');
+  await page.locator('#eventRepeat').selectOption('weekdays');
+  await page.getByRole('button', { name: 'Save' }).click();
+
+  await page.locator('.day-cell[data-date="2026-07-03"] .event-chip').filter({ hasText: 'Weekday standup' }).click();
+  await expect(page.locator('#deleteSeriesEvent')).toBeVisible();
+  await page.locator('#deleteSeriesEvent').click();
+
+  await expect(page.locator('.event-chip').filter({ hasText: 'Weekday standup' })).toHaveCount(0);
+});
+
+test('backspace deletes a non-recurring event from edit dialog', async ({ page }) => {
+  await page.goto('/');
+  const eventChip = page.locator('.event-chip').filter({ hasText: 'Reading group' });
+  await expect(eventChip).toBeVisible();
+  await eventChip.click();
+  await expect(page.locator('#eventDialogTitle')).toHaveText('Edit event');
+  await page.keyboard.press('Backspace');
+  await expect(page.locator('#eventModal')).not.toHaveClass(/is-open/);
+  await expect(page.locator('.event-chip').filter({ hasText: 'Reading group' })).toHaveCount(0);
+});
+
+test('read event matching is case-insensitive, colon optional, and preserves casing on assignment', async ({ page }) => {
+  await page.goto('/');
+  await page.keyboard.press('p');
+  await page.locator('#paperModalInput').fill('Paper A');
+  await page.keyboard.press('Enter');
+
+  await page.locator('#createEventButton').click();
+  await page.locator('#eventTitle').fill('READ Paper A');
+  await expect(page.locator('#eventPaperAssignment')).toBeVisible();
+  await page.locator('.paper-assignment-option').filter({ hasText: 'Paper A' }).locator('input').check();
+  await page.getByRole('button', { name: 'Save' }).click();
+  await expect(page.locator('.event-chip').filter({ hasText: 'READ: Paper A' })).toBeVisible();
+});
+
+test('assigning paper updates non-recurring read event title and removes paper task', async ({ page }) => {
+  await page.goto('/');
+  await page.keyboard.press('p');
+  await page.locator('#paperModalInput').fill('Paper A');
+  await page.keyboard.press('Enter');
+  await expect(page.locator('.paper-task-title')).toHaveText('Paper A');
+
+  await page.locator('#createEventButton').click();
+  await page.locator('#eventTitle').fill('read session');
+  await page.locator('.paper-assignment-option').filter({ hasText: 'Paper A' }).locator('input').check();
+  await page.getByRole('button', { name: 'Save' }).click();
+
+  await expect(page.locator('.event-chip').filter({ hasText: 'read: Paper A' })).toBeVisible();
+  await expect(page.locator('.paper-task-title')).toHaveCount(0);
+
+  await page.locator('.event-chip').filter({ hasText: 'read: Paper A' }).click();
+  await expect(page.locator('.paper-assignment-option').filter({ hasText: 'Paper A' }).locator('input')).toBeChecked();
+});
+
+test('assigning paper to recurring read event updates only selected instance', async ({ page }) => {
+  await page.goto('/');
+  await page.keyboard.press('p');
+  await page.locator('#paperModalInput').fill('Paper A');
+  await page.keyboard.press('Enter');
+
+  await page.locator('#createEventButton').click();
+  await page.locator('#eventTitle').fill('read session');
+  await page.locator('#eventDate').fill('2026-07-02');
+  await page.locator('#eventRepeat').selectOption('weekdays');
+  await page.getByRole('button', { name: 'Save' }).click();
+
+  await expect(page.locator('.day-cell[data-date="2026-07-02"] .event-chip').filter({ hasText: 'read session' })).toBeVisible();
+  await expect(page.locator('.day-cell[data-date="2026-07-03"] .event-chip').filter({ hasText: 'read session' })).toBeVisible();
+
+  await page.locator('.day-cell[data-date="2026-07-03"] .event-chip').filter({ hasText: 'read session' }).click();
+  await page.locator('.paper-assignment-option').filter({ hasText: 'Paper A' }).locator('input').check();
+  await page.getByRole('button', { name: 'Save' }).click();
+
+  await expect(page.locator('.day-cell[data-date="2026-07-02"] .event-chip').filter({ hasText: 'read session' })).toBeVisible();
+  await expect(page.locator('.day-cell[data-date="2026-07-03"] .event-chip').filter({ hasText: 'read: Paper A' })).toBeVisible();
+  await expect(page.locator('.day-cell[data-date="2026-07-06"] .event-chip').filter({ hasText: 'read session' })).toBeVisible();
+  await expect(page.locator('.paper-task-title')).toHaveCount(0);
+});
+
+test('deleting assigned read event restores paper task', async ({ page }) => {
+  await page.goto('/');
+  await page.keyboard.press('p');
+  await page.locator('#paperModalInput').fill('Paper A');
+  await page.keyboard.press('Enter');
+
+  await page.locator('#createEventButton').click();
+  await page.locator('#eventTitle').fill('read session');
+  await page.locator('.paper-assignment-option').filter({ hasText: 'Paper A' }).locator('input').check();
+  await page.getByRole('button', { name: 'Save' }).click();
+  await expect(page.locator('.paper-task-title')).toHaveCount(0);
+
+  await page.locator('.event-chip').filter({ hasText: 'read: Paper A' }).click();
+  await page.keyboard.press('Backspace');
+  await expect(page.locator('.event-chip').filter({ hasText: 'read: Paper A' })).toHaveCount(0);
+  await expect(page.locator('.paper-task-title')).toHaveText('Paper A');
+});
