@@ -1,0 +1,165 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Academical Calendar</title>
+    <meta
+      name="description"
+      content="A Google Calendar inspired academic calendar prototype."
+    />
+    <link rel="stylesheet" href="styles.css" />
+  </head>
+  <body>
+    <div class="app-shell">
+      <header class="topbar">
+        <button class="icon-button" id="sidebarToggle" type="button" aria-label="Toggle sidebar">
+          <span aria-hidden="true">☰</span>
+        </button>
+
+        <a class="brand" href="./" aria-label="Academical home">
+          <span class="brand-mark" aria-hidden="true"><span id="brandDay">2</span></span>
+          <span class="brand-name">Academical</span>
+        </a>
+
+        <div class="topbar-divider" aria-hidden="true"></div>
+
+        <button class="button button--outline" id="todayButton" type="button">Today</button>
+
+        <div class="nav-buttons" aria-label="Calendar navigation">
+          <button class="icon-button" id="previousMonth" type="button" aria-label="Previous month">
+            <span aria-hidden="true">‹</span>
+          </button>
+          <button class="icon-button" id="nextMonth" type="button" aria-label="Next month">
+            <span aria-hidden="true">›</span>
+          </button>
+        </div>
+
+        <h1 class="month-title" id="monthTitle">July 2026</h1>
+
+        <div class="topbar-spacer"></div>
+
+        <label class="search-box" for="searchInput">
+          <span aria-hidden="true">⌕</span>
+          <input id="searchInput" type="search" placeholder="Search" autocomplete="off" />
+        </label>
+
+        <select class="view-select" id="viewSelect" aria-label="Calendar view">
+          <option>Day</option>
+          <option>Week</option>
+          <option selected>Month</option>
+          <option>Schedule</option>
+        </select>
+
+        <button class="icon-button icon-button--hide-sm" type="button" aria-label="Settings">
+          <span aria-hidden="true">⚙</span>
+        </button>
+        <div class="avatar" aria-label="Signed in as DB">DB</div>
+      </header>
+
+      <div class="workspace">
+        <aside class="sidebar" id="sidebar">
+          <button class="create-button" id="createEventButton" type="button">
+            <span aria-hidden="true">＋</span>
+            Create
+          </button>
+
+          <section class="sidebar-card mini-calendar-card" aria-labelledby="miniCalendarTitle">
+            <header class="mini-calendar-header">
+              <h2 id="miniCalendarTitle">July 2026</h2>
+              <div>
+                <button class="mini-nav" id="miniPrevious" type="button" aria-label="Previous month">‹</button>
+                <button class="mini-nav" id="miniNext" type="button" aria-label="Next month">›</button>
+              </div>
+            </header>
+            <div class="mini-weekdays" aria-hidden="true">
+              <span>S</span><span>M</span><span>T</span><span>W</span><span>T</span><span>F</span><span>S</span>
+            </div>
+            <div class="mini-grid" id="miniCalendar" aria-label="Mini month calendar"></div>
+          </section>
+
+          <section class="sidebar-section" aria-labelledby="calendarsTitle">
+            <h2 id="calendarsTitle">My calendars</h2>
+            <div class="calendar-toggles" id="calendarToggles"></div>
+          </section>
+
+          <section class="sidebar-section" aria-labelledby="upcomingTitle">
+            <h2 id="upcomingTitle">Upcoming</h2>
+            <div class="upcoming-list" id="upcomingList"></div>
+          </section>
+        </aside>
+
+        <main class="calendar-panel" aria-label="Month calendar">
+          <div class="weekday-row" aria-hidden="true">
+            <span>Sun</span>
+            <span>Mon</span>
+            <span>Tue</span>
+            <span>Wed</span>
+            <span>Thu</span>
+            <span>Fri</span>
+            <span>Sat</span>
+          </div>
+          <div class="month-grid" id="monthGrid"></div>
+        </main>
+
+        <nav class="right-rail" aria-label="Companion apps">
+          <button class="rail-button rail-button--yellow" type="button" aria-label="Notes">✦</button>
+          <button class="rail-button rail-button--blue" type="button" aria-label="Tasks">✓</button>
+          <button class="rail-button rail-button--green" type="button" aria-label="Contacts">☻</button>
+          <span class="rail-divider"></span>
+          <button class="rail-button" type="button" aria-label="Add companion app">＋</button>
+        </nav>
+      </div>
+    </div>
+
+    <div class="modal-backdrop" id="eventModal" aria-hidden="true">
+      <form class="event-dialog" id="eventForm" role="dialog" aria-modal="true" aria-labelledby="eventDialogTitle">
+        <header class="event-dialog-header">
+          <span class="dialog-drag" aria-hidden="true"></span>
+          <h2 id="eventDialogTitle">Create event</h2>
+          <button class="icon-button" id="closeModal" type="button" aria-label="Close dialog">×</button>
+        </header>
+
+        <input id="eventId" type="hidden" />
+
+        <label class="field field--title" for="eventTitle">
+          <span>Title</span>
+          <input id="eventTitle" name="title" type="text" placeholder="Add title" required />
+        </label>
+
+        <div class="field-grid">
+          <label class="field" for="eventDate">
+            <span>Date</span>
+            <input id="eventDate" name="date" type="date" required />
+          </label>
+
+          <label class="field" for="eventTime">
+            <span>Time</span>
+            <input id="eventTime" name="time" type="time" />
+          </label>
+        </div>
+
+        <label class="field" for="eventCalendar">
+          <span>Calendar</span>
+          <select id="eventCalendar" name="calendar" required></select>
+        </label>
+
+        <label class="field" for="eventNotes">
+          <span>Notes</span>
+          <textarea id="eventNotes" name="notes" rows="3" placeholder="Add location, links, or preparation notes"></textarea>
+        </label>
+
+        <footer class="event-dialog-footer">
+          <button class="button button--danger" id="deleteEvent" type="button">Delete</button>
+          <span class="footer-spacer"></span>
+          <button class="button" id="cancelEvent" type="button">Cancel</button>
+          <button class="button button--primary" type="submit">Save</button>
+        </footer>
+      </form>
+    </div>
+
+    <div class="toast" id="toast" role="status" aria-live="polite"></div>
+
+    <script type="module" src="app.js"></script>
+  </body>
+</html>
