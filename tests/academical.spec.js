@@ -4,12 +4,24 @@ const openCreateEventDialog = async (page, date = '2026-07-02') => {
   await page.locator(`.day-cell[data-date="${date}"] .day-add`).click();
 };
 
+test.beforeEach(async ({ page }) => {
+  await page.clock.setFixedTime(new Date('2026-07-03T09:30:00'));
+});
+
 test('calendar loads with Firebase sync UI', async ({ page }) => {
   await page.goto('/');
   await expect(page.locator('#monthTitle')).toBeVisible();
   await expect(page.locator('#accountButton')).toBeVisible();
   await expect(page.locator('#syncStatus')).toBeHidden();
   await expect(page.locator('#createEventButton')).toHaveCount(0);
+  await expect(page.locator('.right-rail')).toHaveCount(0);
+});
+
+test('today marker follows the actual current date', async ({ page }) => {
+  await page.goto('/');
+  await expect(page.locator('#brandDay')).toHaveText('3');
+  await expect(page.locator('.day-cell[data-date="2026-07-03"]')).toHaveClass(/day-cell--today/);
+  await expect(page.locator('.day-cell[data-date="2026-07-02"]')).not.toHaveClass(/day-cell--today/);
 });
 
 test('account avatar opens sync dropdown and uses generic icon', async ({ page }) => {
@@ -347,11 +359,16 @@ test('time analysis panel shows current view events filtered by calendar selecti
   await expect(page.locator('.sidebar-tab[data-panel="analysis"]')).toHaveClass(/is-active/);
   await expect(page.locator('#sidebarTimeAnalysisRange')).toHaveText('Jun 29 – Jul 5, 2026');
   await expect(page.locator('#sidebarTimeAnalysisSummary')).toHaveText('2 occurrences · 2h');
+  await expect(page.locator('#weeklyActivityChartTitle')).toHaveText('Working hours per week');
+  await expect(page.locator('.weekly-hours-svg')).toHaveAttribute('data-week-count', '1');
+  await expect(page.locator('.weekly-hours-point[data-week="2026-W27"]')).toHaveAttribute('data-hours', '2');
+  await expect(page.locator('.weekly-hours-point[data-week="2026-W27"]')).toHaveAttribute('fill', '#188038');
   await expect(page.locator('#sidebarTimeAnalysisList')).toContainText('CS seminar prep');
   await expect(page.locator('#sidebarTimeAnalysisList')).toContainText('Reading group');
 
   await page.keyboard.press('q');
   await expect(page.locator('#sidebarTimeAnalysisSummary')).toHaveText('1 occurrence · 1h');
+  await expect(page.locator('.weekly-hours-point[data-week="2026-W27"]')).toHaveAttribute('data-hours', '1');
   await expect(page.locator('#sidebarTimeAnalysisList')).toContainText('CS seminar prep');
   await expect(page.locator('#sidebarTimeAnalysisList')).not.toContainText('Reading group');
 });
@@ -376,12 +393,58 @@ END:VCALENDAR`;
     buffer: Buffer.from(ics),
   });
   await page.locator('#calendarModalForm').getByRole('button', { name: 'Create', exact: true }).click();
+  await expect(page.locator('#calendarModal')).not.toHaveClass(/is-open/);
 
   await page.keyboard.press('2');
   await page.locator('.sidebar-tab[data-panel="analysis"]').click();
 
   await expect(page.locator('#sidebarTimeAnalysisSummary')).toHaveText('3 occurrences · 4.5h');
+  await expect(page.locator('.weekly-hours-point[data-week="2026-W27"]')).toHaveAttribute('data-hours', '4.5');
   await expect(page.locator('.time-analysis-item').filter({ hasText: 'Long seminar' })).toContainText('2.5h');
+});
+
+test('time analysis colors weekly hours dots by workload range', async ({ page }) => {
+  await page.goto('/');
+  await page.locator('#addCalendarButton').click();
+
+  const ics = `BEGIN:VCALENDAR
+VERSION:2.0
+X-WR-CALNAME:Workload Colors
+BEGIN:VEVENT
+UID:blue-range
+DTSTART:20260706T000000
+DTEND:20260707T130000
+SUMMARY:Blue workload filler
+END:VEVENT
+BEGIN:VEVENT
+UID:orange-range
+DTSTART:20260713T000000
+DTEND:20260714T200000
+SUMMARY:Orange workload filler
+END:VEVENT
+BEGIN:VEVENT
+UID:red-range
+DTSTART:20260720T000000
+DTEND:20260722T000000
+SUMMARY:Red workload filler
+END:VEVENT
+END:VCALENDAR`;
+  await page.locator('#calendarFileInput').setInputFiles({
+    name: 'workload-colors.ics',
+    mimeType: 'text/calendar',
+    buffer: Buffer.from(ics),
+  });
+  await page.locator('#calendarModalForm').getByRole('button', { name: 'Create', exact: true }).click();
+  await expect(page.locator('#calendarModal')).not.toHaveClass(/is-open/);
+  await page.locator('.sidebar-tab[data-panel="analysis"]').click();
+
+  await expect(page.locator('.weekly-hours-point[data-week="2026-W27"]')).toHaveAttribute('fill', '#188038');
+  await expect(page.locator('.weekly-hours-point[data-week="2026-W28"]')).toHaveAttribute('data-hours', '40');
+  await expect(page.locator('.weekly-hours-point[data-week="2026-W28"]')).toHaveAttribute('fill', '#1a73e8');
+  await expect(page.locator('.weekly-hours-point[data-week="2026-W29"]')).toHaveAttribute('data-hours', '45');
+  await expect(page.locator('.weekly-hours-point[data-week="2026-W29"]')).toHaveAttribute('fill', '#f29900');
+  await expect(page.locator('.weekly-hours-point[data-week="2026-W30"]')).toHaveAttribute('data-hours', '50');
+  await expect(page.locator('.weekly-hours-point[data-week="2026-W30"]')).toHaveAttribute('fill', '#d93025');
 });
 
 test('time analysis renders weekly cumulative activity chart', async ({ page }) => {
@@ -437,10 +500,10 @@ END:VCALENDAR`;
 test('sidebar panels can switch by click and Control-number shortcuts', async ({ page }) => {
   await page.goto('/');
   await expect(page.locator('.sidebar-tab[data-panel="calendar"]')).toHaveClass(/is-active/);
+  await expect(page.locator('.sidebar-tab[data-panel="upcoming"]')).toHaveCount(0);
+  await expect(page.locator('.sidebar-panel[data-panel="upcoming"]')).toHaveCount(0);
   await page.locator('.sidebar-tab[data-panel="papers"]').click();
   await expect(page.locator('.sidebar-panel[data-panel="papers"]')).toBeVisible();
-  await page.locator('.sidebar-tab[data-panel="upcoming"]').click();
-  await expect(page.locator('.sidebar-panel[data-panel="upcoming"]')).toBeVisible();
   await page.locator('.sidebar-tab[data-panel="analysis"]').click();
   await expect(page.locator('#sidebarTimeAnalysisContent')).toBeVisible();
   await expect(page.locator('#sidebarTimeAnalysisSummary')).toContainText('occurrence');
@@ -450,8 +513,6 @@ test('sidebar panels can switch by click and Control-number shortcuts', async ({
   await page.keyboard.press('Control+2');
   await expect(page.locator('.sidebar-panel[data-panel="papers"]')).toBeVisible();
   await page.keyboard.press('Control+3');
-  await expect(page.locator('.sidebar-panel[data-panel="upcoming"]')).toBeVisible();
-  await page.keyboard.press('Control+4');
   await expect(page.locator('.sidebar-panel[data-panel="analysis"]')).toBeVisible();
 });
 
@@ -482,6 +543,29 @@ test('week view renders hourly grid and t centers current-time indicator', async
   await expect(page.locator('.week-now-time')).toBeVisible();
 });
 
+test('clicking week view slots creates events at 15 minute granularity', async ({ page }) => {
+  await page.goto('/');
+  await page.keyboard.press('2');
+
+  const slot = page.locator('.week-slot[data-date="2026-07-02"][data-hour="9"]');
+  const slotBox = await slot.boundingBox();
+  expect(slotBox).not.toBeNull();
+  await page.mouse.move(slotBox.x + 12, slotBox.y + 55);
+
+  const hoverSelection = page.locator('.week-day-column[data-date="2026-07-02"] .week-hover-selection');
+  await expect(hoverSelection).toBeVisible();
+  await expect(hoverSelection).toHaveAttribute('data-time', '09:45');
+  await expect(hoverSelection).toHaveAttribute('data-duration-minutes', '60');
+  await expect(hoverSelection).toHaveCSS('height', '70px');
+
+  await slot.click({ position: { x: 12, y: 55 } });
+
+  await expect(page.locator('#eventModal')).toHaveClass(/is-open/);
+  await expect(page.locator('#eventTime')).toHaveValue('09:45');
+  await expect(page.locator('#eventEndTime')).toHaveValue('10:45');
+  await expect(page.locator('#eventDurationMinutes')).toHaveValue('60');
+});
+
 test('dragging hour boxes in week view creates an event with that range', async ({ page }) => {
   await page.goto('/');
   await page.keyboard.press('2');
@@ -491,22 +575,69 @@ test('dragging hour boxes in week view creates an event with that range', async 
   expect(box).not.toBeNull();
 
   const x = box.x + 24;
-  await page.mouse.move(x, box.y + (2 * 72) + 10);
+  await page.mouse.move(x, box.y + (2 * 72) + 20);
   await page.mouse.down();
-  await page.mouse.move(x, box.y + (4 * 72) + 10, { steps: 4 });
+  await page.mouse.move(x, box.y + (4 * 72) + 45, { steps: 4 });
   await expect(page.locator('.week-drag-selection')).toBeVisible();
   await page.mouse.up();
 
   await expect(page.locator('#eventModal')).toHaveClass(/is-open/);
-  await expect(page.locator('#eventTime')).toHaveValue('02:00');
-  await expect(page.locator('#eventDurationMinutes')).toHaveValue('180');
+  await expect(page.locator('#eventTime')).toHaveValue('02:15');
+  await expect(page.locator('#eventEndTime')).toHaveValue('04:45');
+  await expect(page.locator('#eventDurationMinutes')).toHaveValue('150');
   await page.locator('#eventTitle').fill('Dragged focus block');
   await page.getByRole('button', { name: 'Save' }).click();
 
   const created = await page.evaluate(() => JSON.parse(localStorage.getItem('academical.events.v1')).find((event) => event.title === 'Dragged focus block'));
-  expect(created.time).toBe('02:00');
-  expect(created.durationMinutes).toBe(180);
+  expect(created.time).toBe('02:15');
+  expect(created.durationMinutes).toBe(150);
   await expect(page.locator('.week-timed-event').filter({ hasText: 'Dragged focus block' })).toBeVisible();
+});
+
+test('dragging a timed week event moves its date and 15 minute position', async ({ page }) => {
+  await page.goto('/');
+  await page.keyboard.press('2');
+
+  const eventButton = page.locator('.week-timed-event').filter({ hasText: 'CS seminar prep' });
+  const eventBox = await eventButton.boundingBox();
+  const targetColumn = page.locator('.week-day-column[data-date="2026-07-03"]');
+  const targetBox = await targetColumn.boundingBox();
+  expect(eventBox).not.toBeNull();
+  expect(targetBox).not.toBeNull();
+
+  await page.mouse.move(eventBox.x + 12, eventBox.y + 8);
+  await page.mouse.down();
+  await page.mouse.move(targetBox.x + 24, targetBox.y + (10.25 * 72) + 8, { steps: 8 });
+  await expect(page.locator('.week-event-drag-preview')).toBeVisible();
+  await page.mouse.up();
+
+  await expect(page.locator('#eventModal')).not.toHaveClass(/is-open/);
+  const moved = await page.evaluate(() => JSON.parse(localStorage.getItem('academical.events.v1')).find((event) => event.title === 'CS seminar prep'));
+  expect(moved.date).toBe('2026-07-03');
+  expect(moved.time).toBe('10:15');
+  await expect(page.locator('.week-day-column[data-date="2026-07-03"] .week-timed-event').filter({ hasText: 'CS seminar prep' })).toBeVisible();
+});
+
+test('event dialog end time controls duration and digit shortcuts set hour duration', async ({ page }) => {
+  await page.goto('/');
+
+  await page.locator('.event-chip').filter({ hasText: 'Reading group' }).click();
+  await expect(page.locator('#eventDialogTitle')).toHaveText('Edit event');
+  await expect(page.locator('#eventTime')).toHaveValue('14:00');
+  await expect(page.locator('#eventEndTime')).toHaveValue('15:00');
+
+  await page.keyboard.press('2');
+  await expect(page.locator('#eventTime')).toHaveValue('14:00');
+  await expect(page.locator('#eventEndTime')).toHaveValue('16:00');
+  await expect(page.locator('#eventDurationMinutes')).toHaveValue('120');
+
+  await page.locator('#eventEndTime').fill('17:30');
+  await expect(page.locator('#eventDurationMinutes')).toHaveValue('210');
+  await page.keyboard.press('Enter');
+
+  await expect(page.locator('#eventModal')).not.toHaveClass(/is-open/);
+  const updated = await page.evaluate(() => JSON.parse(localStorage.getItem('academical.events.v1')).find((event) => event.title === 'Reading group'));
+  expect(updated.durationMinutes).toBe(210);
 });
 
 test('p opens Add paper modal and Enter submits', async ({ page }) => {

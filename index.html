@@ -76,7 +76,6 @@
           <nav class="sidebar-tabs" id="sidebarTabs" aria-label="Sidebar panels">
             <button class="sidebar-tab" type="button" data-panel="calendar">Calendar</button>
             <button class="sidebar-tab" type="button" data-panel="papers">Papers</button>
-            <button class="sidebar-tab" type="button" data-panel="upcoming">Upcoming</button>
             <button class="sidebar-tab" type="button" data-panel="analysis">Time analysis</button>
           </nav>
 
@@ -110,13 +109,6 @@
             </section>
           </div>
 
-          <div class="sidebar-panel" data-panel="upcoming" hidden>
-            <section class="sidebar-section" aria-labelledby="upcomingTitle">
-              <h2 id="upcomingTitle">Upcoming</h2>
-              <div class="upcoming-list" id="upcomingList"></div>
-            </section>
-          </div>
-
           <div class="sidebar-panel" data-panel="analysis" hidden>
             <section class="sidebar-section sidebar-time-analysis" aria-labelledby="sidebarTimeAnalysisTitle">
               <h2 id="sidebarTimeAnalysisTitle">Time analysis</h2>
@@ -125,7 +117,7 @@
                 <span id="sidebarTimeAnalysisRange"></span>
                 <p id="sidebarTimeAnalysisSummary"></p>
                 <section class="weekly-activity-chart" id="weeklyActivityChart" aria-labelledby="weeklyActivityChartTitle">
-                  <h3 id="weeklyActivityChartTitle">Weekly activity</h3>
+                  <h3 id="weeklyActivityChartTitle">Working hours per week</h3>
                   <div class="weekly-activity-chart-body" id="weeklyActivityChartBody"></div>
                 </section>
                 <div class="time-analysis-list" id="sidebarTimeAnalysisList"></div>
@@ -146,14 +138,6 @@
           </div>
           <div class="month-grid" id="monthGrid"></div>
         </main>
-
-        <nav class="right-rail" aria-label="Companion apps">
-          <button class="rail-button rail-button--yellow" type="button" aria-label="Notes">✦</button>
-          <button class="rail-button rail-button--blue" type="button" aria-label="Tasks">✓</button>
-          <button class="rail-button rail-button--green" type="button" aria-label="Contacts">☻</button>
-          <span class="rail-divider"></span>
-          <button class="rail-button" type="button" aria-label="Add companion app">＋</button>
-        </nav>
       </div>
     </div>
 
@@ -174,15 +158,20 @@
           <input id="eventTitle" name="title" type="text" placeholder="Add title" required />
         </label>
 
-        <div class="field-grid">
+        <div class="field-grid field-grid--time">
           <label class="field" for="eventDate">
             <span>Date</span>
             <input id="eventDate" name="date" type="date" required />
           </label>
 
           <label class="field" for="eventTime">
-            <span>Time</span>
+            <span>Start time</span>
             <input id="eventTime" name="time" type="time" />
+          </label>
+
+          <label class="field" for="eventEndTime">
+            <span>End time</span>
+            <input id="eventEndTime" name="endTime" type="time" />
           </label>
         </div>
 

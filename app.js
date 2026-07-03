@@ -22,6 +22,7 @@ const VIEW_LABELS = {
 const WEEK_START_DAY = 1; // Monday
 const HOURS = Array.from({ length: 24 }, (_, hour) => hour);
 const WEEK_HOUR_HEIGHT = 72;
+const WEEK_SLOT_GRANULARITY_MINUTES = 15;
 const DEFAULT_EVENT_DURATION_MINUTES = 60;
 const REPEAT_LABELS = {
   none: "Does not repeat",
@@ -289,6 +290,7 @@ const els = {
   eventCalendar: document.querySelector("#eventCalendar"),
   eventDate: document.querySelector("#eventDate"),
   eventDurationMinutes: document.querySelector("#eventDurationMinutes"),
+  eventEndTime: document.querySelector("#eventEndTime"),
   eventForm: document.querySelector("#eventForm"),
   eventId: document.querySelector("#eventId"),
   eventModal: document.querySelector("#eventModal"),
@@ -332,7 +334,6 @@ const els = {
   toast: document.querySelector("#toast"),
   syncAuthButton: document.querySelector("#syncAuthButton"),
   syncStatus: document.querySelector("#syncStatus"),
-  upcomingList: document.querySelector("#upcomingList"),
   userAvatar: document.querySelector("#userAvatar"),
   viewSelect: document.querySelector("#viewSelect"),
   weekdayRow: document.querySelector(".weekday-row"),
@@ -383,7 +384,9 @@ let searchQuery = "";
 let heatmapDetailsAnchor = null;
 let deadlineFilterTags = loadDeadlineFilterTags();
 let activeWeekRangeDrag = null;
+let activeWeekEventDrag = null;
 let suppressNextWeekSlotClick = false;
+let suppressNextWeekEventClick = false;
 let firebaseSync = createFirebaseSyncState();
 let activeEventPaperSnapshots = [];
 let draggedCalendarId = "";
@@ -459,13 +462,14 @@ function bindEvents() {
   els.searchInput.addEventListener("input", (event) => {
     searchQuery = event.target.value.trim().toLowerCase();
     renderMonthGrid();
-    renderUpcoming();
     renderSidebarTimeAnalysisIfActive();
   });
 
   els.eventTitle.addEventListener("input", () => {
     renderEventPaperAssignment(getSelectedEventPaperIds());
   });
+  els.eventTime.addEventListener("input", updateEventEndTimeFromDuration);
+  els.eventEndTime.addEventListener("input", updateEventDurationFromEndTime);
 
   els.viewSelect.addEventListener("change", (event) => {
     setView(event.target.value);
@@ -552,9 +556,15 @@ function bindEvents() {
     if (isPaperModalOpen || isCalendarModalOpen || isEditCalendarModalOpen || isSettingsModalOpen) return;
 
     if (isModalOpen) {
-      if (event.key === "Backspace" && els.eventId.value && !isTypingTarget(event.target)) {
+      if (event.key === "Enter" && !event.shiftKey && !event.isComposing) {
+        event.preventDefault();
+        els.eventForm.requestSubmit();
+      } else if (event.key === "Backspace" && els.eventId.value && !isTypingTarget(event.target)) {
         event.preventDefault();
         deleteActiveEvent();
+      } else if (/^[1-9]$/.test(event.key) && !isTypingTarget(event.target)) {
+        event.preventDefault();
+        setEventDurationHoursShortcut(Number(event.key));
       }
       return;
     }
@@ -562,7 +572,7 @@ function bindEvents() {
     if (isTypingTarget(event.target)) return;
 
     const key = event.key.toLowerCase();
-    if (event.ctrlKey && !event.metaKey && !event.altKey && ["1", "2", "3", "4"].includes(key)) {
+    if (event.ctrlKey && !event.metaKey && !event.altKey && ["1", "2", "3"].includes(key)) {
       event.preventDefault();
       selectSidebarPanelByPosition(Number(key) - 1);
       return;
@@ -614,7 +624,6 @@ function render() {
   applyViewClass();
   renderHeader();
   renderMonthGrid();
-  renderUpcoming();
   if (activeSidebarPanel === "analysis") renderSidebarTimeAnalysis();
 }
 
@@ -683,7 +692,7 @@ function applySidebarLocation() {
 }
 
 function setSidebarPanel(panel) {
-  if (!["calendar", "papers", "upcoming", "analysis"].includes(panel)) return;
+  if (!["calendar", "papers", "analysis"].includes(panel)) return;
   activeSidebarPanel = panel;
   document.querySelectorAll(".sidebar-panel").forEach((item) => {
     item.hidden = item.dataset.panel !== activeSidebarPanel;
@@ -720,7 +729,7 @@ function renderSidebarTimeAnalysis() {
   els.sidebarTimeAnalysisContent.hidden = false;
   els.sidebarTimeAnalysisRange.textContent = analysis.rangeLabel;
   els.sidebarTimeAnalysisSummary.textContent = `${analysis.occurrences.length} occurrence${analysis.occurrences.length === 1 ? "" : "s"} · ${formatHours(analysis.totalHours)}`;
-  renderWeeklyActivityChart(analysis.weeklyActivity);
+  renderWeeklyActivityChart(analysis.weeklyActivity, analysis.weeklyHours);
   els.sidebarTimeAnalysisList.replaceChildren(
     ...analysis.occurrences.map((occurrence) => {
       const item = document.createElement("div");
@@ -1274,7 +1283,6 @@ function persistCalendarVisibility(message = "") {
   renderCalendarToggles();
   renderArchivedCalendars();
   renderMonthGrid();
-  renderUpcoming();
   renderSidebarTimeAnalysisIfActive();
   if (message) showToast(message);
 }
@@ -1292,7 +1300,6 @@ function persistCalendarArchive(message = "") {
   renderArchivedCalendars();
   populateCalendarSelect();
   renderMonthGrid();
-  renderUpcoming();
   renderSidebarTimeAnalysisIfActive();
   if (message) showToast(message);
 }
@@ -1403,7 +1410,6 @@ function persistCalendarManagement(message = "") {
   renderCalendarToggles();
   renderArchivedCalendars();
   populateCalendarSelect();
-  renderUpcoming();
   renderSidebarTimeAnalysisIfActive();
   if (message) showToast(message);
 }
@@ -2076,8 +2082,52 @@ function getCurrentViewTimeAnalysis() {
     rangeLabel: getHeaderTitle(rangeStart, rangeEnd),
     occurrences: occurrences.sort((a, b) => a.label.localeCompare(b.label)),
     totalHours: occurrences.reduce((total, occurrence) => total + occurrence.hours, 0),
+    weeklyHours: getWeeklyHoursData(occurrences, rangeStart, rangeEnd),
     weeklyActivity: getWeeklyActivityData(occurrences),
   };
+}
+
+function getWeeklyHoursData(occurrences, rangeStart, rangeEnd) {
+  const byWeek = new Map();
+  let cursor = startOfWeek(rangeStart);
+
+  while (cursor <= rangeEnd) {
+    ensureWeeklyHoursRow(byWeek, cursor);
+    cursor = addDays(cursor, 7);
+  }
+
+  occurrences.forEach((occurrence) => addOccurrenceHoursToWeeks(byWeek, occurrence));
+
+  return [...byWeek.values()]
+    .sort((a, b) => a.week.localeCompare(b.week))
+    .map((row) => ({ ...row, hours: Math.round(row.hours * 100) / 100 }));
+}
+
+function ensureWeeklyHoursRow(byWeek, date) {
+  const weekInfo = getIsoWeekInfo(date);
+  if (!byWeek.has(weekInfo.key)) {
+    byWeek.set(weekInfo.key, {
+      week: weekInfo.key,
+      label: `W${String(weekInfo.week).padStart(2, "0")}`,
+      hours: 0,
+    });
+  }
+  return byWeek.get(weekInfo.key);
+}
+
+function addOccurrenceHoursToWeeks(byWeek, occurrence) {
+  let cursor = new Date(occurrence.start);
+  const end = new Date(occurrence.end);
+
+  while (cursor < end) {
+    const nextWeekStart = addDays(startOfWeek(cursor), 7);
+    const segmentEnd = end < nextWeekStart ? end : nextWeekStart;
+    if (segmentEnd <= cursor) break;
+
+    const hours = Math.max(0, (segmentEnd - cursor) / 3_600_000);
+    if (hours) ensureWeeklyHoursRow(byWeek, cursor).hours += hours;
+    cursor = new Date(segmentEnd);
+  }
 }
 
 function getWeeklyActivityData(occurrences) {
@@ -2117,19 +2167,221 @@ function getActivityCategory(title = "") {
   return ACTIVITY_CATEGORIES.some(({ key }) => key === prefix) ? prefix : "";
 }
 
-function renderWeeklyActivityChart(data) {
+function renderWeeklyActivityChart(activityData, weeklyHoursData = []) {
   els.weeklyActivityChart.hidden = false;
   els.weeklyActivityChartBody.replaceChildren();
 
-  if (!data.length) {
+  if (!weeklyHoursData.length) {
     const empty = document.createElement("p");
     empty.className = "weekly-activity-chart-empty";
-    empty.textContent = "No read/code/write/meet activity in this range.";
+    empty.textContent = "No worked hours in this range.";
     els.weeklyActivityChartBody.append(empty);
     return;
   }
 
-  els.weeklyActivityChartBody.append(createWeeklyActivityChart(data), createWeeklyActivityLegend());
+  els.weeklyActivityChartBody.append(createWeeklyHoursChart(weeklyHoursData));
+
+  if (activityData.length) {
+    const activityHeading = document.createElement("h4");
+    activityHeading.className = "weekly-activity-chart-subheading";
+    activityHeading.textContent = "Cumulative activity categories";
+    els.weeklyActivityChartBody.append(activityHeading, createWeeklyActivityChart(activityData), createWeeklyActivityLegend());
+  }
+}
+
+function createWeeklyHoursChart(data) {
+  const frame = document.createElement("div");
+  frame.className = "weekly-hours-chart-frame";
+
+  const tooltip = document.createElement("div");
+  tooltip.className = "weekly-hours-tooltip";
+  tooltip.hidden = true;
+
+  frame.append(createWeeklyHoursChartSvg(data, tooltip), tooltip);
+  return frame;
+}
+
+function createWeeklyHoursChartSvg(data, tooltip) {
+  const svgNamespace = "http://www.w3.org/2000/svg";
+  const width = 360;
+  const height = 220;
+  const margin = { top: 18, right: 18, bottom: 46, left: 54 };
+  const plotWidth = width - margin.left - margin.right;
+  const plotHeight = height - margin.top - margin.bottom;
+  const maxHours = Math.max(1, ...data.map((row) => row.hours || 0));
+  const yTicks = getWeeklyHoursAxisTicks(maxHours);
+  const yMax = yTicks[yTicks.length - 1] || maxHours;
+  const xForIndex = (index) => margin.left + (data.length === 1 ? plotWidth / 2 : (plotWidth * index) / (data.length - 1));
+  const yForHours = (hours) => margin.top + plotHeight - (plotHeight * hours) / yMax;
+
+  const svg = document.createElementNS(svgNamespace, "svg");
+  svg.classList.add("weekly-hours-svg");
+  svg.setAttribute("viewBox", `0 0 ${width} ${height}`);
+  svg.setAttribute("role", "img");
+  svg.setAttribute("aria-label", "Working hours per week scatter plot");
+  svg.dataset.weekCount = String(data.length);
+
+  const title = document.createElementNS(svgNamespace, "title");
+  title.textContent = "Working hours per week";
+  svg.append(title);
+
+  yTicks.forEach((tick) => {
+    const y = yForHours(tick);
+    const gridLine = document.createElementNS(svgNamespace, "line");
+    gridLine.classList.add("weekly-hours-grid");
+    gridLine.setAttribute("x1", String(margin.left));
+    gridLine.setAttribute("x2", String(width - margin.right));
+    gridLine.setAttribute("y1", String(y));
+    gridLine.setAttribute("y2", String(y));
+    gridLine.setAttribute("stroke", "#e8eaed");
+    gridLine.setAttribute("stroke-width", "1");
+    svg.append(gridLine);
+
+    const label = document.createElementNS(svgNamespace, "text");
+    label.classList.add("weekly-hours-axis-label");
+    label.setAttribute("x", String(margin.left - 8));
+    label.setAttribute("y", String(y + 3));
+    label.setAttribute("text-anchor", "end");
+    label.setAttribute("fill", "#5f6368");
+    label.setAttribute("font-size", "10");
+    label.textContent = formatHours(tick).replace("h", "");
+    svg.append(label);
+  });
+
+  const yAxis = document.createElementNS(svgNamespace, "line");
+  yAxis.classList.add("weekly-hours-axis");
+  yAxis.setAttribute("x1", String(margin.left));
+  yAxis.setAttribute("x2", String(margin.left));
+  yAxis.setAttribute("y1", String(margin.top));
+  yAxis.setAttribute("y2", String(margin.top + plotHeight));
+  yAxis.setAttribute("stroke", "#dadce0");
+  yAxis.setAttribute("stroke-width", "1.2");
+
+  const xAxis = document.createElementNS(svgNamespace, "line");
+  xAxis.classList.add("weekly-hours-axis");
+  xAxis.setAttribute("x1", String(margin.left));
+  xAxis.setAttribute("x2", String(width - margin.right));
+  xAxis.setAttribute("y1", String(margin.top + plotHeight));
+  xAxis.setAttribute("y2", String(margin.top + plotHeight));
+  xAxis.setAttribute("stroke", "#dadce0");
+  xAxis.setAttribute("stroke-width", "1.2");
+  svg.append(yAxis, xAxis);
+
+  data.forEach((row, index) => {
+    const showLabel = data.length <= 8 || index === 0 || index === data.length - 1 || index % Math.ceil(data.length / 5) === 0;
+    if (!showLabel) return;
+    const label = document.createElementNS(svgNamespace, "text");
+    label.classList.add("weekly-hours-axis-label");
+    label.setAttribute("x", String(xForIndex(index)));
+    label.setAttribute("y", String(height - 20));
+    label.setAttribute("text-anchor", "middle");
+    label.setAttribute("fill", "#5f6368");
+    label.setAttribute("font-size", "10");
+    label.textContent = row.label;
+    svg.append(label);
+  });
+
+  const yAxisTitle = document.createElementNS(svgNamespace, "text");
+  yAxisTitle.classList.add("weekly-hours-axis-title");
+  yAxisTitle.setAttribute("text-anchor", "middle");
+  yAxisTitle.setAttribute("transform", `translate(16 ${margin.top + plotHeight / 2}) rotate(-90)`);
+  yAxisTitle.setAttribute("fill", "#202124");
+  yAxisTitle.setAttribute("font-size", "12");
+  yAxisTitle.setAttribute("font-weight", "700");
+  yAxisTitle.textContent = "Hours";
+  svg.append(yAxisTitle);
+
+  const xAxisTitle = document.createElementNS(svgNamespace, "text");
+  xAxisTitle.classList.add("weekly-hours-axis-title");
+  xAxisTitle.setAttribute("x", String(margin.left + plotWidth / 2));
+  xAxisTitle.setAttribute("y", String(height - 3));
+  xAxisTitle.setAttribute("text-anchor", "middle");
+  xAxisTitle.setAttribute("fill", "#202124");
+  xAxisTitle.setAttribute("font-size", "12");
+  xAxisTitle.setAttribute("font-weight", "700");
+  xAxisTitle.textContent = "Week";
+  svg.append(xAxisTitle);
+
+  data.forEach((row, index) => {
+    const point = {
+      x: xForIndex(index),
+      y: yForHours(row.hours || 0),
+      row,
+      hours: row.hours || 0,
+    };
+    point.color = getWeeklyHoursColor(point.hours);
+    point.range = getWeeklyHoursRange(point.hours);
+
+    const circle = document.createElementNS(svgNamespace, "circle");
+    circle.classList.add("weekly-hours-point");
+    circle.dataset.week = row.week;
+    circle.dataset.hours = String(Math.round(point.hours * 100) / 100);
+    circle.dataset.range = point.range;
+    circle.setAttribute("cx", String(point.x));
+    circle.setAttribute("cy", String(point.y));
+    circle.setAttribute("r", point.hours ? "5.4" : "4.2");
+    circle.setAttribute("fill", point.color);
+    circle.setAttribute("fill-opacity", "0.9");
+    circle.setAttribute("stroke", "#ffffff");
+    circle.setAttribute("stroke-width", "1.5");
+    circle.setAttribute("tabindex", "0");
+    circle.setAttribute("aria-label", `${row.week}: ${formatHours(point.hours)} worked`);
+    circle.addEventListener("mouseenter", () => showWeeklyHoursTooltip(tooltip, svg, point));
+    circle.addEventListener("focus", () => showWeeklyHoursTooltip(tooltip, svg, point));
+    circle.addEventListener("mouseleave", () => hideWeeklyActivityTooltip(tooltip));
+    circle.addEventListener("blur", () => hideWeeklyActivityTooltip(tooltip));
+    const pointTitle = document.createElementNS(svgNamespace, "title");
+    pointTitle.textContent = `${row.week}: ${formatHours(point.hours)} worked`;
+    circle.append(pointTitle);
+    svg.append(circle);
+  });
+
+  return svg;
+}
+
+function getWeeklyHoursColor(hours) {
+  if (hours < 38) return "#188038";
+  if (hours < 42) return "#1a73e8";
+  if (hours < 50) return "#f29900";
+  return "#d93025";
+}
+
+function getWeeklyHoursRange(hours) {
+  if (hours < 38) return "under-38";
+  if (hours < 42) return "38-42";
+  if (hours < 50) return "42-50";
+  return "50-plus";
+}
+
+function getWeeklyHoursAxisTicks(maxHours) {
+  const roughStep = Math.max(1, maxHours / 4);
+  const magnitude = 10 ** Math.floor(Math.log10(roughStep));
+  const normalized = roughStep / magnitude;
+  const step = normalized <= 1 ? magnitude : normalized <= 2 ? 2 * magnitude : normalized <= 5 ? 5 * magnitude : 10 * magnitude;
+  const top = Math.max(step, step * Math.ceil(maxHours / step));
+  const ticks = [];
+  for (let tick = 0; tick <= top + step / 2; tick += step) {
+    ticks.push(Math.round(tick * 100) / 100);
+  }
+  return ticks;
+}
+
+function showWeeklyHoursTooltip(tooltip, svg, point) {
+  if (!tooltip) return;
+
+  const svgRect = svg.getBoundingClientRect();
+  const viewBox = svg.viewBox.baseVal;
+  const left = viewBox.width ? (point.x / viewBox.width) * svgRect.width : point.x;
+  const top = viewBox.height ? (point.y / viewBox.height) * svgRect.height : point.y;
+
+  tooltip.style.setProperty("--activity-color", point.color || "#1a73e8");
+  tooltip.innerHTML = `
+    <strong>${escapeHtml(point.row.week)}</strong>
+    <span>${formatHours(point.hours)} worked</span>
+  `;
+  tooltip.style.left = `${left}px`;
+  tooltip.style.top = `${top}px`;
+  tooltip.hidden = false;
 }
 
 function createWeeklyActivityChart(data) {
@@ -3024,6 +3276,14 @@ function createWeekDayColumn(date) {
     .filter(Boolean)
     .join(" ");
   column.dataset.date = dateKey;
+  column.addEventListener("pointermove", handleWeekColumnPointerMove);
+  column.addEventListener("pointerleave", handleWeekColumnPointerLeave);
+
+  const hoverSelection = document.createElement("div");
+  hoverSelection.className = "week-hover-selection";
+  hoverSelection.hidden = true;
+  hoverSelection.setAttribute("aria-hidden", "true");
+  column.append(hoverSelection);
 
   HOURS.forEach((hour) => column.append(createWeekSlot(date, hour)));
 
@@ -3036,6 +3296,36 @@ function createWeekDayColumn(date) {
   }
 
   return column;
+}
+
+function handleWeekColumnPointerMove(event) {
+  const column = event.currentTarget;
+  if (activeWeekRangeDrag || activeWeekEventDrag || !(column instanceof Element)) return;
+  if (!(event.target instanceof Element) || !event.target.closest(".week-slot")) {
+    hideWeekHoverSelection(column);
+    return;
+  }
+
+  const minutes = getWeekMinutesAtClientY(column, event.clientY);
+  const hoverSelection = column.querySelector(".week-hover-selection");
+  if (!hoverSelection) return;
+
+  const durationMinutes = Math.min(DEFAULT_EVENT_DURATION_MINUTES, 24 * 60 - minutes);
+  hoverSelection.hidden = false;
+  hoverSelection.dataset.time = formatMinutesInput(minutes);
+  hoverSelection.dataset.durationMinutes = String(durationMinutes);
+  hoverSelection.style.top = `${(minutes / 60) * WEEK_HOUR_HEIGHT + 1}px`;
+  hoverSelection.style.height = `${Math.max(18, ((durationMinutes / 60) * WEEK_HOUR_HEIGHT) - 2)}px`;
+}
+
+function handleWeekColumnPointerLeave(event) {
+  hideWeekHoverSelection(event.currentTarget);
+}
+
+function hideWeekHoverSelection(column) {
+  if (!(column instanceof Element)) return;
+  const hoverSelection = column.querySelector(".week-hover-selection");
+  if (hoverSelection) hoverSelection.hidden = true;
 }
 
 function createNowIndicator() {
@@ -3066,26 +3356,29 @@ function createWeekSlot(date, hour) {
   slot.dataset.hour = String(hour);
   slot.style.top = `${hour * WEEK_HOUR_HEIGHT}px`;
   slot.setAttribute("aria-label", `Create event on ${longDateFormatter.format(date)} at ${formatHourLabel(hour) || "12 AM"}`);
-  slot.addEventListener("pointerdown", (event) => startWeekRangeDrag(event, date, hour));
+  slot.addEventListener("pointerdown", (event) => startWeekRangeDrag(event, date));
   slot.addEventListener("click", (event) => {
     if (suppressNextWeekSlotClick) {
       event.preventDefault();
       suppressNextWeekSlotClick = false;
       return;
     }
+    const startMinutes = getWeekPointerMinutes(event);
     selectedDate = new Date(date);
     ensureDateVisible(date);
-    openEventDialog(dateKey, null, { time: formatTimeInput(hour), durationMinutes: DEFAULT_EVENT_DURATION_MINUTES });
+    openEventDialog(dateKey, null, { time: formatMinutesInput(startMinutes), durationMinutes: DEFAULT_EVENT_DURATION_MINUTES });
   });
   return slot;
 }
 
-function startWeekRangeDrag(event, date, hour) {
+function startWeekRangeDrag(event, date) {
   if (event.button !== 0 || activeWeekRangeDrag) return;
 
   const column = event.currentTarget.closest(".week-day-column");
   if (!column) return;
 
+  const startMinutes = getWeekPointerMinutes(event);
+  hideWeekHoverSelection(column);
   const selection = document.createElement("div");
   selection.className = "week-drag-selection";
   column.append(selection);
@@ -3095,8 +3388,8 @@ function startWeekRangeDrag(event, date, hour) {
     dateKey: toDateKey(date),
     column,
     selection,
-    startHour: hour,
-    endHour: hour,
+    startMinutes,
+    endMinutes: startMinutes,
     startX: event.clientX,
     startY: event.clientY,
     moved: false,
@@ -3111,10 +3404,10 @@ function startWeekRangeDrag(event, date, hour) {
 function handleWeekRangeDragMove(event) {
   if (!activeWeekRangeDrag) return;
 
-  const nextHour = getWeekRangeDragHour(activeWeekRangeDrag, event);
+  const nextMinutes = getWeekRangeDragMinutes(activeWeekRangeDrag, event);
   const distance = Math.hypot(event.clientX - activeWeekRangeDrag.startX, event.clientY - activeWeekRangeDrag.startY);
-  activeWeekRangeDrag.moved = activeWeekRangeDrag.moved || distance > 4 || nextHour !== activeWeekRangeDrag.startHour;
-  activeWeekRangeDrag.endHour = nextHour;
+  activeWeekRangeDrag.moved = activeWeekRangeDrag.moved || distance > 4 || nextMinutes !== activeWeekRangeDrag.startMinutes;
+  activeWeekRangeDrag.endMinutes = nextMinutes;
   updateWeekRangeDragSelection(activeWeekRangeDrag);
 }
 
@@ -3135,7 +3428,7 @@ function handleWeekRangeDragEnd() {
   selectedDate = new Date(drag.date);
   ensureDateVisible(drag.date);
   openEventDialog(drag.dateKey, null, {
-    time: formatTimeInput(range.startHour),
+    time: formatMinutesInput(range.startMinutes),
     durationMinutes: range.durationMinutes,
   });
 }
@@ -3152,27 +3445,39 @@ function cleanupWeekRangeDrag() {
   window.removeEventListener("pointercancel", cancelWeekRangeDrag);
 }
 
-function getWeekRangeDragHour(drag, event) {
-  const rect = drag.column.getBoundingClientRect();
-  const y = Math.min(Math.max(event.clientY - rect.top, 0), rect.height - 1);
-  return Math.min(23, Math.max(0, Math.floor(y / WEEK_HOUR_HEIGHT)));
+function getWeekPointerMinutes(event) {
+  const column = event.currentTarget.closest(".week-day-column");
+  if (!column) return (Number(event.currentTarget.dataset.hour) || 0) * 60;
+  return getWeekMinutesAtClientY(column, event.clientY);
+}
+
+function getWeekRangeDragMinutes(drag, event) {
+  return getWeekMinutesAtClientY(drag.column, event.clientY);
+}
+
+function getWeekMinutesAtClientY(column, clientY, { offsetMinutes = 0, maxMinutes = (24 * 60) - WEEK_SLOT_GRANULARITY_MINUTES } = {}) {
+  const rect = column.getBoundingClientRect();
+  const y = Math.min(Math.max(clientY - rect.top, 0), rect.height - 1);
+  const rawMinutes = ((y / WEEK_HOUR_HEIGHT) * 60) - offsetMinutes;
+  const snappedMinutes = Math.floor(rawMinutes / WEEK_SLOT_GRANULARITY_MINUTES) * WEEK_SLOT_GRANULARITY_MINUTES;
+  return Math.min(maxMinutes, Math.max(0, snappedMinutes));
 }
 
 function getWeekRangeDragRange(drag) {
-  const startHour = Math.min(drag.startHour, drag.endHour);
-  const endHour = Math.max(drag.startHour, drag.endHour) + 1;
+  const startMinutes = Math.min(drag.startMinutes, drag.endMinutes);
+  const endMinutes = Math.min(24 * 60, Math.max(drag.startMinutes, drag.endMinutes) + WEEK_SLOT_GRANULARITY_MINUTES);
   return {
-    startHour,
-    endHour,
-    durationMinutes: (endHour - startHour) * 60,
+    startMinutes,
+    endMinutes,
+    durationMinutes: endMinutes - startMinutes,
   };
 }
 
 function updateWeekRangeDragSelection(drag) {
   const range = getWeekRangeDragRange(drag);
-  drag.selection.style.top = `${range.startHour * WEEK_HOUR_HEIGHT + 2}px`;
-  drag.selection.style.height = `${Math.max(32, ((range.durationMinutes / 60) * WEEK_HOUR_HEIGHT) - 4)}px`;
-  drag.selection.textContent = `${formatHourBoundary(range.startHour)} – ${formatHourBoundary(range.endHour)} · ${formatHours(range.durationMinutes / 60)}`;
+  drag.selection.style.top = `${(range.startMinutes / 60) * WEEK_HOUR_HEIGHT + 2}px`;
+  drag.selection.style.height = `${Math.max(18, ((range.durationMinutes / 60) * WEEK_HOUR_HEIGHT) - 4)}px`;
+  drag.selection.textContent = `${formatMinuteBoundary(range.startMinutes)} – ${formatMinuteBoundary(range.endMinutes)} · ${formatHours(range.durationMinutes / 60)}`;
 }
 
 function createWeekTimedEvent(calendarEvent) {
@@ -3199,14 +3504,185 @@ function createWeekTimedEvent(calendarEvent) {
   title.textContent = calendarEvent.title;
 
   eventButton.append(title, time);
+  eventButton.addEventListener("pointerdown", (event) => startWeekEventDrag(event, calendarEvent));
   eventButton.addEventListener("click", (event) => {
     event.stopPropagation();
+    if (suppressNextWeekEventClick) {
+      event.preventDefault();
+      suppressNextWeekEventClick = false;
+      return;
+    }
     selectedDate = fromDateKey(getEventDate(calendarEvent));
     ensureDateVisible(selectedDate);
     openEventDialog(getEventDate(calendarEvent), calendarEvent);
   });
 
   return eventButton;
+}
+
+function startWeekEventDrag(event, calendarEvent) {
+  if (event.button !== 0 || activeWeekEventDrag || activeWeekRangeDrag) return;
+
+  const sourceButton = event.currentTarget;
+  const sourceColumn = sourceButton.closest(".week-day-column");
+  if (!sourceColumn) return;
+
+  const sourceRect = sourceButton.getBoundingClientRect();
+  const durationMinutes = getOccurrenceDurationMinutes(calendarEvent);
+  const offsetMinutes = Math.min(
+    Math.max(0, durationMinutes - WEEK_SLOT_GRANULARITY_MINUTES),
+    Math.max(0, ((event.clientY - sourceRect.top) / WEEK_HOUR_HEIGHT) * 60)
+  );
+  const preview = document.createElement("div");
+  preview.className = "week-event-drag-preview";
+  preview.style.setProperty("--event-color", getCalendar(calendarEvent.calendar).color);
+  preview.hidden = true;
+
+  activeWeekEventDrag = {
+    event: calendarEvent,
+    sourceButton,
+    sourceColumn,
+    preview,
+    durationMinutes,
+    offsetMinutes,
+    targetDateKey: getEventDate(calendarEvent),
+    targetMinutes: timeToMinutes(calendarEvent.time),
+    startX: event.clientX,
+    startY: event.clientY,
+    moved: false,
+  };
+
+  window.addEventListener("pointermove", handleWeekEventDragMove);
+  window.addEventListener("pointerup", handleWeekEventDragEnd);
+  window.addEventListener("pointercancel", cancelWeekEventDrag);
+}
+
+function handleWeekEventDragMove(event) {
+  if (!activeWeekEventDrag) return;
+
+  const drag = activeWeekEventDrag;
+  const distance = Math.hypot(event.clientX - drag.startX, event.clientY - drag.startY);
+  drag.moved = drag.moved || distance > 4;
+  if (!drag.moved) return;
+
+  event.preventDefault();
+  drag.sourceButton.classList.add("is-dragging");
+  updateWeekEventDragPreview(drag, event);
+}
+
+function handleWeekEventDragEnd(event) {
+  if (!activeWeekEventDrag) return;
+
+  const drag = activeWeekEventDrag;
+  if (drag.moved) updateWeekEventDragPreview(drag, event);
+  cleanupWeekEventDrag();
+
+  if (!drag.moved) return;
+
+  suppressNextWeekEventClick = true;
+  setTimeout(() => {
+    suppressNextWeekEventClick = false;
+  }, 0);
+
+  moveWeekEventOccurrence(drag.event, drag.targetDateKey, drag.targetMinutes);
+}
+
+function cancelWeekEventDrag() {
+  cleanupWeekEventDrag();
+}
+
+function cleanupWeekEventDrag() {
+  if (activeWeekEventDrag?.preview) activeWeekEventDrag.preview.remove();
+  if (activeWeekEventDrag?.sourceButton) activeWeekEventDrag.sourceButton.classList.remove("is-dragging");
+  activeWeekEventDrag = null;
+  window.removeEventListener("pointermove", handleWeekEventDragMove);
+  window.removeEventListener("pointerup", handleWeekEventDragEnd);
+  window.removeEventListener("pointercancel", cancelWeekEventDrag);
+}
+
+function updateWeekEventDragPreview(drag, event) {
+  const targetColumn = getWeekColumnAtPoint(event.clientX) || drag.sourceColumn;
+  const maxStartMinutes = Math.max(0, (24 * 60) - drag.durationMinutes);
+  const targetMinutes = getWeekMinutesAtClientY(targetColumn, event.clientY, {
+    offsetMinutes: drag.offsetMinutes,
+    maxMinutes: maxStartMinutes,
+  });
+  const targetDateKey = targetColumn.dataset.date || drag.targetDateKey;
+
+  hideWeekHoverSelection(targetColumn);
+  drag.targetDateKey = targetDateKey;
+  drag.targetMinutes = targetMinutes;
+  drag.preview.hidden = false;
+  drag.preview.style.top = `${(targetMinutes / 60) * WEEK_HOUR_HEIGHT + 2}px`;
+  drag.preview.style.height = `${Math.max(34, ((drag.durationMinutes / 60) * WEEK_HOUR_HEIGHT) - 4)}px`;
+  drag.preview.textContent = `${formatMinuteBoundary(targetMinutes)} · ${drag.event.title}`;
+  if (drag.preview.parentElement !== targetColumn) targetColumn.append(drag.preview);
+}
+
+function getWeekColumnAtPoint(clientX) {
+  return [...els.monthGrid.querySelectorAll(".week-day-column")].find((column) => {
+    const rect = column.getBoundingClientRect();
+    return clientX >= rect.left && clientX <= rect.right;
+  });
+}
+
+function moveWeekEventOccurrence(calendarEvent, targetDateKey, targetMinutes) {
+  const eventIndex = events.findIndex((event) => event.id === calendarEvent.id);
+  if (eventIndex < 0) return;
+
+  const sourceEvent = events[eventIndex];
+  const sourceDateKey = getEventDate(calendarEvent);
+  const targetTime = formatMinutesInput(targetMinutes);
+  const repeat = sourceEvent.repeat ?? "none";
+
+  if (repeat === "none") {
+    events.splice(eventIndex, 1, {
+      ...sourceEvent,
+      date: targetDateKey,
+      time: targetTime,
+    });
+  } else if (targetDateKey === sourceDateKey) {
+    events.splice(eventIndex, 1, {
+      ...sourceEvent,
+      instanceOverrides: {
+        ...(sourceEvent.instanceOverrides ?? {}),
+        [sourceDateKey]: {
+          ...(sourceEvent.instanceOverrides?.[sourceDateKey] ?? {}),
+          time: targetTime,
+        },
+      },
+    });
+  } else {
+    const excludedDates = new Set(sourceEvent.excludedDates ?? []);
+    excludedDates.add(sourceDateKey);
+    events.splice(eventIndex, 1, {
+      ...sourceEvent,
+      excludedDates: [...excludedDates].sort(),
+    });
+    events.push(createMovedStandaloneOccurrence(calendarEvent, targetDateKey, targetTime));
+  }
+
+  selectedDate = fromDateKey(targetDateKey);
+  viewAnchorDate = new Date(selectedDate);
+  visibleMonth = startOfMonth(selectedDate);
+  saveEvents();
+  render();
+  showToast("Event moved");
+}
+
+function createMovedStandaloneOccurrence(calendarEvent, targetDateKey, targetTime) {
+  return {
+    id: makeId(),
+    title: calendarEvent.title,
+    date: targetDateKey,
+    time: targetTime,
+    calendar: calendarEvent.calendar,
+    repeat: "none",
+    paperTaskIds: calendarEvent.paperTaskIds ?? [],
+    papers: calendarEvent.papers ?? [],
+    durationMinutes: getOccurrenceDurationMinutes(calendarEvent),
+    notes: calendarEvent.notes ?? "",
+  };
 }
 
 function createEventChip(calendarEvent) {
@@ -3236,39 +3712,34 @@ function createEventChip(calendarEvent) {
   return chip;
 }
 
-function renderUpcoming() {
-  const selectedKey = toDateKey(selectedDate);
-  const upcoming = getUpcomingOccurrences(selectedKey, 5);
-
-  if (!upcoming.length) {
-    const empty = document.createElement("p");
-    empty.className = "empty-state";
-    empty.textContent = "No upcoming events.";
-    els.upcomingList.replaceChildren(empty);
+function updateEventEndTimeFromDuration() {
+  if (!els.eventTime.value) {
+    els.eventEndTime.value = "";
     return;
   }
 
-  els.upcomingList.replaceChildren(
-    ...upcoming.map((event) => {
-      const calendar = getCalendar(event.calendar);
-      const item = document.createElement("button");
-      item.className = "upcoming-item";
-      item.type = "button";
-      item.style.setProperty("--event-color", calendar.color);
-      item.innerHTML = `
-        <span class="upcoming-date">${compactDateFormatter.format(fromDateKey(getEventDate(event)))}</span>
-        <span class="upcoming-title">${escapeHtml(event.title)}</span>
-        <span class="upcoming-meta">${event.time ? formatTime(event.time) : "All day"} · ${calendar.name}${event.repeat && event.repeat !== "none" ? ` · ${REPEAT_LABELS[event.repeat]}` : ""}</span>
-      `;
-      item.addEventListener("click", () => {
-        selectedDate = fromDateKey(getEventDate(event));
-        viewAnchorDate = new Date(selectedDate);
-        visibleMonth = startOfMonth(selectedDate);
-        openEventDialog(getEventDate(event), event);
-      });
-      return item;
-    })
-  );
+  const startMinutes = timeToMinutes(els.eventTime.value);
+  const durationMinutes = getEventDialogDurationMinutes();
+  els.eventEndTime.value = formatMinutesInput(startMinutes + durationMinutes);
+}
+
+function updateEventDurationFromEndTime() {
+  if (!els.eventTime.value || !els.eventEndTime.value) return;
+
+  const startMinutes = timeToMinutes(els.eventTime.value);
+  let endMinutes = timeToMinutes(els.eventEndTime.value);
+  if (endMinutes <= startMinutes) {
+    endMinutes = Math.min(23 * 60 + 59, startMinutes + WEEK_SLOT_GRANULARITY_MINUTES);
+    els.eventEndTime.value = formatMinutesInput(endMinutes);
+  }
+
+  els.eventDurationMinutes.value = String(Math.max(WEEK_SLOT_GRANULARITY_MINUTES, endMinutes - startMinutes));
+}
+
+function setEventDurationHoursShortcut(hours) {
+  els.eventDurationMinutes.value = String(hours * 60);
+  updateEventEndTimeFromDuration();
+  showToast(`${hours}h duration`);
 }
 
 function openEventDialog(dateKey, existingEvent = null, options = {}) {
@@ -3279,6 +3750,7 @@ function openEventDialog(dateKey, existingEvent = null, options = {}) {
   els.eventTitle.value = existingEvent?.title ?? "";
   els.eventDate.value = existingEvent?.date ?? dateKey;
   els.eventTime.value = options.time ?? existingEvent?.time ?? "";
+  updateEventEndTimeFromDuration();
   els.eventCalendar.value = existingEvent?.calendar ?? getDefaultEventCalendarId();
   els.eventRepeat.value = existingEvent?.repeat ?? "none";
   els.eventNotes.value = existingEvent?.notes ?? "";
@@ -3319,6 +3791,7 @@ function saveEventFromDialog(event) {
   const repeat = els.eventRepeat.value;
   const isRecurring = repeat !== "none";
   const assignedTitle = selectedPapers.length ? getReadEventTitleForPapers(els.eventTitle.value, selectedPapers) : els.eventTitle.value.trim();
+  updateEventDurationFromEndTime();
   const durationMinutes = getEventDialogDurationMinutes();
 
   const formEvent = {
@@ -3589,20 +4062,6 @@ function isWeekday(date) {
   return day >= 1 && day <= 5;
 }
 
-function getUpcomingOccurrences(startKey, limit = 5) {
-  const start = fromDateKey(startKey);
-  const occurrences = [];
-
-  for (let offset = 0; offset < 366 && occurrences.length < limit; offset += 1) {
-    const date = addDays(start, offset);
-    const dateKey = toDateKey(date);
-    occurrences.push(...getFilteredEventsForDate(dateKey));
-    occurrences.sort(compareEvents);
-  }
-
-  return occurrences.slice(0, limit);
-}
-
 function isEventVisible(event) {
   if (isCalendarDeleted(event.calendar)) return false;
   if (!visibleCalendars[event.calendar]) return false;
@@ -3848,8 +4307,7 @@ function isValidDeadlineFilterTag(tag) {
 }
 
 function createReferenceToday() {
-  const clock = new Date();
-  return new Date(2026, 6, 2, clock.getHours(), clock.getMinutes(), clock.getSeconds());
+  return new Date();
 }
 
 function getNow() {
@@ -3967,8 +4425,25 @@ function formatHourBoundary(hour) {
   return formatHourLabel(hour) || "12 AM";
 }
 
+function timeToMinutes(time = "00:00") {
+  const [hour = 0, minute = 0] = time.split(":").map(Number);
+  return (hour * 60) + minute;
+}
+
+function formatMinuteBoundary(totalMinutes) {
+  if (totalMinutes >= 24 * 60) return "12 AM";
+  return formatTime(formatMinutesInput(totalMinutes));
+}
+
+function formatMinutesInput(totalMinutes) {
+  const clampedMinutes = Math.min(23 * 60 + 59, Math.max(0, Math.round(totalMinutes)));
+  const hour = Math.floor(clampedMinutes / 60);
+  const minute = clampedMinutes % 60;
+  return `${String(hour).padStart(2, "0")}:${String(minute).padStart(2, "0")}`;
+}
+
 function formatTimeInput(hour) {
-  return `${String(hour).padStart(2, "0")}:00`;
+  return formatMinutesInput(hour * 60);
 }
 
 function formatTime(time) {
