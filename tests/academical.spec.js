@@ -439,12 +439,16 @@ END:VCALENDAR`;
   await page.locator('.sidebar-tab[data-panel="analysis"]').click();
 
   await expect(page.locator('.weekly-hours-point[data-week="2026-W27"]')).toHaveAttribute('fill', '#188038');
+  await expect(page.locator('.weekly-hours-point[data-week="2026-W27"]')).toHaveCSS('fill', 'rgb(24, 128, 56)');
   await expect(page.locator('.weekly-hours-point[data-week="2026-W28"]')).toHaveAttribute('data-hours', '40');
   await expect(page.locator('.weekly-hours-point[data-week="2026-W28"]')).toHaveAttribute('fill', '#1a73e8');
+  await expect(page.locator('.weekly-hours-point[data-week="2026-W28"]')).toHaveCSS('fill', 'rgb(26, 115, 232)');
   await expect(page.locator('.weekly-hours-point[data-week="2026-W29"]')).toHaveAttribute('data-hours', '45');
   await expect(page.locator('.weekly-hours-point[data-week="2026-W29"]')).toHaveAttribute('fill', '#f29900');
+  await expect(page.locator('.weekly-hours-point[data-week="2026-W29"]')).toHaveCSS('fill', 'rgb(242, 153, 0)');
   await expect(page.locator('.weekly-hours-point[data-week="2026-W30"]')).toHaveAttribute('data-hours', '50');
   await expect(page.locator('.weekly-hours-point[data-week="2026-W30"]')).toHaveAttribute('fill', '#d93025');
+  await expect(page.locator('.weekly-hours-point[data-week="2026-W30"]')).toHaveCSS('fill', 'rgb(217, 48, 37)');
 });
 
 test('time analysis renders weekly cumulative activity chart', async ({ page }) => {

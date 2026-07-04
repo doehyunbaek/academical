@@ -2096,7 +2096,6 @@ textarea:focus-visible {
 }
 
 .weekly-hours-point {
-  fill: var(--primary);
   fill-opacity: 0.9;
   stroke: var(--surface);
   stroke-width: 1.5;
