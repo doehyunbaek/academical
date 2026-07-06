@@ -314,11 +314,11 @@ END:VCALENDAR`;
   await expect(page.locator('.heatmap-day').last()).toHaveAttribute('data-date', '2026-07-01');
 
   await page.keyboard.press('5');
-  await expect(page.locator('#monthTitle')).toHaveText('Jan 1 – Dec 31, 2026');
-  await expect(page.locator('.heatmap-summary')).toContainText('Yearly view');
-  await expect(page.locator('.heatmap-day')).toHaveCount(365);
-  await expect(page.locator('.heatmap-day').first()).toHaveAttribute('data-date', '2026-01-01');
-  await expect(page.locator('.heatmap-day').last()).toHaveAttribute('data-date', '2026-12-31');
+  await expect(page.locator('#monthTitle')).toHaveText('Jul 3, 2025 – Jul 3, 2026');
+  await expect(page.locator('.heatmap-summary')).toContainText('Rolling year');
+  await expect(page.locator('.heatmap-day')).toHaveCount(366);
+  await expect(page.locator('.heatmap-day').first()).toHaveAttribute('data-date', '2025-07-03');
+  await expect(page.locator('.heatmap-day').last()).toHaveAttribute('data-date', '2026-07-03');
 
   await page.keyboard.press('5');
   await expect(page.locator('#monthTitle')).toHaveText('Oct 13, 2025 – Jul 1, 2026');

@@ -2987,9 +2987,10 @@ function makeDeadlineId(conference, index) {
 
 function getHeatmapDateRange() {
   if (heatmapRangeMode === "year") {
+    const rangeEnd = startOfDay(viewAnchorDate);
     return {
-      start: startOfYear(selectedDate),
-      end: endOfYear(selectedDate),
+      start: addYears(rangeEnd, -1),
+      end: rangeEnd,
       hasEvents: true,
       mode: heatmapRangeMode,
     };
@@ -3063,7 +3064,7 @@ function renderHeatmapView() {
   summary.className = "heatmap-summary";
   summary.innerHTML = `
     <strong>${formatHours(totalHours)}</strong>
-    <span>${mode === "year" ? "Yearly view" : "Event span"} · ${activeDays} active day${activeDays === 1 ? "" : "s"} · ${formatDateRange(rangeStart, rangeEnd)}${maxHours ? ` · max ${formatHours(maxHours)}/day` : ""}</span>
+    <span>${mode === "year" ? "Rolling year" : "Event span"} · ${activeDays} active day${activeDays === 1 ? "" : "s"} · ${formatDateRange(rangeStart, rangeEnd)}${maxHours ? ` · max ${formatHours(maxHours)}/day` : ""}</span>
   `;
 
   const monthRow = document.createElement("div");
@@ -3122,8 +3123,6 @@ function renderHeatmapView() {
     day.setAttribute("aria-label", day.title);
     day.addEventListener("click", (event) => {
       selectedDate = new Date(date);
-      viewAnchorDate = new Date(date);
-      visibleMonth = startOfMonth(date);
       heatmapDetailsAnchor = getHeatmapDetailsAnchor(event);
       render();
     });
@@ -4075,7 +4074,7 @@ function toggleHeatmapRangeMode() {
   heatmapRangeMode = heatmapRangeMode === "events" ? "year" : "events";
   heatmapDetailsAnchor = null;
   render();
-  showToast(heatmapRangeMode === "year" ? "Heatmap showing full year" : "Heatmap showing event span");
+  showToast(heatmapRangeMode === "year" ? "Heatmap showing rolling year" : "Heatmap showing event span");
 }
 
 function jumpToCurrentTime() {

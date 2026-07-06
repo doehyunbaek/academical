@@ -17,7 +17,7 @@ Open <http://localhost:8000>.
 - Week view uses a Google Calendar-style per-hour timeline grid; drag across hour boxes to create an event for that selected range
 - Weeks start on Monday
 - Keyboard shortcuts: `j` future, `k` past, `t` current time, `p` open Add paper modal, `a` all calendars, `q`/`w`/`e`/`r` solo calendars 1–4, `Ctrl+1`–`Ctrl+3` sidebar panels, `1` deadlines, `2` week, `3` month, `4` four weeks, `5` heatmap, `Backspace` delete focused edit event
-- Google Calendar-style top bar, configurable left/bottom/right multipanel sidebar, month grid, GitHub-style worked-hours heatmap spanning the first-to-last visible selected-calendar event with compact near-cursor clicked-day details, and an expanded bottom sidebar in heatmap mode
+- Google Calendar-style top bar, configurable left/bottom/right multipanel sidebar, month grid, GitHub-style worked-hours heatmap spanning the first-to-last visible selected-calendar event or a rolling current-date-minus-one-year range with compact near-cursor clicked-day details, and an expanded bottom sidebar in heatmap mode
 - Create/edit/delete events; Create event defaults to the earliest currently visible calendar; Time analysis sidebar panel summarizes all visible events in the current view and includes a color-banded working-hours-per-week scatter chart plus a weekly cumulative read/code/write/meet activity chart
 - Repeating events: daily, weekly, and every weekday
 - Deleting a recurring event occurrence removes only that instance; `Delete recurring` removes the full series
