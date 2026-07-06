@@ -37,7 +37,9 @@ test('account avatar opens sync dropdown and uses generic icon', async ({ page }
 test('weeks start on Monday in month and week views', async ({ page }) => {
   await page.goto('/');
   await expect(page.locator('.weekday-row span').first()).toHaveText('Mon');
+  await expect(page.locator('.day-cell')).toHaveCount(35);
   await expect(page.locator('.day-cell').first().locator('.day-number')).toHaveText('29');
+  await expect(page.locator('.day-cell[data-date="2026-08-03"]')).toHaveCount(0);
   await page.keyboard.press('2');
   await expect(page.locator('#monthTitle')).toHaveText('Jun 29 – Jul 5, 2026');
   await expect(page.locator('.week-day-header').first().locator('.week-day-header-weekday')).toHaveText('Mon');
@@ -64,6 +66,25 @@ test('keyboard shortcuts switch views and navigate periods', async ({ page }) =>
   await expect(page.locator('#viewSelect')).toHaveValue('month');
 });
 
+test('four-week range title stays inline beside nav carets on compact header', async ({ page }) => {
+  await page.setViewportSize({ width: 800, height: 900 });
+  await page.goto('/');
+  await page.locator('.day-cell[data-date="2026-07-06"]').click();
+  await page.locator('#viewSelect').selectOption('four-week');
+
+  await expect(page.locator('#monthTitle')).toHaveText('Jul 6 – Aug 2, 2026');
+  const navBox = await page.locator('.nav-buttons').boundingBox();
+  const titleBox = await page.locator('#monthTitle').boundingBox();
+  const titleMetrics = await page.locator('#monthTitle').evaluate((element) => ({
+    clientWidth: element.clientWidth,
+    scrollWidth: element.scrollWidth,
+  }));
+  expect(navBox).not.toBeNull();
+  expect(titleBox).not.toBeNull();
+  expect(Math.abs(titleBox.y - navBox.y)).toBeLessThan(12);
+  expect(titleBox.x).toBeGreaterThanOrEqual(navBox.x + navBox.width - 4);
+  expect(titleMetrics.clientWidth).toBeGreaterThanOrEqual(titleMetrics.scrollWidth);
+});
 
 test('deadline view internalizes deadlines app entries', async ({ page }) => {
   await page.goto('/');
@@ -288,8 +309,19 @@ END:VCALENDAR`;
   await page.keyboard.press('5');
 
   await expect(page.locator('#monthTitle')).toHaveText('Oct 13, 2025 – Jul 1, 2026');
+  await expect(page.locator('.heatmap-summary')).toContainText('Event span');
   await expect(page.locator('.heatmap-day').first()).toHaveAttribute('data-date', '2025-10-13');
   await expect(page.locator('.heatmap-day').last()).toHaveAttribute('data-date', '2026-07-01');
+
+  await page.keyboard.press('5');
+  await expect(page.locator('#monthTitle')).toHaveText('Jan 1 – Dec 31, 2026');
+  await expect(page.locator('.heatmap-summary')).toContainText('Yearly view');
+  await expect(page.locator('.heatmap-day')).toHaveCount(365);
+  await expect(page.locator('.heatmap-day').first()).toHaveAttribute('data-date', '2026-01-01');
+  await expect(page.locator('.heatmap-day').last()).toHaveAttribute('data-date', '2026-12-31');
+
+  await page.keyboard.press('5');
+  await expect(page.locator('#monthTitle')).toHaveText('Oct 13, 2025 – Jul 1, 2026');
 });
 
 test('create calendar modal can create a blank calendar', async ({ page }) => {
@@ -303,6 +335,9 @@ test('create calendar modal can create a blank calendar', async ({ page }) => {
 });
 
 test('calendar rows can be reordered with drag and drop and shortcuts follow order', async ({ page }) => {
+  await page.addInitScript(() => {
+    localStorage.setItem('academical.bottomSidebarHeight.v1', '340');
+  });
   await page.goto('/');
 
   const rows = page.locator('.calendar-toggle-row');
@@ -363,14 +398,47 @@ test('time analysis panel shows current view events filtered by calendar selecti
   await expect(page.locator('.weekly-hours-svg')).toHaveAttribute('data-week-count', '1');
   await expect(page.locator('.weekly-hours-point[data-week="2026-W27"]')).toHaveAttribute('data-hours', '2');
   await expect(page.locator('.weekly-hours-point[data-week="2026-W27"]')).toHaveAttribute('fill', '#188038');
-  await expect(page.locator('#sidebarTimeAnalysisList')).toContainText('CS seminar prep');
-  await expect(page.locator('#sidebarTimeAnalysisList')).toContainText('Reading group');
+  await expect(page.locator('#sidebarTimeAnalysisList')).toContainText('CS seminar prep · Jul 1, 9 AM, 1 hour');
+  await expect(page.locator('#sidebarTimeAnalysisList')).toContainText('Reading group · Jul 2, 2 PM, 1 hour');
 
   await page.keyboard.press('q');
   await expect(page.locator('#sidebarTimeAnalysisSummary')).toHaveText('1 occurrence · 1h');
   await expect(page.locator('.weekly-hours-point[data-week="2026-W27"]')).toHaveAttribute('data-hours', '1');
-  await expect(page.locator('#sidebarTimeAnalysisList')).toContainText('CS seminar prep');
+  await expect(page.locator('#sidebarTimeAnalysisList')).toContainText('CS seminar prep · Jul 1, 9 AM, 1 hour');
   await expect(page.locator('#sidebarTimeAnalysisList')).not.toContainText('Reading group');
+});
+
+test('time analysis ignores all-day events', async ({ page }) => {
+  await page.addInitScript(() => {
+    localStorage.setItem('academical.events.v1', JSON.stringify([
+      {
+        id: 'timed-analysis',
+        title: 'Timed analysis block',
+        date: '2026-07-01',
+        time: '09:00',
+        calendar: 'research',
+        durationMinutes: 180,
+        notes: '',
+      },
+      {
+        id: 'all-day-analysis',
+        title: 'All-day conference marker',
+        date: '2026-07-01',
+        time: '',
+        calendar: 'research',
+        durationMinutes: 1440,
+        notes: '',
+      },
+    ]));
+  });
+
+  await page.goto('/');
+  await page.keyboard.press('2');
+  await page.locator('.sidebar-tab[data-panel="analysis"]').click();
+
+  await expect(page.locator('#sidebarTimeAnalysisSummary')).toHaveText('1 occurrence · 3h');
+  await expect(page.locator('#sidebarTimeAnalysisList')).toContainText('Timed analysis block · Jul 1, 9 AM, 3 hours');
+  await expect(page.locator('#sidebarTimeAnalysisList')).not.toContainText('All-day conference marker');
 });
 
 test('time analysis uses imported ICS event durations', async ({ page }) => {
@@ -400,7 +468,7 @@ END:VCALENDAR`;
 
   await expect(page.locator('#sidebarTimeAnalysisSummary')).toHaveText('3 occurrences · 4.5h');
   await expect(page.locator('.weekly-hours-point[data-week="2026-W27"]')).toHaveAttribute('data-hours', '4.5');
-  await expect(page.locator('.time-analysis-item').filter({ hasText: 'Long seminar' })).toContainText('2.5h');
+  await expect(page.locator('.time-analysis-item').filter({ hasText: 'Long seminar' })).toContainText('Long seminar · Jul 3, 9 AM, 2.5 hours');
 });
 
 test('time analysis colors weekly hours dots by workload range', async ({ page }) => {
@@ -452,6 +520,9 @@ END:VCALENDAR`;
 });
 
 test('time analysis renders weekly cumulative activity chart', async ({ page }) => {
+  await page.addInitScript(() => {
+    localStorage.setItem('academical.sidebarLocation.v1', 'bottom');
+  });
   await page.goto('/');
   await page.locator('#addCalendarButton').click();
 
@@ -487,6 +558,13 @@ END:VCALENDAR`;
   await page.locator('.sidebar-tab[data-panel="analysis"]').click();
 
   await expect(page.locator('#weeklyActivityChart')).toBeVisible();
+  await expect(page.locator('.time-analysis-chart-panel')).toHaveCount(2);
+  const chartPanels = await page.locator('.time-analysis-chart-panel').evaluateAll((panels) => panels.map((panel) => {
+    const rect = panel.getBoundingClientRect();
+    return { x: rect.x, y: rect.y, width: rect.width };
+  }));
+  expect(Math.abs(chartPanels[0].y - chartPanels[1].y)).toBeLessThan(8);
+  expect(chartPanels[1].x).toBeGreaterThan(chartPanels[0].x + chartPanels[0].width - 8);
   await expect(page.locator('.weekly-activity-svg')).toHaveAttribute('data-week-count', '3');
   await expect(page.locator('.weekly-activity-legend-item[data-category="read"]')).toHaveText('Read');
   await expect(page.locator('.weekly-activity-legend-item[data-category="code"]')).toHaveText('Code');
@@ -506,6 +584,13 @@ test('sidebar panels can switch by click and Control-number shortcuts', async ({
   await expect(page.locator('.sidebar-tab[data-panel="calendar"]')).toHaveClass(/is-active/);
   await expect(page.locator('.sidebar-tab[data-panel="upcoming"]')).toHaveCount(0);
   await expect(page.locator('.sidebar-panel[data-panel="upcoming"]')).toHaveCount(0);
+
+  await page.keyboard.press('Control+1');
+  await expect(page.locator('body')).toHaveClass(/sidebar-collapsed/);
+  await page.keyboard.press('Control+1');
+  await expect(page.locator('body')).not.toHaveClass(/sidebar-collapsed/);
+  await expect(page.locator('.sidebar-panel[data-panel="calendar"]')).toBeVisible();
+
   await page.locator('.sidebar-tab[data-panel="papers"]').click();
   await expect(page.locator('.sidebar-panel[data-panel="papers"]')).toBeVisible();
   await page.locator('.sidebar-tab[data-panel="analysis"]').click();
@@ -520,22 +605,84 @@ test('sidebar panels can switch by click and Control-number shortcuts', async ({
   await expect(page.locator('.sidebar-panel[data-panel="analysis"]')).toBeVisible();
 });
 
-test('settings can change and persist sidebar location', async ({ page }) => {
+test('settings show bottom-only sidebar panel guidance', async ({ page }) => {
   await page.goto('/');
+  await expect(page.locator('body')).toHaveClass(/sidebar-location-bottom/);
   await page.locator('#settingsButton').click();
   await expect(page.locator('#settingsDialogTitle')).toHaveText('Settings');
-  await page.locator('input[name="sidebarLocation"][value="right"]').check();
-  await page.locator('#settingsForm').getByRole('button', { name: 'Save' }).click();
-  await expect(page.locator('body')).toHaveClass(/sidebar-location-right/);
-
-  await page.reload();
-  await expect(page.locator('body')).toHaveClass(/sidebar-location-right/);
-
-  await page.locator('#settingsButton').click();
-  await expect(page.locator('input[name="sidebarLocation"][value="right"]')).toBeChecked();
-  await page.locator('input[name="sidebarLocation"][value="bottom"]').check();
+  await expect(page.locator('input[name="sidebarLocation"][value="bottom"]')).toBeChecked();
+  await expect(page.locator('input[name="sidebarLocation"][value="left"]')).toHaveCount(0);
+  await expect(page.locator('input[name="sidebarLocation"][value="right"]')).toHaveCount(0);
+  await expect(page.locator('#settingsForm')).toContainText('Drag the splitter above the panel to resize it.');
   await page.locator('#settingsForm').getByRole('button', { name: 'Save' }).click();
   await expect(page.locator('body')).toHaveClass(/sidebar-location-bottom/);
+});
+
+test('bottom sidebar stays below calendar on narrow viewport', async ({ page }) => {
+  await page.setViewportSize({ width: 604, height: 900 });
+  await page.addInitScript(() => {
+    localStorage.setItem('academical.sidebarLocation.v1', 'bottom');
+  });
+
+  await page.goto('/');
+  await expect(page.locator('body')).toHaveClass(/sidebar-location-bottom/);
+
+  const calendarBox = await page.locator('.calendar-panel').boundingBox();
+  const sidebarBox = await page.locator('#sidebar').boundingBox();
+  expect(calendarBox).not.toBeNull();
+  expect(sidebarBox).not.toBeNull();
+  expect(sidebarBox.y).toBeGreaterThanOrEqual(calendarBox.y + calendarBox.height - 1);
+});
+
+test('month and four-week views fill viewport with draggable bottom panel', async ({ page }) => {
+  await page.setViewportSize({ width: 1200, height: 900 });
+  await page.addInitScript(() => {
+    localStorage.setItem('academical.bottomSidebarHeight.v1', '220');
+  });
+
+  await page.goto('/');
+  await expect(page.locator('body')).toHaveClass(/sidebar-location-bottom/);
+
+  const initial = await page.evaluate(() => {
+    const workspace = document.querySelector('.workspace').getBoundingClientRect();
+    const calendar = document.querySelector('.calendar-panel').getBoundingClientRect();
+    const resizer = document.querySelector('#sidebarResizer').getBoundingClientRect();
+    const sidebar = document.querySelector('#sidebar').getBoundingClientRect();
+    const monthGridStyle = getComputedStyle(document.querySelector('#monthGrid'));
+    return {
+      workspaceHeight: workspace.height,
+      totalHeight: calendar.height + resizer.height + sidebar.height,
+      bodyScrollHeight: document.documentElement.scrollHeight,
+      viewportHeight: window.innerHeight,
+      monthGridOverflowY: monthGridStyle.overflowY,
+      sidebarHeight: sidebar.height,
+    };
+  });
+  expect(Math.abs(initial.workspaceHeight - initial.totalHeight)).toBeLessThan(2);
+  expect(initial.bodyScrollHeight).toBeLessThanOrEqual(initial.viewportHeight + 1);
+  expect(initial.monthGridOverflowY).toBe('hidden');
+
+  const resizerBox = await page.locator('#sidebarResizer').boundingBox();
+  expect(resizerBox).not.toBeNull();
+  await page.mouse.move(resizerBox.x + resizerBox.width / 2, resizerBox.y + resizerBox.height / 2);
+  await page.mouse.down();
+  await page.mouse.move(resizerBox.x + resizerBox.width / 2, resizerBox.y - 80, { steps: 5 });
+  await page.mouse.up();
+
+  const resizedHeight = await page.locator('#sidebar').evaluate((sidebar) => sidebar.getBoundingClientRect().height);
+  expect(resizedHeight).toBeGreaterThan(initial.sidebarHeight + 20);
+
+  await page.keyboard.press('4');
+  const fourWeek = await page.evaluate(() => {
+    const monthGridStyle = getComputedStyle(document.querySelector('#monthGrid'));
+    return {
+      bodyScrollHeight: document.documentElement.scrollHeight,
+      viewportHeight: window.innerHeight,
+      monthGridOverflowY: monthGridStyle.overflowY,
+    };
+  });
+  expect(fourWeek.bodyScrollHeight).toBeLessThanOrEqual(fourWeek.viewportHeight + 1);
+  expect(fourWeek.monthGridOverflowY).toBe('hidden');
 });
 
 test('week view renders hourly grid and t centers current-time indicator', async ({ page }) => {
@@ -550,6 +697,9 @@ test('week view renders hourly grid and t centers current-time indicator', async
 test('clicking week view slots creates events at 15 minute granularity', async ({ page }) => {
   await page.goto('/');
   await page.keyboard.press('2');
+  await page.locator('.week-timeline-scroll').evaluate((element) => {
+    element.scrollTop = 360;
+  });
 
   const slot = page.locator('.week-slot[data-date="2026-07-02"][data-hour="9"]');
   const slotBox = await slot.boundingBox();
@@ -568,6 +718,26 @@ test('clicking week view slots creates events at 15 minute granularity', async (
   await expect(page.locator('#eventTime')).toHaveValue('09:45');
   await expect(page.locator('#eventEndTime')).toHaveValue('10:45');
   await expect(page.locator('#eventDurationMinutes')).toHaveValue('60');
+});
+
+test('creating an event in week view preserves the vertical scroll position', async ({ page }) => {
+  await page.setViewportSize({ width: 1440, height: 950 });
+  await page.goto('/');
+  await page.keyboard.press('2');
+
+  const scroller = page.locator('.week-timeline-scroll');
+  await scroller.evaluate((element) => {
+    element.scrollTop = 720;
+  });
+  await expect.poll(() => scroller.evaluate((element) => element.scrollTop)).toBe(720);
+
+  await page.locator('.week-slot[data-date="2026-07-02"][data-hour="12"]').click({ position: { x: 12, y: 20 } });
+  await page.locator('#eventTitle').fill('Scroll-preserving focus block');
+  await page.locator('#eventForm').getByRole('button', { name: 'Save' }).click();
+
+  await expect(page.locator('#eventModal')).not.toHaveClass(/is-open/);
+  await expect(page.locator('.week-timed-event').filter({ hasText: 'Scroll-preserving focus block' })).toBeVisible();
+  await expect.poll(() => page.locator('.week-timeline-scroll').evaluate((element) => element.scrollTop)).toBe(720);
 });
 
 test('dragging hour boxes in week view creates an event with that range', async ({ page }) => {
@@ -601,6 +771,9 @@ test('dragging hour boxes in week view creates an event with that range', async 
 test('dragging a timed week event moves its date and 15 minute position', async ({ page }) => {
   await page.goto('/');
   await page.keyboard.press('2');
+  await page.locator('.week-timeline-scroll').evaluate((element) => {
+    element.scrollTop = 360;
+  });
 
   const eventButton = page.locator('.week-timed-event').filter({ hasText: 'CS seminar prep' });
   const eventBox = await eventButton.boundingBox();
@@ -642,6 +815,56 @@ test('event dialog end time controls duration and digit shortcuts set hour durat
   await expect(page.locator('#eventModal')).not.toHaveClass(/is-open/);
   const updated = await page.evaluate(() => JSON.parse(localStorage.getItem('academical.events.v1')).find((event) => event.title === 'Reading group'));
   expect(updated.durationMinutes).toBe(210);
+});
+
+test('month event chips distinguish Google-style all-day bars and timed rows', async ({ page }) => {
+  await page.goto('/');
+
+  await openCreateEventDialog(page, '2026-07-07');
+  await page.locator('#eventTitle').fill('All-day paper deadline');
+  await page.getByRole('button', { name: 'Save' }).click();
+
+  await openCreateEventDialog(page, '2026-07-07');
+  await page.locator('#eventTitle').fill('Timed writing block');
+  await page.locator('#eventTime').fill('09:00');
+  await page.getByRole('button', { name: 'Save' }).click();
+
+  const day = page.locator('.day-cell[data-date="2026-07-07"]');
+  const allDay = day.locator('.event-chip').filter({ hasText: 'All-day paper deadline' });
+  const timed = day.locator('.event-chip').filter({ hasText: 'Timed writing block' });
+  await expect(allDay).toHaveClass(/event-chip--all-day/);
+  await expect(timed).toHaveClass(/event-chip--timed/);
+  await expect(allDay.locator('.event-dot')).toHaveCount(0);
+  await expect(timed.locator('.event-dot')).toHaveCount(1);
+  await expect(timed.locator('.event-time')).toHaveText('9 AM');
+  await expect(allDay).not.toContainText('All day');
+
+  const order = await day.locator('.event-chip').evaluateAll((chips) => chips.map((chip) => chip.textContent));
+  expect(order.findIndex((text) => text.includes('All-day paper deadline'))).toBeLessThan(order.findIndex((text) => text.includes('Timed writing block')));
+});
+
+test('month and four-week views fit expanded event counts per day', async ({ page }) => {
+  await page.addInitScript(() => {
+    const events = Array.from({ length: 8 }, (_, index) => ({
+      id: `dense-${index + 1}`,
+      title: `Dense event ${index + 1}`,
+      date: '2026-07-07',
+      time: `${String(8 + index).padStart(2, '0')}:00`,
+      calendar: 'research',
+      notes: '',
+    }));
+    localStorage.setItem('academical.events.v1', JSON.stringify(events));
+  });
+
+  await page.goto('/');
+  const monthDay = page.locator('.day-cell[data-date="2026-07-07"]');
+  await expect(monthDay.locator('.event-chip')).toHaveCount(6);
+  await expect(monthDay.locator('.more-events')).toHaveText('+2 more');
+
+  await page.keyboard.press('4');
+  const fourWeekDay = page.locator('.day-cell[data-date="2026-07-07"]');
+  await expect(fourWeekDay.locator('.event-chip')).toHaveCount(8);
+  await expect(fourWeekDay.locator('.more-events')).toHaveCount(0);
 });
 
 test('p opens Add paper modal and Enter submits', async ({ page }) => {

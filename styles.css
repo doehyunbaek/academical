@@ -19,6 +19,7 @@
   --radius-lg: 24px;
   --topbar-height: 64px;
   --sidebar-width: 284px;
+  --bottom-sidebar-height: 180px;
   font-family: Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
 }
 
@@ -121,8 +122,9 @@ textarea:focus-visible {
 }
 
 .month-title {
+  flex: 0 0 auto;
   margin: 0 4px;
-  min-width: 180px;
+  min-width: max-content;
   font-size: 22px;
   font-weight: 400;
   letter-spacing: -0.01em;
@@ -330,16 +332,21 @@ textarea:focus-visible {
   min-height: 0;
   flex: 1;
   display: grid;
-  grid-template-columns: var(--sidebar-width) minmax(0, 1fr);
-  grid-template-areas: "sidebar calendar";
-  transition: grid-template-columns 220ms ease, grid-template-rows 220ms ease;
+  grid-template-columns: minmax(0, 1fr);
+  grid-template-rows: minmax(0, 1fr) 8px var(--bottom-sidebar-height);
+  grid-template-areas:
+    "calendar"
+    "resizer"
+    "sidebar";
+  transition: none;
 }
 
 .sidebar {
   grid-area: sidebar;
   min-width: 0;
+  min-height: 0;
   padding: 0;
-  border-right: 1px solid var(--border-soft);
+  border-top: 0;
   background: var(--surface);
   overflow-y: auto;
   transition: opacity 180ms ease, padding 220ms ease, border-color 220ms ease;
@@ -410,44 +417,45 @@ textarea:focus-visible {
   grid-area: calendar;
 }
 
-.sidebar-location-right .workspace {
-  grid-template-columns: minmax(0, 1fr) var(--sidebar-width);
-  grid-template-areas: "calendar sidebar";
-}
-
-.sidebar-location-right .sidebar {
-  border-right: 0;
-  border-left: 1px solid var(--border-soft);
-}
-
-.sidebar-location-bottom .workspace {
-  grid-template-columns: minmax(0, 1fr);
-  grid-template-rows: minmax(0, 1fr) minmax(180px, 34dvh);
-  grid-template-areas:
-    "calendar"
-    "sidebar";
-}
-
-.sidebar-location-bottom.view-heatmap .workspace {
-  grid-template-rows: minmax(140px, 1fr) minmax(320px, 56dvh);
-}
-
-.sidebar-location-bottom .sidebar {
-  border-right: 0;
+.sidebar-resizer {
+  display: block;
+  position: relative;
+  grid-area: resizer;
+  cursor: row-resize;
+  background: var(--surface);
   border-top: 1px solid var(--border-soft);
+  border-bottom: 1px solid var(--border-soft);
+  touch-action: none;
+}
+
+.sidebar-resizer::before {
+  content: "";
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  width: 42px;
+  height: 3px;
+  border-radius: 999px;
+  background: var(--border);
+  transform: translate(-50%, -50%);
+}
+
+.sidebar-resizing,
+.sidebar-resizing * {
+  cursor: row-resize !important;
+  user-select: none;
+}
+
+.sidebar-resizing .workspace {
+  transition: none;
 }
 
 .sidebar-collapsed .workspace {
-  grid-template-columns: 0 minmax(0, 1fr);
+  grid-template-rows: minmax(0, 1fr) 0 0;
 }
 
-.sidebar-location-right.sidebar-collapsed .workspace {
-  grid-template-columns: minmax(0, 1fr) 0;
-}
-
-.sidebar-location-bottom.sidebar-collapsed .workspace {
-  grid-template-columns: minmax(0, 1fr);
-  grid-template-rows: minmax(0, 1fr) 0;
+.sidebar-collapsed .sidebar-resizer {
+  display: none;
 }
 
 .sidebar-collapsed .sidebar {
@@ -894,7 +902,7 @@ textarea:focus-visible {
   flex: 1;
   display: grid;
   grid-template-columns: repeat(7, minmax(110px, 1fr));
-  grid-template-rows: repeat(6, minmax(92px, 1fr));
+  grid-template-rows: repeat(var(--month-grid-row-count, 6), minmax(164px, 1fr));
   overflow: auto;
 }
 
@@ -1100,11 +1108,26 @@ textarea:focus-visible {
 }
 
 .month-grid--four-week {
-  grid-template-rows: repeat(4, minmax(132px, 1fr));
+  grid-template-rows: repeat(4, minmax(212px, 1fr));
 }
 
 .month-grid--four-week .day-cell {
-  min-height: 132px;
+  min-height: 212px;
+}
+
+.view-month .month-grid,
+.view-four-week .month-grid {
+  grid-template-rows: repeat(var(--month-grid-row-count, 6), minmax(0, 1fr));
+  overflow: hidden;
+}
+
+.view-four-week .month-grid--four-week {
+  grid-template-rows: repeat(4, minmax(0, 1fr));
+}
+
+.view-month .day-cell,
+.view-four-week .day-cell {
+  min-height: 0;
 }
 
 .month-grid--heatmap {
@@ -1447,15 +1470,14 @@ textarea:focus-visible {
 .week-all-day-chip {
   min-width: 0;
   padding: 2px 6px;
-  border-radius: 6px;
+  border-radius: 5px;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
-  background: #e8f0fe;
-  background: color-mix(in srgb, var(--event-color) 14%, white);
-  color: var(--text);
+  background: var(--event-color);
+  color: #fff;
   font-size: 11px;
-  font-weight: 700;
+  font-weight: 600;
   text-align: left;
 }
 
@@ -1670,7 +1692,7 @@ textarea:focus-visible {
 
 .day-cell {
   min-width: 0;
-  min-height: 92px;
+  min-height: 164px;
   display: flex;
   flex-direction: column;
   padding: 6px 8px 7px;
@@ -1750,7 +1772,7 @@ textarea:focus-visible {
 .event-list {
   min-height: 0;
   display: grid;
-  gap: 3px;
+  gap: 1px;
   margin-top: 2px;
   overflow: hidden;
 }
@@ -1766,40 +1788,50 @@ textarea:focus-visible {
 .event-chip {
   width: 100%;
   min-width: 0;
-  min-height: 24px;
+  min-height: 20px;
   display: flex;
   align-items: center;
-  gap: 6px;
-  padding: 0 8px 0 7px;
-  border-radius: 6px;
-  background: #e8f0fe;
-  background: color-mix(in srgb, var(--event-color) 13%, white);
-  color: #174ea6;
+  gap: 4px;
+  border: 0;
+  border-radius: 4px;
+  color: var(--text);
   text-align: left;
   overflow: hidden;
   position: relative;
 }
 
-.event-chip::before {
-  content: "";
-  width: 7px;
-  height: 7px;
-  flex: 0 0 7px;
+.event-chip--all-day {
+  padding: 0 6px;
+  background: var(--event-color);
+  color: #fff;
+}
+
+.event-chip--all-day:hover {
+  background: color-mix(in srgb, var(--event-color) 88%, #000);
+}
+
+.event-chip--timed {
+  padding: 0 2px;
+  background: transparent;
+}
+
+.event-chip--timed:hover {
+  background: var(--surface-2);
+}
+
+.event-dot {
+  width: 8px;
+  height: 8px;
+  flex: 0 0 8px;
   border-radius: 50%;
   background: var(--event-color);
 }
 
-.event-chip:hover {
-  background: #d2e3fc;
-  background: color-mix(in srgb, var(--event-color) 20%, white);
-}
-
 .event-time {
   flex: 0 0 auto;
-  color: var(--event-color);
-  color: color-mix(in srgb, var(--event-color) 70%, #202124);
-  font-size: 11px;
-  font-weight: 700;
+  color: var(--text);
+  font-size: 12px;
+  font-weight: 500;
 }
 
 .event-title {
@@ -1809,7 +1841,11 @@ textarea:focus-visible {
   white-space: nowrap;
   color: var(--text);
   font-size: 12px;
-  font-weight: 600;
+  font-weight: 500;
+}
+
+.event-chip--all-day .event-title {
+  color: #fff;
 }
 
 .more-events {
@@ -2029,8 +2065,8 @@ textarea:focus-visible {
 }
 
 .weekly-activity-chart {
-  width: min(100%, 460px);
-  max-width: 460px;
+  width: min(100%, 920px);
+  max-width: 920px;
   justify-self: start;
   display: grid;
   gap: 8px;
@@ -2053,11 +2089,20 @@ textarea:focus-visible {
 
 .weekly-activity-chart-body {
   display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 320px), 1fr));
+  align-items: start;
+  gap: 12px;
+}
+
+.time-analysis-chart-panel {
+  min-width: 0;
+  display: grid;
+  align-content: start;
   gap: 8px;
 }
 
 .weekly-activity-chart-subheading {
-  margin: 4px 0 0;
+  margin: 0;
   color: var(--text-muted);
   font-size: 12px;
   font-weight: 700;
@@ -2412,18 +2457,18 @@ textarea:focus-visible {
   }
 
   .month-title {
-    min-width: 160px;
+    min-width: max-content;
   }
 }
 
 @media (max-width: 860px) {
   body {
-    overflow: auto;
+    overflow: hidden;
   }
 
   .app-shell {
-    min-height: 100dvh;
-    height: auto;
+    min-height: 0;
+    height: 100dvh;
   }
 
   .topbar {
@@ -2439,10 +2484,9 @@ textarea:focus-visible {
   }
 
   .month-title {
-    order: 2;
-    width: 100%;
-    min-width: 0;
-    padding-left: 52px;
+    flex: 0 0 auto;
+    min-width: max-content;
+    padding-left: 0;
   }
 
   .topbar-spacer {
@@ -2451,7 +2495,17 @@ textarea:focus-visible {
 
   .workspace,
   .sidebar-collapsed .workspace {
-    display: block;
+    display: grid;
+    grid-template-columns: minmax(0, 1fr);
+    grid-template-rows: minmax(0, 1fr) 8px var(--bottom-sidebar-height);
+    grid-template-areas:
+      "calendar"
+      "resizer"
+      "sidebar";
+  }
+
+  .sidebar-collapsed .workspace {
+    grid-template-rows: minmax(0, 1fr) 0 0;
   }
 
   .sidebar,
@@ -2459,17 +2513,20 @@ textarea:focus-visible {
     display: block;
     padding: 14px 16px;
     border-right: 0;
-    border-bottom: 1px solid var(--border-soft);
+    border-left: 0;
+    border-top: 0;
+    border-bottom: 0;
     opacity: 1;
     pointer-events: auto;
   }
 
-  .sidebar-collapsed .sidebar {
+  .sidebar-collapsed .sidebar,
+  .sidebar-collapsed .sidebar-resizer {
     display: none;
   }
 
   .calendar-panel {
-    min-height: 680px;
+    min-height: 0;
   }
 
   .month-grid {
@@ -2489,7 +2546,7 @@ textarea:focus-visible {
   }
 
   .month-title {
-    padding-left: 4px;
+    padding-left: 0;
     font-size: 20px;
   }
 

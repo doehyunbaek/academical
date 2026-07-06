@@ -10,6 +10,7 @@ const STORAGE_DELETED_CALENDARS = "academical.deletedCalendars.v1";
 const STORAGE_PAPER_TASKS = "academical.paperTasks.v1";
 const STORAGE_SYNC_UPDATED_AT = "academical.sync.updatedAt.v1";
 const STORAGE_SIDEBAR_LOCATION = "academical.sidebarLocation.v1";
+const STORAGE_BOTTOM_SIDEBAR_HEIGHT = "academical.bottomSidebarHeight.v1";
 const STORAGE_DEADLINE_FILTER_TAGS = "academical.deadlineFilterTags.v1";
 
 const VIEW_LABELS = {
@@ -322,6 +323,7 @@ const els = {
   closePaperModal: document.querySelector("#closePaperModal"),
   cancelPaperModal: document.querySelector("#cancelPaperModal"),
   sidebarTabs: document.querySelector("#sidebarTabs"),
+  sidebarResizer: document.querySelector("#sidebarResizer"),
   sidebarTimeAnalysisContent: document.querySelector("#sidebarTimeAnalysisContent"),
   sidebarTimeAnalysisEmpty: document.querySelector("#sidebarTimeAnalysisEmpty"),
   sidebarTimeAnalysisList: document.querySelector("#sidebarTimeAnalysisList"),
@@ -378,10 +380,12 @@ let archivedCalendarIds = loadArchivedCalendarIds();
 let deletedCalendarIds = loadDeletedCalendarIds();
 let archivedCalendarsExpanded = false;
 let sidebarLocation = loadSidebarLocation();
+let bottomSidebarHeight = loadBottomSidebarHeight();
 let activeSidebarPanel = "calendar";
 let paperTasks = loadPaperTasks();
 let searchQuery = "";
 let heatmapDetailsAnchor = null;
+let heatmapRangeMode = "events";
 let deadlineFilterTags = loadDeadlineFilterTags();
 let activeWeekRangeDrag = null;
 let activeWeekEventDrag = null;
@@ -390,12 +394,14 @@ let suppressNextWeekEventClick = false;
 let firebaseSync = createFirebaseSyncState();
 let activeEventPaperSnapshots = [];
 let draggedCalendarId = "";
+let activeSidebarResize = null;
 
 init();
 
 function init() {
   els.brandDay.textContent = TODAY.getDate();
   applySidebarLocation();
+  applyBottomSidebarHeight();
   setSidebarPanel(activeSidebarPanel);
   renderColorPalette(els.calendarColorPalette, els.calendarColorInput, "blue");
   renderColorPalette(els.editCalendarColorPalette, els.editCalendarColorInput, "blue");
@@ -432,6 +438,8 @@ function bindEvents() {
   els.sidebarToggle.addEventListener("click", () => {
     document.body.classList.toggle("sidebar-collapsed");
   });
+  els.sidebarResizer.addEventListener("pointerdown", startSidebarResize);
+  els.sidebarResizer.addEventListener("keydown", handleSidebarResizeKeydown);
   els.sidebarTabs.addEventListener("click", (event) => {
     const button = event.target.closest(".sidebar-tab");
     if (!button) return;
@@ -611,7 +619,11 @@ function bindEvents() {
       setView("four-week");
     } else if (key === "5") {
       event.preventDefault();
-      setView("heatmap");
+      if (currentView === "heatmap") {
+        toggleHeatmapRangeMode();
+      } else {
+        setView("heatmap");
+      }
     }
   });
 
@@ -624,6 +636,7 @@ function render() {
   applyViewClass();
   renderHeader();
   renderMonthGrid();
+  updateSidebarResizerValue();
   if (activeSidebarPanel === "analysis") renderSidebarTimeAnalysis();
 }
 
@@ -662,8 +675,9 @@ function closeAccountPopover() {
 
 function openSettingsModal() {
   const selected = els.settingsForm.elements.sidebarLocation;
-  [...selected].forEach((input) => {
-    input.checked = input.value === sidebarLocation;
+  const inputs = selected instanceof RadioNodeList ? [...selected] : [selected].filter(Boolean);
+  inputs.forEach((input) => {
+    input.checked = input.value === "bottom";
   });
   els.settingsModal.classList.add("is-open");
   els.settingsModal.setAttribute("aria-hidden", "false");
@@ -676,19 +690,101 @@ function closeSettingsModal() {
 
 function saveSettingsFromDialog(event) {
   event.preventDefault();
-  const selected = new FormData(els.settingsForm).get("sidebarLocation");
-  if (isValidSidebarLocation(selected)) {
-    sidebarLocation = selected;
-    saveSidebarLocation();
-    applySidebarLocation();
-  }
+  sidebarLocation = "bottom";
+  saveSidebarLocation();
+  applySidebarLocation();
   closeSettingsModal();
   showToast("Settings saved");
 }
 
 function applySidebarLocation() {
-  document.body.classList.remove("sidebar-location-left", "sidebar-location-bottom", "sidebar-location-right");
-  document.body.classList.add(`sidebar-location-${sidebarLocation}`);
+  sidebarLocation = "bottom";
+  document.body.classList.remove("sidebar-location-left", "sidebar-location-right");
+  document.body.classList.add("sidebar-location-bottom");
+}
+
+function applyBottomSidebarHeight() {
+  if (bottomSidebarHeight) {
+    document.documentElement.style.setProperty("--bottom-sidebar-height", `${bottomSidebarHeight}px`);
+  }
+  updateSidebarResizerValue();
+}
+
+function updateSidebarResizerValue() {
+  if (!els.sidebarResizer) return;
+  const currentHeight = bottomSidebarHeight || Math.round(document.querySelector("#sidebar")?.getBoundingClientRect().height || 0);
+  els.sidebarResizer.setAttribute("aria-valuemin", String(getBottomSidebarHeightBounds().min));
+  els.sidebarResizer.setAttribute("aria-valuemax", String(getBottomSidebarHeightBounds().max));
+  els.sidebarResizer.setAttribute("aria-valuenow", String(currentHeight));
+}
+
+function setBottomSidebarHeight(height, { persist = true, updateAria = true, bounds = getBottomSidebarHeightBounds() } = {}) {
+  const { min, max } = bounds;
+  bottomSidebarHeight = Math.round(Math.min(max, Math.max(min, height)));
+  document.documentElement.style.setProperty("--bottom-sidebar-height", `${bottomSidebarHeight}px`);
+  if (updateAria) updateSidebarResizerValue();
+  if (persist) saveBottomSidebarHeight();
+}
+
+function getBottomSidebarHeightBounds() {
+  const workspace = document.querySelector(".workspace");
+  const workspaceHeight = workspace?.getBoundingClientRect().height || window.innerHeight;
+  const min = 120;
+  const minCalendarHeight = currentView === "four-week" ? 280 : 240;
+  const max = Math.max(min, Math.round(workspaceHeight - minCalendarHeight - 8));
+  return { min, max };
+}
+
+function startSidebarResize(event) {
+  if (event.button !== 0) return;
+  event.preventDefault();
+  document.body.classList.remove("sidebar-collapsed");
+  const sidebarRect = document.querySelector("#sidebar")?.getBoundingClientRect();
+  activeSidebarResize = {
+    pointerId: event.pointerId,
+    startY: event.clientY,
+    startHeight: sidebarRect?.height || bottomSidebarHeight || 220,
+    bounds: getBottomSidebarHeightBounds(),
+  };
+  document.body.classList.add("sidebar-resizing");
+  els.sidebarResizer.setPointerCapture(event.pointerId);
+  window.addEventListener("pointermove", handleSidebarResizeMove);
+  window.addEventListener("pointerup", stopSidebarResize);
+  window.addEventListener("pointercancel", stopSidebarResize);
+}
+
+function handleSidebarResizeMove(event) {
+  if (!activeSidebarResize) return;
+  const nextHeight = activeSidebarResize.startHeight - (event.clientY - activeSidebarResize.startY);
+  setBottomSidebarHeight(nextHeight, { persist: false, updateAria: false, bounds: activeSidebarResize.bounds });
+}
+
+function stopSidebarResize() {
+  if (!activeSidebarResize) return;
+  updateSidebarResizerValue();
+  saveBottomSidebarHeight();
+  if (els.sidebarResizer.hasPointerCapture?.(activeSidebarResize.pointerId)) {
+    els.sidebarResizer.releasePointerCapture(activeSidebarResize.pointerId);
+  }
+  activeSidebarResize = null;
+  document.body.classList.remove("sidebar-resizing");
+  window.removeEventListener("pointermove", handleSidebarResizeMove);
+  window.removeEventListener("pointerup", stopSidebarResize);
+  window.removeEventListener("pointercancel", stopSidebarResize);
+}
+
+function handleSidebarResizeKeydown(event) {
+  if (!["ArrowUp", "ArrowDown", "Home", "End"].includes(event.key)) return;
+  event.preventDefault();
+  const { min, max } = getBottomSidebarHeightBounds();
+  const currentHeight = document.querySelector("#sidebar")?.getBoundingClientRect().height || bottomSidebarHeight || min;
+  if (event.key === "Home") {
+    setBottomSidebarHeight(min);
+  } else if (event.key === "End") {
+    setBottomSidebarHeight(max);
+  } else {
+    setBottomSidebarHeight(currentHeight + (event.key === "ArrowUp" ? 24 : -24));
+  }
 }
 
 function setSidebarPanel(panel) {
@@ -707,7 +803,17 @@ function setSidebarPanel(panel) {
 
 function selectSidebarPanelByPosition(position) {
   const tab = els.sidebarTabs.querySelectorAll(".sidebar-tab")[position];
-  if (tab?.dataset.panel) setSidebarPanel(tab.dataset.panel);
+  const panel = tab?.dataset.panel;
+  if (!panel) return;
+
+  const isCollapsed = document.body.classList.contains("sidebar-collapsed");
+  if (panel === activeSidebarPanel && !isCollapsed) {
+    document.body.classList.add("sidebar-collapsed");
+    return;
+  }
+
+  document.body.classList.remove("sidebar-collapsed");
+  setSidebarPanel(panel);
 }
 
 function renderSidebarTimeAnalysisIfActive() {
@@ -734,7 +840,7 @@ function renderSidebarTimeAnalysis() {
     ...analysis.occurrences.map((occurrence) => {
       const item = document.createElement("div");
       item.className = "time-analysis-item";
-      item.innerHTML = `<span>${escapeHtml(occurrence.label)}</span><strong>${formatHours(occurrence.hours)}</strong>`;
+      item.innerHTML = `<span>${escapeHtml(occurrence.label)}</span>`;
       return item;
     })
   );
@@ -2063,6 +2169,7 @@ function getCurrentViewTimeAnalysis() {
   makeDateRange(startOfDay(rangeStart), days).forEach((date) => {
     const dateKey = toDateKey(date);
     getFilteredEventsForDate(dateKey).forEach((occurrence) => {
+      if (!occurrence.time) return;
       const { start: occurrenceStart, end: occurrenceEnd } = getOccurrenceDateTimeRange(occurrence);
       const clippedStart = occurrenceStart < rangeStart ? rangeStart : occurrenceStart;
       const clippedEnd = occurrenceEnd > rangeEnd ? rangeEnd : occurrenceEnd;
@@ -2070,7 +2177,7 @@ function getCurrentViewTimeAnalysis() {
       if (!hours) return;
       occurrences.push({
         title: occurrence.title,
-        label: `${occurrence.title} · ${compactDateFormatter.format(occurrenceStart)}${occurrence.time ? `, ${formatTime(occurrence.time)}` : ""}`,
+        label: `${occurrence.title} · ${compactDateFormatter.format(occurrenceStart)}, ${formatTime(occurrence.time)}, ${formatHoursLong(hours)}`,
         start: clippedStart,
         end: clippedEnd,
         hours,
@@ -2179,13 +2286,22 @@ function renderWeeklyActivityChart(activityData, weeklyHoursData = []) {
     return;
   }
 
-  els.weeklyActivityChartBody.append(createWeeklyHoursChart(weeklyHoursData));
+  const hoursPanel = document.createElement("section");
+  hoursPanel.className = "time-analysis-chart-panel";
+  hoursPanel.setAttribute("aria-label", "Working hours per week chart");
+  hoursPanel.append(createWeeklyHoursChart(weeklyHoursData));
+  els.weeklyActivityChartBody.append(hoursPanel);
 
   if (activityData.length) {
+    const activityPanel = document.createElement("section");
+    activityPanel.className = "time-analysis-chart-panel";
+    activityPanel.setAttribute("aria-label", "Cumulative activity categories chart");
+
     const activityHeading = document.createElement("h4");
     activityHeading.className = "weekly-activity-chart-subheading";
     activityHeading.textContent = "Cumulative activity categories";
-    els.weeklyActivityChartBody.append(activityHeading, createWeeklyActivityChart(activityData), createWeeklyActivityLegend());
+    activityPanel.append(activityHeading, createWeeklyActivityChart(activityData), createWeeklyActivityLegend());
+    els.weeklyActivityChartBody.append(activityPanel);
   }
 }
 
@@ -2594,7 +2710,16 @@ function getHeatmapIntensityLevel(hours) {
 
 function formatHours(hours) {
   const rounded = Math.round(hours * 100) / 100;
-  return `${Number.isInteger(rounded) ? rounded : rounded.toFixed(2).replace(/0+$/, "").replace(/\.$/, "")}h`;
+  return `${formatHourValue(rounded)}h`;
+}
+
+function formatHoursLong(hours) {
+  const rounded = Math.round(hours * 100) / 100;
+  return `${formatHourValue(rounded)} hour${rounded === 1 ? "" : "s"}`;
+}
+
+function formatHourValue(hours) {
+  return Number.isInteger(hours) ? String(hours) : hours.toFixed(2).replace(/0+$/, "").replace(/\.$/, "");
 }
 
 function startOfDay(date) {
@@ -2630,8 +2755,10 @@ function populateCalendarSelect() {
 }
 
 function renderMonthGrid() {
+  const weekScrollPosition = currentView === "week" ? getWeekScrollPosition() : null;
   els.weekdayRow.hidden = ["deadlines", "week", "heatmap"].includes(currentView);
   els.monthGrid.className = `month-grid month-grid--${currentView}`;
+  els.monthGrid.style.removeProperty("--month-grid-row-count");
 
   if (currentView === "deadlines") {
     renderDeadlineView();
@@ -2639,7 +2766,7 @@ function renderMonthGrid() {
   }
 
   if (currentView === "week") {
-    renderWeekTimeline();
+    renderWeekTimeline(weekScrollPosition);
     return;
   }
 
@@ -2648,8 +2775,12 @@ function renderMonthGrid() {
     return;
   }
 
+  const dates = getMainCalendarDates();
+  if (currentView === "month") {
+    els.monthGrid.style.setProperty("--month-grid-row-count", Math.max(1, dates.length / 7));
+  }
   els.monthGrid.replaceChildren(
-    ...getMainCalendarDates().map((date) => createDayCell(date))
+    ...dates.map((date) => createDayCell(date))
   );
 }
 
@@ -2855,12 +2986,21 @@ function makeDeadlineId(conference, index) {
 }
 
 function getHeatmapDateRange() {
+  if (heatmapRangeMode === "year") {
+    return {
+      start: startOfYear(selectedDate),
+      end: endOfYear(selectedDate),
+      hasEvents: true,
+      mode: heatmapRangeMode,
+    };
+  }
+
   const visibleEventDates = events
     .filter((event) => isEventVisible(event))
     .flatMap((event) => [event.date, getEventRangeEndDateKey(event)]);
 
   if (!visibleEventDates.length) {
-    return { start: startOfDay(selectedDate), end: startOfDay(selectedDate), hasEvents: false };
+    return { start: startOfDay(selectedDate), end: startOfDay(selectedDate), hasEvents: false, mode: heatmapRangeMode };
   }
 
   let rangeStart = fromDateKey(visibleEventDates.reduce((min, date) => (date < min ? date : min)));
@@ -2878,8 +3018,8 @@ function getHeatmapDateRange() {
   });
 
   return firstEventDate
-    ? { start: firstEventDate, end: lastEventDate, hasEvents: true }
-    : { start: startOfDay(selectedDate), end: startOfDay(selectedDate), hasEvents: false };
+    ? { start: firstEventDate, end: lastEventDate, hasEvents: true, mode: heatmapRangeMode }
+    : { start: startOfDay(selectedDate), end: startOfDay(selectedDate), hasEvents: false, mode: heatmapRangeMode };
 }
 
 function getEventRangeEndDateKey(event) {
@@ -2900,7 +3040,7 @@ function getMonthStartsBetween(start, end) {
 }
 
 function renderHeatmapView() {
-  const { start: rangeStart, end: rangeEnd, hasEvents } = getHeatmapDateRange();
+  const { start: rangeStart, end: rangeEnd, hasEvents, mode } = getHeatmapDateRange();
   const dayCount = Math.max(1, Math.round((startOfDay(rangeEnd) - startOfDay(rangeStart)) / 86_400_000) + 1);
   const leadingBlankDays = (rangeStart.getDay() - WEEK_START_DAY + 7) % 7;
   const weekCount = Math.max(1, Math.ceil((leadingBlankDays + dayCount) / 7));
@@ -2912,7 +3052,8 @@ function renderHeatmapView() {
   const totalHours = [...hoursByDate.values()].reduce((total, hours) => total + hours, 0);
   const activeDays = [...hoursByDate.values()].filter(Boolean).length;
   const maxHours = Math.max(0, ...hoursByDate.values());
-  const selectedHeatmapDate = selectedDate >= rangeStart && selectedDate <= rangeEnd ? selectedDate : rangeStart;
+  const selectedDay = startOfDay(selectedDate);
+  const selectedHeatmapDate = selectedDay >= startOfDay(rangeStart) && selectedDay <= startOfDay(rangeEnd) ? selectedDay : rangeStart;
 
   const heatmap = document.createElement("section");
   heatmap.className = "heatmap-view";
@@ -2922,7 +3063,7 @@ function renderHeatmapView() {
   summary.className = "heatmap-summary";
   summary.innerHTML = `
     <strong>${formatHours(totalHours)}</strong>
-    <span>${activeDays} active day${activeDays === 1 ? "" : "s"} · ${formatDateRange(rangeStart, rangeEnd)}${maxHours ? ` · max ${formatHours(maxHours)}/day` : ""}</span>
+    <span>${mode === "year" ? "Yearly view" : "Event span"} · ${activeDays} active day${activeDays === 1 ? "" : "s"} · ${formatDateRange(rangeStart, rangeEnd)}${maxHours ? ` · max ${formatHours(maxHours)}/day` : ""}</span>
   `;
 
   const monthRow = document.createElement("div");
@@ -3183,7 +3324,21 @@ function createDayCell(date) {
   return cell;
 }
 
-function renderWeekTimeline() {
+function getWeekScrollPosition() {
+  const scroller = els.monthGrid.querySelector(".week-timeline-scroll");
+  return scroller
+    ? { top: scroller.scrollTop, left: scroller.scrollLeft }
+    : null;
+}
+
+function restoreWeekScrollPosition(position) {
+  if (!position) return;
+  const scroller = els.monthGrid.querySelector(".week-timeline-scroll");
+  if (!scroller) return;
+  scroller.scrollTo({ top: position.top, left: position.left, behavior: "auto" });
+}
+
+function renderWeekTimeline(scrollPosition = null) {
   const weekDates = getMainCalendarDates();
   const timeline = document.createElement("section");
   timeline.className = "week-timeline";
@@ -3217,6 +3372,7 @@ function renderWeekTimeline() {
   scroller.append(timeColumn, daysGrid);
   timeline.append(header, scroller);
   els.monthGrid.replaceChildren(timeline);
+  restoreWeekScrollPosition(scrollPosition);
 }
 
 function createWeekHeaderDay(date) {
@@ -3688,21 +3844,29 @@ function createMovedStandaloneOccurrence(calendarEvent, targetDateKey, targetTim
 function createEventChip(calendarEvent) {
   const calendar = getCalendar(calendarEvent.calendar);
   const chip = document.createElement("button");
-  chip.className = "event-chip";
+  chip.className = `event-chip ${calendarEvent.time ? "event-chip--timed" : "event-chip--all-day"}`;
   chip.type = "button";
   chip.style.setProperty("--event-color", calendar.color);
   chip.dataset.eventId = calendarEvent.id;
   chip.setAttribute("aria-label", `${calendarEvent.time ? `${formatTime(calendarEvent.time)} ` : ""}${calendarEvent.title}, ${calendar.name}`);
 
-  const time = document.createElement("span");
-  time.className = "event-time";
-  time.textContent = calendarEvent.time ? formatTime(calendarEvent.time) : "All day";
+  if (calendarEvent.time) {
+    const dot = document.createElement("span");
+    dot.className = "event-dot";
+    dot.setAttribute("aria-hidden", "true");
+
+    const time = document.createElement("span");
+    time.className = "event-time";
+    time.textContent = formatTime(calendarEvent.time);
+
+    chip.append(dot, time);
+  }
 
   const title = document.createElement("span");
   title.className = "event-title";
   title.textContent = calendarEvent.title;
 
-  chip.append(time, title);
+  chip.append(title);
   chip.addEventListener("click", (event) => {
     event.stopPropagation();
     selectedDate = fromDateKey(getEventDate(calendarEvent));
@@ -3907,6 +4071,13 @@ function setView(view) {
   render();
 }
 
+function toggleHeatmapRangeMode() {
+  heatmapRangeMode = heatmapRangeMode === "events" ? "year" : "events";
+  heatmapDetailsAnchor = null;
+  render();
+  showToast(heatmapRangeMode === "year" ? "Heatmap showing full year" : "Heatmap showing event span");
+}
+
 function jumpToCurrentTime() {
   const now = getNow();
   heatmapDetailsAnchor = null;
@@ -4001,13 +4172,20 @@ function formatDateRange(start, end) {
 
 function getMainCalendarDates() {
   if (currentView === "month") {
-    const firstDay = startOfMonth(visibleMonth);
-    const gridStart = startOfWeek(firstDay);
-    return makeDateRange(gridStart, 42);
+    return getMonthCalendarDates();
   }
 
   const { start } = getVisibleDateRange();
   return makeDateRange(start, currentView === "week" ? 7 : 28);
+}
+
+function getMonthCalendarDates() {
+  const firstDay = startOfMonth(visibleMonth);
+  const lastDay = endOfMonth(visibleMonth);
+  const gridStart = startOfWeek(firstDay);
+  const gridEnd = endOfWeek(lastDay);
+  const dayCount = Math.round((startOfDay(gridEnd) - startOfDay(gridStart)) / 86_400_000) + 1;
+  return makeDateRange(gridStart, dayCount);
 }
 
 function makeDateRange(start, length) {
@@ -4016,8 +4194,8 @@ function makeDateRange(start, length) {
 
 function getMaxVisibleEvents() {
   if (currentView === "week") return 8;
-  if (currentView === "four-week") return 4;
-  return 3;
+  if (currentView === "four-week") return 8;
+  return 6;
 }
 
 function getFilteredEventsForDate(dateKey) {
@@ -4074,7 +4252,8 @@ function compareEvents(a, b) {
   const dateA = getEventDate(a);
   const dateB = getEventDate(b);
   if (dateA !== dateB) return dateA.localeCompare(dateB);
-  return (a.time || "24:00").localeCompare(b.time || "24:00");
+  if (Boolean(a.time) !== Boolean(b.time)) return a.time ? 1 : -1;
+  return (a.time || "").localeCompare(b.time || "");
 }
 
 function getCalendar(id) {
@@ -4277,16 +4456,24 @@ function savePaperTasks({ sync = true, touch = true } = {}) {
 }
 
 function isValidSidebarLocation(value) {
-  return ["left", "bottom", "right"].includes(value);
+  return value === "bottom";
 }
 
 function loadSidebarLocation() {
-  const saved = localStorage.getItem(STORAGE_SIDEBAR_LOCATION);
-  return isValidSidebarLocation(saved) ? saved : "left";
+  return "bottom";
 }
 
 function saveSidebarLocation() {
-  localStorage.setItem(STORAGE_SIDEBAR_LOCATION, sidebarLocation);
+  localStorage.setItem(STORAGE_SIDEBAR_LOCATION, "bottom");
+}
+
+function loadBottomSidebarHeight() {
+  const saved = Number(localStorage.getItem(STORAGE_BOTTOM_SIDEBAR_HEIGHT));
+  return Number.isFinite(saved) && saved > 0 ? saved : 0;
+}
+
+function saveBottomSidebarHeight() {
+  if (bottomSidebarHeight) localStorage.setItem(STORAGE_BOTTOM_SIDEBAR_HEIGHT, String(bottomSidebarHeight));
 }
 
 function loadDeadlineFilterTags() {
@@ -4322,6 +4509,14 @@ function endOfMonth(date) {
   return new Date(date.getFullYear(), date.getMonth() + 1, 0);
 }
 
+function startOfYear(date) {
+  return new Date(date.getFullYear(), 0, 1);
+}
+
+function endOfYear(date) {
+  return new Date(date.getFullYear(), 11, 31);
+}
+
 function endOfDay(date) {
   const end = new Date(date);
   end.setHours(23, 59, 59, 999);
@@ -4334,6 +4529,10 @@ function startOfWeek(date) {
   start.setDate(start.getDate() - daysSinceWeekStart);
   start.setHours(0, 0, 0, 0);
   return start;
+}
+
+function endOfWeek(date) {
+  return addDays(startOfWeek(date), 6);
 }
 
 function addDays(date, amount) {

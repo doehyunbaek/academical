@@ -126,6 +126,8 @@
           </div>
         </aside>
 
+        <div class="sidebar-resizer" id="sidebarResizer" role="separator" aria-orientation="horizontal" aria-label="Resize sidebar panel" tabindex="0"></div>
+
         <main class="calendar-panel" aria-label="Calendar">
           <div class="weekday-row" aria-hidden="true">
             <span>Mon</span>
@@ -307,10 +309,9 @@
         </header>
 
         <fieldset class="settings-fieldset">
-          <legend>Sidebar location</legend>
-          <label><input type="radio" name="sidebarLocation" value="left" /> Left</label>
-          <label><input type="radio" name="sidebarLocation" value="bottom" /> Bottom</label>
-          <label><input type="radio" name="sidebarLocation" value="right" /> Right</label>
+          <legend>Sidebar panel</legend>
+          <label><input type="radio" name="sidebarLocation" value="bottom" checked /> Bottom</label>
+          <p class="sync-status">Drag the splitter above the panel to resize it.</p>
         </fieldset>
 
         <footer class="event-dialog-footer">
