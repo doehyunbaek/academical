@@ -3406,6 +3406,13 @@ function createWeekHeaderDay(date) {
       chip.className = "week-all-day-chip";
       chip.style.setProperty("--event-color", getCalendar(calendarEvent.calendar).color);
       chip.textContent = calendarEvent.title;
+      chip.addEventListener("click", (event) => {
+        event.preventDefault();
+        event.stopPropagation();
+        selectedDate = fromDateKey(getEventDate(calendarEvent));
+        ensureDateVisible(selectedDate);
+        openEventDialog(getEventDate(calendarEvent), calendarEvent);
+      });
       allDayList.append(chip);
     });
     headerButton.append(allDayList);

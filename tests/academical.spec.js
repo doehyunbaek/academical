@@ -694,6 +694,21 @@ test('week view renders hourly grid and t centers current-time indicator', async
   await expect(page.locator('.week-now-time')).toBeVisible();
 });
 
+test('clicking all-day events in week view opens the edit dialog', async ({ page }) => {
+  await page.goto('/');
+  await openCreateEventDialog(page, '2026-07-02');
+  await page.locator('#eventTitle').fill('All-day review block');
+  await page.getByRole('button', { name: 'Save' }).click();
+
+  await page.keyboard.press('2');
+  await page.locator('.week-all-day-chip').filter({ hasText: 'All-day review block' }).click();
+
+  await expect(page.locator('#eventModal')).toHaveClass(/is-open/);
+  await expect(page.locator('#eventDialogTitle')).toHaveText('Edit event');
+  await expect(page.locator('#eventTitle')).toHaveValue('All-day review block');
+  await expect(page.locator('#eventTime')).toHaveValue('');
+});
+
 test('clicking week view slots creates events at 15 minute granularity', async ({ page }) => {
   await page.goto('/');
   await page.keyboard.press('2');
