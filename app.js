@@ -157,6 +157,7 @@ const defaultCalendars = [
   { id: "tasks", name: "Tasks", color: "#f9ab00", builtIn: true },
 ];
 const importedCalendarColors = ["#1a73e8", "#188038", "#d93025", "#9334e6", "#f9ab00", "#0891b2", "#c026d3", "#ea580c"];
+const paperTagColors = ["blue", "green", "rebeccapurple", "darkorange", "teal", "crimson", "deeppink", "olive", "navy", "maroon"];
 const basicColorKeywords = [
   "black",
   "silver",
@@ -279,6 +280,7 @@ const els = {
   closeCalendarModal: document.querySelector("#closeCalendarModal"),
   closeModal: document.querySelector("#closeModal"),
   deleteEvent: document.querySelector("#deleteEvent"),
+  deletePaper: document.querySelector("#deletePaper"),
   deleteSeriesEvent: document.querySelector("#deleteSeriesEvent"),
   editCalendarColorInput: document.querySelector("#editCalendarColorInput"),
   editCalendarColorPalette: document.querySelector("#editCalendarColorPalette"),
@@ -306,15 +308,28 @@ const els = {
   monthGrid: document.querySelector("#monthGrid"),
   monthTitle: document.querySelector("#monthTitle"),
   nextMonth: document.querySelector("#nextMonth"),
+  paperEditFields: document.querySelector("#paperEditFields"),
+  paperEditIdentity: document.querySelector("#paperEditIdentity"),
+  paperEditSource: document.querySelector("#paperEditSource"),
+  paperEditTitle: document.querySelector("#paperEditTitle"),
+  paperFilterInput: document.querySelector("#paperFilterInput"),
   paperModal: document.querySelector("#paperModal"),
+  paperModalFieldLabel: document.querySelector("#paperModalFieldLabel"),
   paperModalForm: document.querySelector("#paperModalForm"),
   paperModalInput: document.querySelector("#paperModalInput"),
+  paperModalInputField: document.querySelector("#paperModalInputField"),
+  paperModalSubmit: document.querySelector("#paperModalSubmit"),
+  paperNoteInput: document.querySelector("#paperNoteInput"),
+  paperTagsInput: document.querySelector("#paperTagsInput"),
+  paperTagSuggestionList: document.querySelector("#paperTagSuggestionList"),
+  paperTagSuggestions: document.querySelector("#paperTagSuggestions"),
   paperTaskCount: document.querySelector("#paperTaskCount"),
-  paperTaskForm: document.querySelector("#paperTaskForm"),
-  paperTaskInput: document.querySelector("#paperTaskInput"),
   paperTaskList: document.querySelector("#paperTaskList"),
+  readPaperCount: document.querySelector("#readPaperCount"),
+  readPaperList: document.querySelector("#readPaperList"),
   previousMonth: document.querySelector("#previousMonth"),
   searchInput: document.querySelector("#searchInput"),
+  searchResults: document.querySelector("#searchResults"),
   settingsButton: document.querySelector("#settingsButton"),
   settingsForm: document.querySelector("#settingsForm"),
   settingsModal: document.querySelector("#settingsModal"),
@@ -355,6 +370,15 @@ const compactDateFormatter = new Intl.DateTimeFormat("en-US", {
   month: "short",
   day: "numeric",
 });
+const searchResultDateFormatter = new Intl.DateTimeFormat("en-US", {
+  weekday: "short",
+  month: "short",
+  day: "numeric",
+});
+const searchResultTimeFormatter = new Intl.DateTimeFormat("en-US", {
+  hour: "numeric",
+  minute: "2-digit",
+});
 const shortMonthFormatter = new Intl.DateTimeFormat("en-US", {
   month: "short",
 });
@@ -383,6 +407,7 @@ let sidebarLocation = loadSidebarLocation();
 let bottomSidebarHeight = loadBottomSidebarHeight();
 let activeSidebarPanel = "calendar";
 let paperTasks = loadPaperTasks();
+let paperFilterQuery = "";
 let searchQuery = "";
 let heatmapDetailsAnchor = null;
 let heatmapRangeMode = "events";
@@ -393,6 +418,7 @@ let suppressNextWeekSlotClick = false;
 let suppressNextWeekEventClick = false;
 let firebaseSync = createFirebaseSyncState();
 let activeEventPaperSnapshots = [];
+let editingPaperTaskId = "";
 let draggedCalendarId = "";
 let activeSidebarResize = null;
 
@@ -426,6 +452,7 @@ function bindEvents() {
     if (!els.accountPopover.hidden && !event.target.closest(".account-menu")) {
       closeAccountPopover();
     }
+    if (!event.target.closest(".search-shell")) hideSearchResults();
   });
 
   document.addEventListener("click", (event) => {
@@ -469,8 +496,23 @@ function bindEvents() {
 
   els.searchInput.addEventListener("input", (event) => {
     searchQuery = event.target.value.trim().toLowerCase();
+    renderSearchResults();
     renderMonthGrid();
     renderSidebarTimeAnalysisIfActive();
+  });
+  els.searchInput.addEventListener("focus", renderSearchResults);
+  els.searchInput.addEventListener("keydown", (event) => {
+    if (event.key !== "Escape") return;
+    els.searchInput.value = "";
+    searchQuery = "";
+    hideSearchResults();
+    renderMonthGrid();
+    renderSidebarTimeAnalysisIfActive();
+  });
+
+  els.paperFilterInput.addEventListener("input", (event) => {
+    paperFilterQuery = event.target.value.trim().toLowerCase();
+    renderPaperTasks();
   });
 
   els.eventTitle.addEventListener("input", () => {
@@ -498,7 +540,6 @@ function bindEvents() {
   });
   els.archivedCalendarsToggle.addEventListener("click", toggleArchivedCalendars);
   els.syncAuthButton.addEventListener("click", toggleFirebaseAuth);
-  els.paperTaskForm.addEventListener("submit", addPaperTasksFromInput);
   els.paperModalForm.addEventListener("submit", addPaperTasksFromInput);
   els.paperModalInput.addEventListener("keydown", (event) => {
     if (event.key === "Enter" && !event.shiftKey) {
@@ -508,6 +549,7 @@ function bindEvents() {
   });
   els.closePaperModal.addEventListener("click", closePaperModal);
   els.cancelPaperModal.addEventListener("click", closePaperModal);
+  els.deletePaper.addEventListener("click", deleteEditingPaperTask);
   els.paperModal.addEventListener("click", (event) => {
     if (event.target === els.paperModal) closePaperModal();
   });
@@ -587,7 +629,10 @@ function bindEvents() {
     }
 
     if (event.metaKey || event.ctrlKey || event.altKey) return;
-    if (key === "j") {
+    if (key === "/") {
+      event.preventDefault();
+      els.searchInput.focus();
+    } else if (key === "j") {
       event.preventDefault();
       navigatePeriod(1);
     } else if (key === "k") {
@@ -1732,83 +1777,177 @@ function makeCustomCalendarId(name) {
   return `custom-${slug}-${Date.now()}-${Math.random().toString(16).slice(2, 8)}`;
 }
 
-function openPaperModal() {
+function openPaperModal(task = null) {
+  editingPaperTaskId = task?.id ?? "";
+  document.querySelector("#paperDialogTitle").textContent = task ? "Edit paper" : "Add paper";
+  els.paperModalFieldLabel.textContent = "Paper titles or arXiv URLs";
+  els.paperModalSubmit.textContent = task ? "Save" : "Add papers";
+  els.deletePaper.hidden = !task;
+  els.paperModalInput.value = "";
+  els.paperModalInputField.hidden = Boolean(task);
+  els.paperEditIdentity.hidden = !task;
+  els.paperEditTitle.textContent = task?.title ?? "";
+  const sourceUrl = task?.metadata?.absUrl ?? "";
+  els.paperEditSource.hidden = !sourceUrl;
+  els.paperEditSource.href = sourceUrl;
+  els.paperEditSource.textContent = sourceUrl;
+  els.paperEditFields.hidden = !task;
+  els.paperNoteInput.value = task?.note ?? "";
+  els.paperTagsInput.value = Array.isArray(task?.tags) ? task.tags.join(", ") : "";
+  renderPaperTagSuggestions();
   els.paperModal.classList.add("is-open");
   els.paperModal.setAttribute("aria-hidden", "false");
-  requestAnimationFrame(() => els.paperModalInput.focus());
+  requestAnimationFrame(() => (task ? els.paperNoteInput : els.paperModalInput).focus());
 }
 
 function closePaperModal() {
+  editingPaperTaskId = "";
   els.paperModal.classList.remove("is-open");
   els.paperModal.setAttribute("aria-hidden", "true");
+  els.paperModalInput.value = "";
+  els.paperNoteInput.value = "";
+  els.paperTagsInput.value = "";
+  els.paperEditFields.hidden = true;
+  els.paperEditIdentity.hidden = true;
+  els.paperEditSource.hidden = true;
+  els.paperTagSuggestions.hidden = true;
+  els.paperTagSuggestionList.replaceChildren();
+  els.paperModalInputField.hidden = false;
+  els.deletePaper.hidden = true;
+}
+
+function renderPaperTagSuggestions() {
+  const seen = new Set();
+  const tags = paperTasks
+    .flatMap((task) => (Array.isArray(task.tags) ? task.tags : []))
+    .filter((tag) => {
+      const key = tag.toLowerCase();
+      if (seen.has(key)) return false;
+      seen.add(key);
+      return true;
+    })
+    .sort((a, b) => a.localeCompare(b));
+
+  els.paperTagSuggestions.hidden = !editingPaperTaskId || !tags.length;
+  els.paperTagSuggestionList.replaceChildren(...tags.map(createPaperTagSuggestion));
+}
+
+function createPaperTagSuggestion(tag) {
+  const button = document.createElement("button");
+  button.className = "paper-tag-suggestion";
+  button.type = "button";
+  button.textContent = tag;
+  button.style.setProperty("--paper-tag-color", getPaperTagColor(tag));
+  button.addEventListener("click", () => {
+    const tags = parsePaperTags(els.paperTagsInput.value);
+    if (!tags.some((existing) => existing.toLowerCase() === tag.toLowerCase())) tags.push(tag);
+    els.paperTagsInput.value = tags.join(", ");
+    els.paperTagsInput.focus();
+  });
+  return button;
+}
+
+function deleteEditingPaperTask() {
+  if (!editingPaperTaskId) return;
+  paperTasks = paperTasks.filter((task) => task.id !== editingPaperTaskId);
+  savePaperTasks();
+  renderPaperTasks();
+  closePaperModal();
+  showToast("Paper deleted");
 }
 
 function renderPaperTasks() {
-  const activeCount = paperTasks.filter((task) => !task.done).length;
-  els.paperTaskCount.textContent = activeCount;
+  const activeTasks = paperTasks
+    .filter((task) => !task.done && paperMatchesFilter(task))
+    .sort((a, b) => b.createdAt.localeCompare(a.createdAt));
+  const readPapers = paperTasks
+    .filter((task) => task.done && paperMatchesFilter(task))
+    .sort((a, b) => (b.readAt || b.createdAt).localeCompare(a.readAt || a.createdAt));
 
-  if (!paperTasks.length) {
-    const empty = document.createElement("p");
-    empty.className = "empty-state";
-    empty.textContent = "No papers queued.";
-    els.paperTaskList.replaceChildren(empty);
+  els.paperTaskCount.textContent = activeTasks.length;
+  els.readPaperCount.textContent = readPapers.length;
+  const activeEmptyText = paperFilterQuery ? "No matching paper tasks." : "No papers queued.";
+  const readEmptyText = paperFilterQuery ? "No matching read papers." : "No papers read yet.";
+  renderPaperTaskGroup(els.paperTaskList, activeTasks, activeEmptyText);
+  renderPaperTaskGroup(els.readPaperList, readPapers, readEmptyText);
+}
+
+function paperMatchesFilter(task) {
+  if (!paperFilterQuery) return true;
+  const metadata = task.metadata ?? {};
+  const haystack = [
+    task.title,
+    ...(metadata.authors ?? []),
+    metadata.arxivId,
+    metadata.semanticScholarId,
+    metadata.summary,
+    task.note,
+    ...(Array.isArray(task.tags) ? task.tags : []),
+  ]
+    .filter(Boolean)
+    .join(" ")
+    .toLowerCase();
+  return haystack.includes(paperFilterQuery);
+}
+
+function renderPaperTaskGroup(container, tasks, emptyText) {
+  if (tasks.length) {
+    container.replaceChildren(...tasks.map(createPaperTaskItem));
     return;
   }
 
-  const sortedTasks = [...paperTasks].sort((a, b) => Number(a.done) - Number(b.done) || b.createdAt.localeCompare(a.createdAt));
-  els.paperTaskList.replaceChildren(...sortedTasks.map(createPaperTaskItem));
+  const empty = document.createElement("p");
+  empty.className = "empty-state";
+  empty.textContent = emptyText;
+  container.replaceChildren(empty);
 }
 
 function createPaperTaskItem(task) {
   const item = document.createElement("article");
-  item.className = ["paper-task-item", task.done ? "paper-task-item--done" : ""].filter(Boolean).join(" ");
-
-  const checkbox = document.createElement("input");
-  checkbox.type = "checkbox";
-  checkbox.checked = task.done;
-  checkbox.setAttribute("aria-label", `Mark ${task.title} as ${task.done ? "not done" : "done"}`);
-  checkbox.addEventListener("change", () => togglePaperTask(task.id));
+  item.className = "paper-task-item";
 
   const body = document.createElement("div");
   body.className = "paper-task-body";
+
+  const details = document.createElement("div");
+  details.className = "paper-task-details";
 
   const title = document.createElement("div");
   title.className = "paper-task-title";
   title.title = task.title;
   title.textContent = task.title;
 
+  details.append(title);
   if (task.metadata) {
     const meta = document.createElement("div");
     meta.className = "paper-task-meta";
     meta.textContent = formatPaperMetadata(task.metadata);
-    body.append(title, meta);
+    details.append(meta);
+  }
 
-    if (task.metadata.summary) {
-      const summary = document.createElement("p");
-      summary.className = "paper-task-summary";
-      summary.textContent = task.metadata.summary;
-      body.append(summary);
-    }
-  } else {
-    body.append(title);
+  if (Array.isArray(task.tags) && task.tags.length) {
+    const tags = document.createElement("div");
+    tags.className = "paper-task-tags";
+    tags.replaceChildren(...task.tags.map(createPaperTag));
+    details.append(tags);
+  }
+
+  if (task.note) {
+    const note = document.createElement("p");
+    note.className = "paper-task-note";
+    note.textContent = task.note;
+    details.append(note);
   }
 
   const actions = document.createElement("div");
   actions.className = "paper-task-actions";
 
-  const pullButton = document.createElement("button");
-  pullButton.className = "paper-task-action";
-  pullButton.type = "button";
-  pullButton.textContent = "Pull";
-  pullButton.setAttribute("aria-label", `Pull ${task.title} into selected date`);
-  pullButton.addEventListener("click", () => pullPaperTaskToCalendar(task));
-
-  const removeButton = document.createElement("button");
-  removeButton.className = "paper-task-action";
-  removeButton.type = "button";
-  removeButton.textContent = "Remove";
-  removeButton.setAttribute("aria-label", `Remove ${task.title}`);
-  removeButton.addEventListener("click", () => removePaperTask(task.id));
+  const editButton = document.createElement("button");
+  editButton.className = "paper-task-action";
+  editButton.type = "button";
+  editButton.textContent = "Edit";
+  editButton.setAttribute("aria-label", `Edit ${task.title}`);
+  editButton.addEventListener("click", () => openPaperModal(task));
 
   if (task.metadata?.absUrl) {
     actions.append(createPaperLink("Abs", task.metadata.absUrl));
@@ -1818,10 +1957,23 @@ function createPaperTaskItem(task) {
     actions.append(createPaperLink("PDF", task.metadata.pdfUrl));
   }
 
-  actions.append(pullButton, removeButton);
-  body.append(actions);
-  item.append(checkbox, body);
+  actions.append(editButton);
+  body.append(details, actions);
+  item.append(body);
   return item;
+}
+
+function createPaperTag(label) {
+  const tag = document.createElement("span");
+  tag.className = "paper-task-tag";
+  tag.textContent = label;
+  tag.style.setProperty("--paper-tag-color", getPaperTagColor(label));
+  return tag;
+}
+
+function getPaperTagColor(label) {
+  const hash = [...label.toLowerCase()].reduce((value, character) => ((value * 31) + character.codePointAt(0)) >>> 0, 0);
+  return paperTagColors[hash % paperTagColors.length];
 }
 
 function createPaperLink(label, href) {
@@ -1835,15 +1987,25 @@ function createPaperLink(label, href) {
 }
 
 function formatPaperMetadata(metadata) {
-  const authors = metadata.authors?.length ? ` · ${metadata.authors.slice(0, 3).join(", ")}${metadata.authors.length > 3 ? " et al." : ""}` : "";
+  const authorList = formatPaperAuthors(metadata.authors ?? []);
+  const authors = authorList ? ` · ${authorList}` : "";
   const published = metadata.published ? ` · ${metadata.published.slice(0, 10)}` : "";
   const source = metadata.source === "semantic-scholar" ? `S2:${metadata.semanticScholarId?.slice(0, 8)}` : `arXiv:${metadata.arxivId}`;
   return `${source}${authors}${published}`;
 }
 
+function formatPaperAuthors(authors) {
+  if (authors.length <= 3) return authors.join(", ");
+  return `${authors[0]}, ${authors[1]}, …, ${authors.at(-1)}`;
+}
+
 async function addPaperTasksFromInput(event) {
   event.preventDefault();
   const form = event.currentTarget;
+  if (editingPaperTaskId) {
+    await saveEditedPaperTask(form);
+    return;
+  }
   const input = form.querySelector("textarea");
   const inputs = input.value
     .split("\n")
@@ -1895,6 +2057,31 @@ async function addPaperTasksFromInput(event) {
   renderPaperTasks();
   setSidebarPanel("papers");
   showToast(`${newTasks.length} paper${newTasks.length === 1 ? "" : "s"} added`);
+}
+
+async function saveEditedPaperTask(form) {
+  const taskIndex = paperTasks.findIndex((task) => task.id === editingPaperTaskId);
+  if (taskIndex < 0) return;
+
+  const submitButton = form.querySelector("button[type='submit']");
+  submitButton.disabled = true;
+  submitButton.textContent = "Saving...";
+
+  paperTasks.splice(taskIndex, 1, {
+    ...paperTasks[taskIndex],
+    note: els.paperNoteInput.value.trim(),
+    tags: parsePaperTags(els.paperTagsInput.value),
+  });
+  submitButton.disabled = false;
+  submitButton.textContent = "Save";
+  savePaperTasks();
+  renderPaperTasks();
+  closePaperModal();
+  showToast("Paper updated");
+}
+
+function parsePaperTags(value) {
+  return [...new Set(value.split(",").map((tag) => tag.trim()).filter(Boolean))];
 }
 
 function getPaperTaskKey(task) {
@@ -2012,53 +2199,6 @@ function cleanPaperText(value) {
   return value.replace(/\s+/g, " ").trim();
 }
 
-function togglePaperTask(id) {
-  paperTasks = paperTasks.map((task) => (task.id === id ? { ...task, done: !task.done } : task));
-  savePaperTasks();
-  renderPaperTasks();
-}
-
-function removePaperTask(id) {
-  paperTasks = paperTasks.filter((task) => task.id !== id);
-  savePaperTasks();
-  renderPaperTasks();
-}
-
-function pullPaperTaskToCalendar(task) {
-  const paper = getPaperSnapshot(task);
-  const metadata = task.metadata;
-  const notes = [
-    "Paper task",
-    task.title,
-    metadata?.authors?.length ? `Authors: ${metadata.authors.join(", ")}` : "",
-    metadata?.arxivId ? `arXiv: ${metadata.arxivId}` : "",
-    metadata?.semanticScholarId ? `Semantic Scholar: ${metadata.semanticScholarId}` : "",
-    metadata?.absUrl ? `Abstract: ${metadata.absUrl}` : "",
-    metadata?.pdfUrl ? `PDF: ${metadata.pdfUrl}` : "",
-    metadata?.summary ? `Summary: ${metadata.summary}` : "",
-  ]
-    .filter(Boolean)
-    .join("\n");
-
-  events.push({
-    id: makeId(),
-    title: `Read: ${task.title}`,
-    date: toDateKey(selectedDate),
-    time: "",
-    calendar: "tasks",
-    repeat: "none",
-    paperTaskIds: [task.id],
-    papers: [paper],
-    notes,
-  });
-  paperTasks = paperTasks.filter((paperTask) => paperTask.id !== task.id);
-  savePaperTasks();
-  saveEvents();
-  renderPaperTasks();
-  render();
-  showToast("Paper pulled into Tasks calendar");
-}
-
 function isReadEventTitle(title) {
   return title.trim().slice(0, 4).toLowerCase() === "read";
 }
@@ -2073,7 +2213,7 @@ function inferPaperTaskIdsFromEvent(event) {
   const readTitle = getReadEventPaperQuery(event.title);
   if (!readTitle) return [];
   return paperTasks
-    .filter((task) => task.title.trim().toLowerCase() === readTitle)
+    .filter((task) => !task.done && task.title.trim().toLowerCase() === readTitle)
     .map((task) => task.id);
 }
 
@@ -2097,9 +2237,10 @@ function getExistingEventPaperSnapshots(event) {
 }
 
 function getEventPaperAssignmentCandidates() {
-  const assignedById = new Map(activeEventPaperSnapshots.map((paper) => [paper.id, paper]));
-  paperTasks.forEach((task) => assignedById.set(task.id, getPaperSnapshot(task)));
-  return [...assignedById.values()];
+  return paperTasks
+    .filter((task) => !task.done)
+    .sort((a, b) => b.createdAt.localeCompare(a.createdAt))
+    .map(getPaperSnapshot);
 }
 
 function renderEventPaperAssignment(selectedIds = []) {
@@ -2163,16 +2304,49 @@ function getReadEventTitleForPapers(currentTitle, papers) {
   return `${readPrefix}: ${papers[0].title} + ${papers.length - 1} more`;
 }
 
-function removeAssignedPapersFromTasks(papers) {
-  const selectedIds = new Set(papers.map((paper) => paper.id));
-  const beforeCount = paperTasks.length;
-  paperTasks = paperTasks.filter((task) => !selectedIds.has(task.id));
-  return paperTasks.length !== beforeCount;
+function markAssignedPapersAsRead(papers) {
+  const selectedById = new Map(papers.filter((paper) => paper?.id).map((paper) => [paper.id, paper]));
+  if (!selectedById.size) return false;
+
+  const readAt = new Date().toISOString();
+  let changed = false;
+  paperTasks = paperTasks.map((task) => {
+    if (!selectedById.has(task.id) || task.done) return task;
+    changed = true;
+    return { ...task, done: true, readAt };
+  });
+
+  const existingIds = new Set(paperTasks.map((task) => task.id));
+  const added = [...selectedById.values()]
+    .filter((paper) => !existingIds.has(paper.id))
+    .map((paper, index) => ({
+      id: paper.id,
+      title: paper.title,
+      metadata: paper.metadata ?? null,
+      done: true,
+      readAt,
+      createdAt: `${readAt}-assigned-${index}`,
+    }));
+
+  if (added.length) {
+    paperTasks = [...paperTasks, ...added];
+    changed = true;
+  }
+  return changed;
 }
 
 function restorePapersToTasks(papers) {
+  const restoredIds = new Set(papers.filter((paper) => paper?.id).map((paper) => paper.id));
+  let changed = false;
+  paperTasks = paperTasks.map((task) => {
+    if (!restoredIds.has(task.id) || !task.done) return task;
+    changed = true;
+    const { readAt, ...restoredTask } = task;
+    return { ...restoredTask, done: false };
+  });
+
   const existingIds = new Set(paperTasks.map((task) => task.id));
-  const restored = papers
+  const added = papers
     .filter((paper) => paper?.id && !existingIds.has(paper.id))
     .map((paper, index) => ({
       id: paper.id,
@@ -2182,9 +2356,11 @@ function restorePapersToTasks(papers) {
       createdAt: `${new Date().toISOString()}-restored-${index}`,
     }));
 
-  if (!restored.length) return false;
-  paperTasks = [...paperTasks, ...restored];
-  return true;
+  if (added.length) {
+    paperTasks = [...paperTasks, ...added];
+    changed = true;
+  }
+  return changed;
 }
 
 function getAssignedPapersForOccurrence(event, occurrenceDate = event.date) {
@@ -3974,7 +4150,6 @@ function openEventDialog(dateKey, existingEvent = null, options = {}) {
   activeEventPaperSnapshots = getExistingEventPaperSnapshots(existingEvent);
   const selectedPaperIds = existingEvent?.paperTaskIds ?? activeEventPaperSnapshots.map((paper) => paper.id);
   renderEventPaperAssignment(selectedPaperIds.length ? selectedPaperIds : inferPaperTaskIdsFromEvent(existingEvent));
-  if (existingEvent?.id) setSidebarPanel("analysis");
   const isRecurringEvent = existingEvent && (existingEvent.repeat ?? "none") !== "none";
   els.deleteEvent.hidden = !existingEvent;
   els.deleteEvent.textContent = isRecurringEvent ? "Delete instance" : "Delete";
@@ -4002,8 +4177,15 @@ function saveEventFromDialog(event) {
   const id = els.eventId.value || makeId();
   const existingIndex = events.findIndex((item) => item.id === id);
   const existingEvent = existingIndex >= 0 ? events[existingIndex] : null;
-  const selectedPapers = isReadEventTitle(els.eventTitle.value) ? getSelectedEventPapers() : [];
-  const paperTasksChanged = selectedPapers.length ? removeAssignedPapersFromTasks(selectedPapers) : false;
+  let selectedPapers = isReadEventTitle(els.eventTitle.value) ? getSelectedEventPapers() : [];
+  if (!selectedPapers.length && isReadEventTitle(els.eventTitle.value)) {
+    const matchingIds = new Set(inferPaperTaskIdsFromEvent({ title: els.eventTitle.value }));
+    selectedPapers = getEventPaperAssignmentCandidates().filter((paper) => matchingIds.has(paper.id));
+  }
+  if (!selectedPapers.length && existingEvent && isReadEventTitle(els.eventTitle.value)) {
+    selectedPapers = activeEventPaperSnapshots;
+  }
+  const paperTasksChanged = selectedPapers.length ? markAssignedPapersAsRead(selectedPapers) : false;
   const occurrenceDate = els.eventOccurrenceDate.value || els.eventDate.value;
   const repeat = els.eventRepeat.value;
   const isRecurring = repeat !== "none";
@@ -4293,12 +4475,105 @@ function isWeekday(date) {
   return day >= 1 && day <= 5;
 }
 
+function renderSearchResults() {
+  if (!searchQuery) {
+    hideSearchResults();
+    return;
+  }
+
+  const matches = events
+    .filter((event) => !isCalendarDeleted(event.calendar) && eventMatchesSearch(event))
+    .sort(compareEvents)
+    .slice(0, 50);
+
+  if (!matches.length) {
+    const empty = document.createElement("p");
+    empty.className = "empty-state search-results-empty";
+    empty.textContent = "No matching events.";
+    els.searchResults.replaceChildren(empty);
+  } else {
+    els.searchResults.replaceChildren(...matches.map(createSearchResultItem));
+  }
+
+  els.searchResults.hidden = false;
+  els.searchInput.setAttribute("aria-expanded", "true");
+}
+
+function hideSearchResults() {
+  els.searchResults.hidden = true;
+  els.searchInput.setAttribute("aria-expanded", "false");
+}
+
+function createSearchResultItem(event) {
+  const calendar = getCalendar(event.calendar);
+  const result = document.createElement("button");
+  result.className = "search-result-item";
+  result.type = "button";
+  result.setAttribute("role", "option");
+  result.style.setProperty("--event-color", calendar.color);
+
+  const icon = document.createElement("span");
+  icon.className = "search-result-calendar-icon";
+  icon.setAttribute("aria-hidden", "true");
+  icon.textContent = String(new Date(`${getEventDate(event)}T00:00:00`).getDate());
+
+  const main = document.createElement("span");
+  main.className = "search-result-main";
+  const title = document.createElement("span");
+  title.className = "search-result-title";
+  title.textContent = event.title;
+  const calendarName = document.createElement("span");
+  calendarName.className = "search-result-calendar";
+  calendarName.textContent = calendar.name;
+  main.append(title, calendarName);
+
+  const when = document.createElement("span");
+  when.className = "search-result-when";
+  const date = document.createElement("span");
+  date.className = "search-result-date";
+  date.textContent = searchResultDateFormatter.format(fromDateKey(getEventDate(event)));
+  const time = document.createElement("span");
+  time.className = "search-result-time";
+  time.textContent = getSearchResultTimeLabel(event);
+  when.append(date, time);
+
+  result.append(icon, main, when);
+  result.addEventListener("click", () => openSearchResult(event));
+  return result;
+}
+
+function getSearchResultTimeLabel(event) {
+  if (!event.time) return "All day";
+  const startMinutes = timeToMinutes(event.time);
+  const endMinutes = Math.min(23 * 60 + 59, startMinutes + getOccurrenceDurationMinutes(event));
+  return `${formatSearchResultTime(startMinutes)}–${formatSearchResultTime(endMinutes)}`;
+}
+
+function formatSearchResultTime(totalMinutes) {
+  const hour = Math.floor(totalMinutes / 60);
+  const minute = totalMinutes % 60;
+  return searchResultTimeFormatter.format(new Date(2026, 0, 1, hour, minute));
+}
+
+function openSearchResult(event) {
+  const date = fromDateKey(getEventDate(event));
+  selectedDate = date;
+  viewAnchorDate = new Date(date);
+  visibleMonth = startOfMonth(date);
+  hideSearchResults();
+  render();
+  openEventDialog(getEventDate(event), event);
+}
+
+function eventMatchesSearch(event) {
+  const haystack = `${event.title} ${event.notes ?? ""} ${getCalendar(event.calendar).name}`.toLowerCase();
+  return haystack.includes(searchQuery);
+}
+
 function isEventVisible(event) {
   if (isCalendarDeleted(event.calendar)) return false;
   if (!visibleCalendars[event.calendar]) return false;
-  if (!searchQuery) return true;
-  const haystack = `${event.title} ${event.notes ?? ""} ${getCalendar(event.calendar).name}`.toLowerCase();
-  return haystack.includes(searchQuery);
+  return !searchQuery || eventMatchesSearch(event);
 }
 
 function compareEvents(a, b) {

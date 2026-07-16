@@ -24,6 +24,28 @@ test('today marker follows the actual current date', async ({ page }) => {
   await expect(page.locator('.day-cell[data-date="2026-07-02"]')).not.toHaveClass(/day-cell--today/);
 });
 
+test('/ focuses the event search box', async ({ page }) => {
+  await page.goto('/');
+  await page.keyboard.press('/');
+  await expect(page.locator('#searchInput')).toBeFocused();
+});
+
+test('search displays matching events with calendar, date, and time details', async ({ page }) => {
+  await page.goto('/');
+  await page.locator('#searchInput').fill('Reading group');
+
+  const result = page.locator('.search-result-item').filter({ hasText: 'Reading group' });
+  await expect(result).toBeVisible();
+  await expect(result.locator('.search-result-calendar')).toHaveText('Research');
+  await expect(result.locator('.search-result-date')).toHaveText('Thu, Jul 2');
+  await expect(result.locator('.search-result-time')).toHaveText('2:00 PM–3:00 PM');
+
+  await result.click();
+  await expect(page.locator('#eventDialogTitle')).toHaveText('Edit event');
+  await expect(page.locator('#eventTitle')).toHaveValue('Reading group');
+  await expect(page.locator('#searchResults')).toBeHidden();
+});
+
 test('account avatar opens sync dropdown and uses generic icon', async ({ page }) => {
   await page.goto('/');
   await expect(page.locator('#accountPopover')).toBeHidden();
@@ -694,6 +716,22 @@ test('week view renders hourly grid and t centers current-time indicator', async
   await expect(page.locator('.week-now-time')).toBeVisible();
 });
 
+test('opening Edit event preserves the selected sidebar panel', async ({ page }) => {
+  await page.goto('/');
+  const event = page.locator('.event-chip').filter({ hasText: 'Reading group' });
+
+  await event.click();
+  await expect(page.locator('#eventDialogTitle')).toHaveText('Edit event');
+  await expect(page.locator('.sidebar-tab[data-panel="calendar"]')).toHaveClass(/is-active/);
+  await page.getByRole('button', { name: 'Cancel' }).click();
+
+  await page.locator('.sidebar-tab[data-panel="papers"]').click();
+  await event.click();
+  await expect(page.locator('#eventDialogTitle')).toHaveText('Edit event');
+  await expect(page.locator('.sidebar-tab[data-panel="papers"]')).toHaveClass(/is-active/);
+  await expect(page.locator('.sidebar-panel[data-panel="papers"]')).toBeVisible();
+});
+
 test('clicking all-day events in week view opens the edit dialog', async ({ page }) => {
   await page.goto('/');
   await openCreateEventDialog(page, '2026-07-02');
@@ -882,6 +920,43 @@ test('month and four-week views fit expanded event counts per day', async ({ pag
   await expect(fourWeekDay.locator('.more-events')).toHaveCount(0);
 });
 
+test('papers panel splits queued and read papers into separate columns', async ({ page }) => {
+  await page.addInitScript(() => {
+    localStorage.setItem('academical.paperTasks.v1', JSON.stringify([
+      { id: 'queued-paper', title: 'Queued paper', done: false, createdAt: '2026-07-02T00:00:00Z' },
+      { id: 'newest-paper', title: 'Newest queued paper', done: false, createdAt: '2026-07-03T00:00:00Z' },
+      { id: 'read-paper', title: 'Read paper', done: true, createdAt: '2026-07-01T00:00:00Z' },
+    ]));
+  });
+
+  await page.goto('/');
+  await page.getByRole('button', { name: 'Papers', exact: true }).click();
+
+  await expect(page.locator('#paperTaskList')).toContainText('Queued paper');
+  await expect(page.locator('#paperTaskList')).not.toContainText('Read paper');
+  await expect(page.locator('#readPaperList')).toContainText('Read paper');
+  await expect(page.locator('#readPaperList')).not.toContainText('Queued paper');
+  await expect(page.locator('#paperTaskCount')).toHaveText('2');
+  await expect(page.locator('#paperTaskList .paper-task-title').first()).toHaveText('Newest queued paper');
+  await expect(page.locator('#readPaperCount')).toHaveText('1');
+  await expect(page.locator('.paper-task-list input[type="checkbox"]')).toHaveCount(0);
+  await expect(page.locator('#readPaperList .paper-task-title')).toHaveCSS('text-decoration-line', 'none');
+
+  await page.locator('#paperFilterInput').fill('newest');
+  await expect(page.locator('#paperTaskList .paper-task-title')).toHaveText('Newest queued paper');
+  await expect(page.locator('#paperTaskCount')).toHaveText('1');
+  await expect(page.locator('#readPaperList')).toContainText('No matching read papers.');
+  await expect(page.locator('#readPaperCount')).toHaveText('0');
+  await page.locator('#paperFilterInput').fill('');
+
+  await openCreateEventDialog(page);
+  await page.locator('#eventTitle').fill('read session');
+  await expect(page.locator('.paper-assignment-option')).toHaveCount(2);
+  await expect(page.locator('.paper-assignment-option').first()).toContainText('Newest queued paper');
+  await expect(page.locator('.paper-assignment-option').nth(1)).toContainText('Queued paper');
+  await expect(page.locator('.paper-assignment-option').filter({ hasText: /^Read paper$/ })).toHaveCount(0);
+});
+
 test('p opens Add paper modal and Enter submits', async ({ page }) => {
   await page.goto('/');
   await page.keyboard.press('p');
@@ -891,6 +966,38 @@ test('p opens Add paper modal and Enter submits', async ({ page }) => {
   await page.keyboard.press('Enter');
   await expect(page.locator('#paperModal')).not.toHaveClass(/is-open/);
   await expect(page.locator('.paper-task-title')).toHaveText('A paper title');
+});
+
+test('Edit displays paper identity and updates notes and tags', async ({ page }) => {
+  await page.goto('/');
+  await page.keyboard.press('p');
+  await page.locator('#paperModalInput').fill('Original paper title');
+  await page.keyboard.press('Enter');
+
+  await page.getByRole('button', { name: 'Edit Original paper title' }).click();
+  await expect(page.locator('#paperDialogTitle')).toHaveText('Edit paper');
+  await expect(page.locator('#paperModalInputField')).toBeHidden();
+  await expect(page.locator('#paperEditTitle')).toHaveText('Original paper title');
+  await page.locator('#paperNoteInput').fill('Compare this with the baseline results.');
+  await page.locator('#paperTagsInput').fill('evaluation, LLM, evaluation');
+  await page.locator('#paperModalSubmit').click();
+
+  await expect(page.locator('#paperModal')).not.toHaveClass(/is-open/);
+  await expect(page.locator('.paper-task-title')).toHaveText('Original paper title');
+  await expect(page.locator('.paper-task-note')).toHaveText('Compare this with the baseline results.');
+  await expect(page.locator('.paper-task-tag')).toHaveText(['evaluation', 'LLM']);
+  await expect(page.locator('.paper-task-tag').nth(0)).toHaveAttribute('style', /rebeccapurple/);
+  await expect(page.locator('.paper-task-tag').nth(1)).toHaveAttribute('style', /crimson/);
+
+  await page.getByRole('button', { name: 'Edit Original paper title' }).click();
+  await expect(page.locator('#paperNoteInput')).toHaveValue('Compare this with the baseline results.');
+  await expect(page.locator('#paperTagsInput')).toHaveValue('evaluation, LLM');
+  await expect(page.locator('.paper-tag-suggestion')).toHaveText(['evaluation', 'LLM']);
+  await page.locator('#paperTagsInput').fill('');
+  await page.getByRole('button', { name: 'evaluation', exact: true }).click();
+  await expect(page.locator('#paperTagsInput')).toHaveValue('evaluation');
+  await page.getByRole('button', { name: 'Delete', exact: true }).click();
+  await expect(page.locator('.paper-task-title')).toHaveCount(0);
 });
 
 test('paper URLs fall back to static source links when metadata is unavailable', async ({ page }) => {
@@ -937,6 +1044,8 @@ test('arXiv URLs load metadata through the Cloudflare Worker proxy', async ({ pa
             <published>2025-05-23T00:00:00Z</published>
             <author><name>Ada Lovelace</name></author>
             <author><name>Alan Turing</name></author>
+            <author><name>Grace Hopper</name></author>
+            <author><name>Katherine Johnson</name></author>
             <link href="https://arxiv.org/abs/2505.17716v1" rel="alternate" type="text/html"/>
             <link title="pdf" href="https://arxiv.org/pdf/2505.17716v1" rel="related" type="application/pdf"/>
           </entry>
@@ -950,9 +1059,14 @@ test('arXiv URLs load metadata through the Cloudflare Worker proxy', async ({ pa
   await page.locator('#paperModalForm').getByRole('button', { name: 'Add papers' }).click();
 
   await expect(page.locator('.paper-task-title')).toHaveText('Useful Paper Title');
-  await expect(page.locator('.paper-task-meta')).toContainText('Ada Lovelace, Alan Turing');
-  await expect(page.locator('.paper-task-summary')).toHaveText('A useful abstract.');
+  await expect(page.locator('.paper-task-meta')).toContainText('Ada Lovelace, Alan Turing, …, Katherine Johnson');
+  await expect(page.locator('.paper-task-summary')).toHaveCount(0);
   await expect(page.getByRole('link', { name: 'PDF' })).toHaveAttribute('href', 'https://arxiv.org/pdf/2505.17716v1');
+  await expect(page.locator('.paper-task-actions')).toHaveCSS('justify-self', 'end');
+
+  await page.getByRole('button', { name: 'Edit Useful Paper Title' }).click();
+  await expect(page.locator('#paperEditTitle')).toHaveText('Useful Paper Title');
+  await expect(page.locator('#paperEditSource')).toHaveAttribute('href', 'https://arxiv.org/abs/2505.17716v1');
 });
 
 test('creating every weekday recurring event skips weekends', async ({ page }) => {
@@ -1031,7 +1145,21 @@ test('read event matching is case-insensitive, colon optional, and preserves cas
   await expect(page.locator('.event-chip').filter({ hasText: 'READ: Paper A' })).toBeVisible();
 });
 
-test('assigning paper updates non-recurring read event title and removes paper task', async ({ page }) => {
+test('an exact-title read event automatically moves its paper to Read papers', async ({ page }) => {
+  await page.goto('/');
+  await page.keyboard.press('p');
+  await page.locator('#paperModalInput').fill('How much do language models memorize?');
+  await page.keyboard.press('Enter');
+
+  await openCreateEventDialog(page);
+  await page.locator('#eventTitle').fill('Read: How much do language models memorize?');
+  await page.getByRole('button', { name: 'Save' }).click();
+
+  await expect(page.locator('#paperTaskList .paper-task-title')).toHaveCount(0);
+  await expect(page.locator('#readPaperList .paper-task-title')).toHaveText('How much do language models memorize?');
+});
+
+test('assigning paper updates a read event and moves the paper to Read papers', async ({ page }) => {
   await page.goto('/');
   await page.keyboard.press('p');
   await page.locator('#paperModalInput').fill('Paper A');
@@ -1044,10 +1172,14 @@ test('assigning paper updates non-recurring read event title and removes paper t
   await page.getByRole('button', { name: 'Save' }).click();
 
   await expect(page.locator('.event-chip').filter({ hasText: 'read: Paper A' })).toBeVisible();
-  await expect(page.locator('.paper-task-title')).toHaveCount(0);
+  await expect(page.locator('#paperTaskList .paper-task-title')).toHaveCount(0);
+  await expect(page.locator('#readPaperList .paper-task-title')).toHaveText('Paper A');
 
   await page.locator('.event-chip').filter({ hasText: 'read: Paper A' }).click();
-  await expect(page.locator('.paper-assignment-option').filter({ hasText: 'Paper A' }).locator('input')).toBeChecked();
+  await expect(page.locator('.paper-assignment-option').filter({ hasText: 'Paper A' })).toHaveCount(0);
+  await expect(page.locator('#eventPaperAssignment')).toContainText('No paper tasks yet');
+  await page.getByRole('button', { name: 'Save' }).click();
+  await expect(page.locator('.event-chip').filter({ hasText: 'read: Paper A' })).toBeVisible();
 });
 
 test('assigning paper to recurring read event updates only selected instance', async ({ page }) => {
@@ -1072,7 +1204,8 @@ test('assigning paper to recurring read event updates only selected instance', a
   await expect(page.locator('.day-cell[data-date="2026-07-02"] .event-chip').filter({ hasText: 'read session' })).toBeVisible();
   await expect(page.locator('.day-cell[data-date="2026-07-03"] .event-chip').filter({ hasText: 'read: Paper A' })).toBeVisible();
   await expect(page.locator('.day-cell[data-date="2026-07-06"] .event-chip').filter({ hasText: 'read session' })).toBeVisible();
-  await expect(page.locator('.paper-task-title')).toHaveCount(0);
+  await expect(page.locator('#paperTaskList .paper-task-title')).toHaveCount(0);
+  await expect(page.locator('#readPaperList .paper-task-title')).toHaveText('Paper A');
 });
 
 test('deleting assigned read event restores paper task', async ({ page }) => {
@@ -1085,10 +1218,12 @@ test('deleting assigned read event restores paper task', async ({ page }) => {
   await page.locator('#eventTitle').fill('read session');
   await page.locator('.paper-assignment-option').filter({ hasText: 'Paper A' }).locator('input').check();
   await page.getByRole('button', { name: 'Save' }).click();
-  await expect(page.locator('.paper-task-title')).toHaveCount(0);
+  await expect(page.locator('#paperTaskList .paper-task-title')).toHaveCount(0);
+  await expect(page.locator('#readPaperList .paper-task-title')).toHaveText('Paper A');
 
   await page.locator('.event-chip').filter({ hasText: 'read: Paper A' }).click();
   await page.keyboard.press('Backspace');
   await expect(page.locator('.event-chip').filter({ hasText: 'read: Paper A' })).toHaveCount(0);
-  await expect(page.locator('.paper-task-title')).toHaveText('Paper A');
+  await expect(page.locator('#paperTaskList .paper-task-title')).toHaveText('Paper A');
+  await expect(page.locator('#readPaperList .paper-task-title')).toHaveCount(0);
 });

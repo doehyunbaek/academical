@@ -39,10 +39,13 @@
 
         <div class="topbar-spacer"></div>
 
-        <label class="search-box" for="searchInput">
-          <span aria-hidden="true">⌕</span>
-          <input id="searchInput" type="search" placeholder="Search" autocomplete="off" />
-        </label>
+        <div class="search-shell">
+          <label class="search-box" for="searchInput">
+            <span aria-hidden="true">⌕</span>
+            <input id="searchInput" type="search" placeholder="Search" autocomplete="off" aria-controls="searchResults" aria-autocomplete="list" />
+          </label>
+          <div class="search-results" id="searchResults" role="listbox" aria-label="Matching events" hidden></div>
+        </div>
 
         <select class="view-select" id="viewSelect" aria-label="Calendar view">
           <option value="deadlines">Deadlines</option>
@@ -98,15 +101,20 @@
           </div>
 
           <div class="sidebar-panel" data-panel="papers" hidden>
-            <section class="sidebar-section" aria-labelledby="paperTasksTitle">
-              <h2 id="paperTasksTitle">Paper tasks <span class="section-count" id="paperTaskCount">0</span></h2>
-              <form class="paper-task-form" id="paperTaskForm">
-                <label class="sr-only" for="paperTaskInput">Paper titles</label>
-                <textarea id="paperTaskInput" rows="4" placeholder="Paste paper titles, one per line"></textarea>
-                <button class="button button--primary paper-task-submit" type="submit">Add papers</button>
-              </form>
-              <div class="paper-task-list" id="paperTaskList"></div>
-            </section>
+            <label class="paper-filter" for="paperFilterInput">
+              <span aria-hidden="true">⌕</span>
+              <input id="paperFilterInput" type="search" placeholder="Filter papers" autocomplete="off" />
+            </label>
+            <div class="paper-queue-columns">
+              <section class="sidebar-section paper-queue" aria-labelledby="readPapersTitle">
+                <h2 id="readPapersTitle">Read papers <span class="section-count" id="readPaperCount">0</span></h2>
+                <div class="paper-task-list" id="readPaperList"></div>
+              </section>
+              <section class="sidebar-section paper-queue" aria-labelledby="paperTasksTitle">
+                <h2 id="paperTasksTitle">Paper tasks <span class="section-count" id="paperTaskCount">0</span></h2>
+                <div class="paper-task-list" id="paperTaskList"></div>
+              </section>
+            </div>
           </div>
 
           <div class="sidebar-panel" data-panel="analysis" hidden>
@@ -225,15 +233,37 @@
           <button class="icon-button" id="closePaperModal" type="button" aria-label="Close add paper dialog">×</button>
         </header>
 
-        <label class="field" for="paperModalInput">
-          <span>Paper titles or arXiv URLs</span>
+        <label class="field" id="paperModalInputField" for="paperModalInput">
+          <span id="paperModalFieldLabel">Paper titles or arXiv URLs</span>
           <textarea id="paperModalInput" rows="7" placeholder="Paste paper titles or arXiv URLs, one per line&#10;Enter to add · Shift+Enter for newline&#10;https://arxiv.org/pdf/2505.17716"></textarea>
         </label>
 
+        <div class="paper-edit-identity" id="paperEditIdentity" hidden>
+          <span>Paper</span>
+          <strong id="paperEditTitle"></strong>
+          <a id="paperEditSource" target="_blank" rel="noreferrer" hidden></a>
+        </div>
+
+        <div class="paper-edit-fields" id="paperEditFields" hidden>
+          <label class="field" for="paperNoteInput">
+            <span>Note</span>
+            <textarea id="paperNoteInput" rows="4" placeholder="Add a personal note about this paper"></textarea>
+          </label>
+          <label class="field" for="paperTagsInput">
+            <span>Tags</span>
+            <input id="paperTagsInput" type="text" placeholder="memorization, evaluation, llm" autocomplete="off" />
+          </label>
+          <div class="paper-tag-suggestions" id="paperTagSuggestions" hidden>
+            <span>Existing tags</span>
+            <div id="paperTagSuggestionList"></div>
+          </div>
+        </div>
+
         <footer class="event-dialog-footer">
+          <button class="button button--danger" id="deletePaper" type="button" hidden>Delete</button>
           <span class="footer-spacer"></span>
           <button class="button" id="cancelPaperModal" type="button">Cancel</button>
-          <button class="button button--primary" type="submit">Add papers</button>
+          <button class="button button--primary" id="paperModalSubmit" type="submit">Add papers</button>
         </footer>
       </form>
     </div>
