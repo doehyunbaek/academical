@@ -22,7 +22,7 @@ Open <http://localhost:8000>.
 - Repeating events: daily, weekly, and every weekday
 - Deleting a recurring event occurrence removes only that instance; `Delete recurring` removes the full series
 - Search events
-- Paper task queue: paste paper titles, arXiv URLs, or Semantic Scholar URLs; store source IDs/links browser-side; track done status; assign papers to events whose first four characters are `read`; assigned papers update the event title, leave the task queue, and return if the assigned event is deleted
+- Paper task queue: paste paper titles, arXiv URLs, or Semantic Scholar URLs; arXiv entries load title, authors, abstract, and dates through a Cloudflare Worker proxy (with static-link fallback); track done status; assign papers to events whose first four characters are `read`; assigned papers update the event title, leave the task queue, and return if the assigned event is deleted
 - Toggle calendar categories, drag-and-drop reorder calendars, edit calendar name/color with an Edit calendar modal, use the 16 CSS basic colors plus `transparent` and `rebeccapurple`, open a Create calendar modal from the always-visible `+` button, create blank calendars or import `.ics` files, archive each calendar with its hover-only row-level `×` action, expand/collapse Archived calendars, select archived calendars for viewing/analysis, restore archived calendars, or permanently delete them
 - Events persist in `localStorage`
 - Optional Firebase Google sign-in sync for events, imported calendars, calendar names/colors/order, paper tasks, and calendar visibility
@@ -51,4 +51,27 @@ Firestore path:
 
 ```text
 users/{uid}/academical/state
+```
+
+## arXiv metadata proxy
+
+`worker/index.js` provides a Cloudflare Worker that validates an arXiv ID, fetches the Atom feed server-side, caches successful responses, and enables CORS for the static GitHub Pages client.
+
+Authenticate and deploy it on the Cloudflare Workers free plan:
+
+```bash
+npx wrangler login
+npx wrangler deploy
+```
+
+Wrangler prints a URL similar to:
+
+```text
+https://academical-arxiv.YOUR-SUBDOMAIN.workers.dev
+```
+
+Copy that URL into `arxivMetadataUrl` in `google-api-config.js`. Test the deployed proxy with:
+
+```bash
+curl 'https://academical-arxiv.YOUR-SUBDOMAIN.workers.dev/?id=2505.17716'
 ```

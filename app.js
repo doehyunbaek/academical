@@ -1860,8 +1860,10 @@ async function addPaperTasksFromInput(event) {
   const createdAt = new Date().toISOString();
   const newTasks = [];
 
-  for (const paperInput of inputs) {
-    const metadata = createStaticPaperMetadata(paperInput);
+  const resolvedPapers = await Promise.all(inputs.map(resolvePaperMetadata));
+
+  for (const [index, paperInput] of inputs.entries()) {
+    const metadata = resolvedPapers[index];
     const title = metadata?.title ?? paperInput;
     const task = {
       id: makeId(),
@@ -1959,6 +1961,51 @@ function getSemanticScholarTitleFallback(input, paperId) {
   const slug = input.match(/semanticscholar\.org\/paper\/([^/]+)\//i)?.[1];
   if (!slug) return `Semantic Scholar:${paperId.slice(0, 8)}`;
   return slug.replace(/-/g, " ");
+}
+
+async function resolvePaperMetadata(input) {
+  const fallback = createStaticPaperMetadata(input);
+  if (!fallback?.arxivId) return fallback;
+
+  const endpoint = window.ACADEMICAL_GOOGLE_CONFIG?.arxivMetadataUrl;
+  if (!endpoint) return fallback;
+
+  try {
+    const url = new URL(endpoint, window.location.origin);
+    url.searchParams.set("id", fallback.arxivId);
+    const response = await fetch(url, { headers: { Accept: "application/atom+xml" } });
+    if (!response.ok) throw new Error(`Metadata request failed (${response.status})`);
+    return parseArxivMetadata(await response.text(), fallback);
+  } catch (error) {
+    console.warn(`Could not load arXiv metadata for ${fallback.arxivId}:`, error);
+    return fallback;
+  }
+}
+
+function parseArxivMetadata(xml, fallback) {
+  const documentNode = new DOMParser().parseFromString(xml, "application/xml");
+  const entry = documentNode.getElementsByTagName("entry")[0];
+  if (!entry || documentNode.getElementsByTagName("parsererror").length) {
+    throw new Error("arXiv returned invalid metadata");
+  }
+
+  const text = (tagName) => cleanPaperText(entry.getElementsByTagName(tagName)[0]?.textContent ?? "");
+  const authors = [...entry.getElementsByTagName("author")]
+    .map((author) => cleanPaperText(author.getElementsByTagName("name")[0]?.textContent ?? ""))
+    .filter(Boolean);
+  const links = [...entry.getElementsByTagName("link")];
+  const alternateLink = links.find((link) => link.getAttribute("rel") === "alternate")?.getAttribute("href");
+  const pdfLink = links.find((link) => link.getAttribute("title") === "pdf")?.getAttribute("href");
+
+  return {
+    ...fallback,
+    title: text("title") || fallback.title,
+    authors,
+    summary: text("summary"),
+    published: text("published"),
+    absUrl: alternateLink || fallback.absUrl,
+    pdfUrl: pdfLink || fallback.pdfUrl,
+  };
 }
 
 function cleanPaperText(value) {

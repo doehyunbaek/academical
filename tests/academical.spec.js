@@ -893,14 +893,14 @@ test('p opens Add paper modal and Enter submits', async ({ page }) => {
   await expect(page.locator('.paper-task-title')).toHaveText('A paper title');
 });
 
-test('paper URLs are stored as static source links without external API calls', async ({ page }) => {
-  let externalCalled = false;
+test('paper URLs fall back to static source links when metadata is unavailable', async ({ page }) => {
+  let directExternalCalled = false;
   await page.route('https://api.semanticscholar.org/**', async (route) => {
-    externalCalled = true;
+    directExternalCalled = true;
     await route.abort('failed');
   });
   await page.route('https://export.arxiv.org/**', async (route) => {
-    externalCalled = true;
+    directExternalCalled = true;
     await route.abort('failed');
   });
 
@@ -915,7 +915,44 @@ test('paper URLs are stored as static source links without external API calls', 
   await expect(page.locator('.paper-task-title')).toHaveCount(2);
   await expect(page.locator('.paper-task-meta').filter({ hasText: 'arXiv:2505.17716' })).toBeVisible();
   await expect(page.locator('.paper-task-meta').filter({ hasText: 'S2:206e3b19' })).toBeVisible();
-  expect(externalCalled).toBe(false);
+  expect(directExternalCalled).toBe(false);
+});
+
+test('arXiv URLs load metadata through the Cloudflare Worker proxy', async ({ page }) => {
+  await page.route('**/google-api-config.js', (route) => route.fulfill({
+    contentType: 'application/javascript',
+    body: 'window.ACADEMICAL_GOOGLE_CONFIG = { arxivMetadataUrl: "https://academical-arxiv.example.workers.dev" };',
+  }));
+  await page.route(/workers\.dev/, async (route) => {
+    expect(new URL(route.request().url()).searchParams.get('id')).toBe('2505.17716');
+    await route.fulfill({
+      status: 200,
+      contentType: 'application/atom+xml; charset=utf-8',
+      body: `<?xml version="1.0" encoding="UTF-8"?>
+        <feed xmlns="http://www.w3.org/2005/Atom">
+          <entry>
+            <id>https://arxiv.org/abs/2505.17716v1</id>
+            <title>Useful Paper Title</title>
+            <summary>A useful abstract.</summary>
+            <published>2025-05-23T00:00:00Z</published>
+            <author><name>Ada Lovelace</name></author>
+            <author><name>Alan Turing</name></author>
+            <link href="https://arxiv.org/abs/2505.17716v1" rel="alternate" type="text/html"/>
+            <link title="pdf" href="https://arxiv.org/pdf/2505.17716v1" rel="related" type="application/pdf"/>
+          </entry>
+        </feed>`,
+    });
+  });
+
+  await page.goto('/');
+  await page.keyboard.press('p');
+  await page.locator('#paperModalInput').fill('https://arxiv.org/abs/2505.17716');
+  await page.locator('#paperModalForm').getByRole('button', { name: 'Add papers' }).click();
+
+  await expect(page.locator('.paper-task-title')).toHaveText('Useful Paper Title');
+  await expect(page.locator('.paper-task-meta')).toContainText('Ada Lovelace, Alan Turing');
+  await expect(page.locator('.paper-task-summary')).toHaveText('A useful abstract.');
+  await expect(page.getByRole('link', { name: 'PDF' })).toHaveAttribute('href', 'https://arxiv.org/pdf/2505.17716v1');
 });
 
 test('creating every weekday recurring event skips weekends', async ({ page }) => {
