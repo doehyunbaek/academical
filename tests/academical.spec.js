@@ -765,7 +765,9 @@ test('clicking week view slots creates events at 15 minute granularity', async (
   await expect(hoverSelection).toHaveAttribute('data-duration-minutes', '60');
   await expect(hoverSelection).toHaveCSS('height', '70px');
 
-  await slot.click({ position: { x: 12, y: 55 } });
+  await page.mouse.down();
+  await expect(page.locator('.week-drag-selection')).toBeHidden();
+  await page.mouse.up();
 
   await expect(page.locator('#eventModal')).toHaveClass(/is-open/);
   await expect(page.locator('#eventTime')).toHaveValue('09:45');
@@ -848,13 +850,29 @@ test('dragging a timed week event moves its date and 15 minute position', async 
   await expect(page.locator('.week-day-column[data-date="2026-07-03"] .week-timed-event').filter({ hasText: 'CS seminar prep' })).toBeVisible();
 });
 
-test('event dialog end time controls duration and digit shortcuts set hour duration', async ({ page }) => {
+test('event dialog end time controls duration and keyboard shortcuts adjust time and duration', async ({ page }) => {
   await page.goto('/');
 
   await page.locator('.event-chip').filter({ hasText: 'Reading group' }).click();
   await expect(page.locator('#eventDialogTitle')).toHaveText('Edit event');
   await expect(page.locator('#eventTime')).toHaveValue('14:00');
   await expect(page.locator('#eventEndTime')).toHaveValue('15:00');
+
+  await page.keyboard.press('-');
+  await expect(page.locator('#eventTime')).toHaveValue('14:00');
+  await expect(page.locator('#eventEndTime')).toHaveValue('14:45');
+  await page.keyboard.press('=');
+  await expect(page.locator('#eventTime')).toHaveValue('14:00');
+  await expect(page.locator('#eventEndTime')).toHaveValue('15:00');
+  await page.keyboard.press('0');
+  await expect(page.locator('#eventTime')).toHaveValue('14:00');
+  await expect(page.locator('#eventEndTime')).toHaveValue('14:00');
+  await expect(page.locator('#eventDurationMinutes')).toHaveValue('0');
+  await page.keyboard.press('=');
+  await expect(page.locator('#eventTime')).toHaveValue('14:00');
+  await expect(page.locator('#eventEndTime')).toHaveValue('14:15');
+  await page.locator('#eventTime').fill('14:00');
+  await page.locator('#eventDialogTitle').click();
 
   await page.keyboard.press('2');
   await expect(page.locator('#eventTime')).toHaveValue('14:00');

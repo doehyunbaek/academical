@@ -612,6 +612,12 @@ function bindEvents() {
       } else if (event.key === "Backspace" && els.eventId.value && !isTypingTarget(event.target)) {
         event.preventDefault();
         deleteActiveEvent();
+      } else if (event.key === "0" && !isTypingTarget(event.target)) {
+        event.preventDefault();
+        setEventDurationHoursShortcut(0);
+      } else if (["-", "="].includes(event.key) && !isTypingTarget(event.target)) {
+        event.preventDefault();
+        adjustEventEndTimeShortcut(event.key === "=" ? WEEK_SLOT_GRANULARITY_MINUTES : -WEEK_SLOT_GRANULARITY_MINUTES);
       } else if (/^[1-9]$/.test(event.key) && !isTypingTarget(event.target)) {
         event.preventDefault();
         setEventDurationHoursShortcut(Number(event.key));
@@ -2907,12 +2913,12 @@ function getOccurrenceDateTimeRange(event) {
 function getOccurrenceDurationMinutes(event = {}) {
   event = event || {};
   const durationMinutes = Number(event.durationMinutes);
-  return Number.isFinite(durationMinutes) && durationMinutes > 0 ? durationMinutes : DEFAULT_EVENT_DURATION_MINUTES;
+  return Number.isFinite(durationMinutes) && durationMinutes >= 0 ? durationMinutes : DEFAULT_EVENT_DURATION_MINUTES;
 }
 
 function getEventDialogDurationMinutes() {
   const durationMinutes = Number(els.eventDurationMinutes.value);
-  return Number.isFinite(durationMinutes) && durationMinutes > 0 ? durationMinutes : DEFAULT_EVENT_DURATION_MINUTES;
+  return Number.isFinite(durationMinutes) && durationMinutes >= 0 ? durationMinutes : DEFAULT_EVENT_DURATION_MINUTES;
 }
 
 function getOccurrenceDurationHours(event = {}) {
@@ -3766,6 +3772,7 @@ function startWeekRangeDrag(event, date) {
   hideWeekHoverSelection(column);
   const selection = document.createElement("div");
   selection.className = "week-drag-selection";
+  selection.hidden = true;
   column.append(selection);
 
   activeWeekRangeDrag = {
@@ -3793,6 +3800,7 @@ function handleWeekRangeDragMove(event) {
   const distance = Math.hypot(event.clientX - activeWeekRangeDrag.startX, event.clientY - activeWeekRangeDrag.startY);
   activeWeekRangeDrag.moved = activeWeekRangeDrag.moved || distance > 4 || nextMinutes !== activeWeekRangeDrag.startMinutes;
   activeWeekRangeDrag.endMinutes = nextMinutes;
+  activeWeekRangeDrag.selection.hidden = !activeWeekRangeDrag.moved;
   updateWeekRangeDragSelection(activeWeekRangeDrag);
 }
 
@@ -4121,12 +4129,23 @@ function updateEventDurationFromEndTime() {
 
   const startMinutes = timeToMinutes(els.eventTime.value);
   let endMinutes = timeToMinutes(els.eventEndTime.value);
-  if (endMinutes <= startMinutes) {
+  if (endMinutes < startMinutes) {
     endMinutes = Math.min(23 * 60 + 59, startMinutes + WEEK_SLOT_GRANULARITY_MINUTES);
     els.eventEndTime.value = formatMinutesInput(endMinutes);
   }
 
-  els.eventDurationMinutes.value = String(Math.max(WEEK_SLOT_GRANULARITY_MINUTES, endMinutes - startMinutes));
+  els.eventDurationMinutes.value = String(Math.max(0, endMinutes - startMinutes));
+}
+
+function adjustEventEndTimeShortcut(minutes) {
+  if (!els.eventTime.value) return;
+
+  const startMinutes = timeToMinutes(els.eventTime.value);
+  const endMinutes = els.eventEndTime.value ? timeToMinutes(els.eventEndTime.value) : startMinutes;
+  const adjustedEndMinutes = Math.min(23 * 60 + 59, Math.max(startMinutes, endMinutes + minutes));
+  els.eventEndTime.value = formatMinutesInput(adjustedEndMinutes);
+  els.eventDurationMinutes.value = String(adjustedEndMinutes - startMinutes);
+  showToast(`End time ${formatTime(els.eventEndTime.value)}`);
 }
 
 function setEventDurationHoursShortcut(hours) {
