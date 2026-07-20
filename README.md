@@ -22,7 +22,7 @@ Open <http://localhost:8000>.
 - Repeating events: daily, weekly, and every weekday
 - Deleting a recurring event occurrence removes only that instance; `Delete recurring` removes the full series
 - Search events
-- Paper task queue: paste paper titles, arXiv URLs, or Semantic Scholar URLs; arXiv entries load title, authors, abstract, and dates through a Cloudflare Worker proxy (with static-link fallback); track queued and read papers separately; assign papers to events whose first four characters are `read`; assigned or exact-title-matched papers move to Read papers and return to the queue if the assigned event is deleted
+- Paper task queue: paste paper titles, arXiv URLs, ACM Digital Library URLs, or Semantic Scholar URLs; arXiv and ACM entries load title, authors, abstract, and dates through a Cloudflare Worker metadata proxy (with static-link fallback); track queued and read papers separately; assign papers to events whose first four characters are `read`; assigned or exact-title-matched papers move to Read papers and return to the queue if the assigned event is deleted
 - Toggle calendar categories, drag-and-drop reorder calendars, edit calendar name/color with an Edit calendar modal, use the 16 CSS basic colors plus `transparent` and `rebeccapurple`, open a Create calendar modal from the always-visible `+` button, create blank calendars or import `.ics` files, archive each calendar with its hover-only row-level `×` action, expand/collapse Archived calendars, select archived calendars for viewing/analysis, restore archived calendars, or permanently delete them
 - Events persist in `localStorage`
 - Optional Firebase Google sign-in sync for events, imported calendars, calendar names/colors/order, paper tasks, and calendar visibility
@@ -53,9 +53,9 @@ Firestore path:
 users/{uid}/academical/state
 ```
 
-## arXiv metadata proxy
+## Paper metadata proxy
 
-`worker/index.js` provides a Cloudflare Worker that validates an arXiv ID, fetches the Atom feed server-side, caches successful responses, and enables CORS for the static GitHub Pages client.
+`worker/index.js` provides a Cloudflare Worker that validates and proxies arXiv metadata, and resolves ACM Digital Library DOIs through Crossref. It caches successful responses and enables CORS for the static GitHub Pages client.
 
 Authenticate and deploy it on the Cloudflare Workers free plan:
 
@@ -70,8 +70,9 @@ Wrangler prints a URL similar to:
 https://academical-arxiv.YOUR-SUBDOMAIN.workers.dev
 ```
 
-Copy that URL into `arxivMetadataUrl` in `google-api-config.js`. Test the deployed proxy with:
+Copy that URL into `paperMetadataUrl` (preferred) or the backwards-compatible `arxivMetadataUrl` in `google-api-config.js`. Test the deployed proxy with:
 
 ```bash
 curl 'https://academical-arxiv.YOUR-SUBDOMAIN.workers.dev/?id=2505.17716'
+curl 'https://academical-arxiv.YOUR-SUBDOMAIN.workers.dev/?doi=10.1145%2F3728973'
 ```

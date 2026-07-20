@@ -1786,7 +1786,7 @@ function makeCustomCalendarId(name) {
 function openPaperModal(task = null) {
   editingPaperTaskId = task?.id ?? "";
   document.querySelector("#paperDialogTitle").textContent = task ? "Edit paper" : "Add paper";
-  els.paperModalFieldLabel.textContent = "Paper titles or arXiv URLs";
+  els.paperModalFieldLabel.textContent = "Paper titles, arXiv URLs, or ACM DL URLs";
   els.paperModalSubmit.textContent = task ? "Save" : "Add papers";
   els.deletePaper.hidden = !task;
   els.paperModalInput.value = "";
@@ -1885,6 +1885,7 @@ function paperMatchesFilter(task) {
     task.title,
     ...(metadata.authors ?? []),
     metadata.arxivId,
+    metadata.doi,
     metadata.semanticScholarId,
     metadata.summary,
     task.note,
@@ -1996,7 +1997,11 @@ function formatPaperMetadata(metadata) {
   const authorList = formatPaperAuthors(metadata.authors ?? []);
   const authors = authorList ? ` · ${authorList}` : "";
   const published = metadata.published ? ` · ${metadata.published.slice(0, 10)}` : "";
-  const source = metadata.source === "semantic-scholar" ? `S2:${metadata.semanticScholarId?.slice(0, 8)}` : `arXiv:${metadata.arxivId}`;
+  const source = metadata.source === "semantic-scholar"
+    ? `S2:${metadata.semanticScholarId?.slice(0, 8)}`
+    : metadata.source === "acm"
+      ? `ACM:${metadata.doi}`
+      : `arXiv:${metadata.arxivId}`;
   return `${source}${authors}${published}`;
 }
 
@@ -2092,6 +2097,7 @@ function parsePaperTags(value) {
 
 function getPaperTaskKey(task) {
   if (task.metadata?.arxivId) return `arxiv:${task.metadata.arxivId.toLowerCase()}`;
+  if (task.metadata?.doi) return `doi:${task.metadata.doi.toLowerCase()}`;
   if (task.metadata?.semanticScholarId) return `s2:${task.metadata.semanticScholarId.toLowerCase()}`;
   return `title:${task.title.toLowerCase()}`;
 }
@@ -2107,6 +2113,15 @@ function extractArxivId(input) {
 
 function normalizeArxivId(value) {
   return value.replace(/\.pdf$/i, "").replace(/^arxiv:/i, "");
+}
+
+function extractAcmDoi(input) {
+  const value = input.trim();
+  const urlMatch = value.match(/(?:dl\.acm\.org\/doi\/(?:abs\/|pdf\/|epdf\/|full\/)?|doi\.org\/)(10\.1145\/\d+(?:\.\d+)*)(?:[/?#]|$)/i);
+  if (urlMatch) return urlMatch[1].toLowerCase();
+
+  const doiMatch = value.match(/\b(10\.1145\/\d+(?:\.\d+)*)\b/i);
+  return doiMatch ? doiMatch[1].toLowerCase() : null;
 }
 
 function extractSemanticScholarPaperId(input) {
@@ -2130,6 +2145,20 @@ function createStaticPaperMetadata(input) {
       published: "",
       absUrl: `https://arxiv.org/abs/${arxivId}`,
       pdfUrl: `https://arxiv.org/pdf/${arxivId}`,
+    };
+  }
+
+  const doi = extractAcmDoi(input);
+  if (doi) {
+    return {
+      source: "acm",
+      doi,
+      title: `ACM:${doi}`,
+      authors: [],
+      summary: "",
+      published: "",
+      absUrl: `https://dl.acm.org/doi/abs/${doi}`,
+      pdfUrl: `https://dl.acm.org/doi/pdf/${doi}`,
     };
   }
 
@@ -2158,21 +2187,46 @@ function getSemanticScholarTitleFallback(input, paperId) {
 
 async function resolvePaperMetadata(input) {
   const fallback = createStaticPaperMetadata(input);
-  if (!fallback?.arxivId) return fallback;
+  if (!fallback?.arxivId && !fallback?.doi) return fallback;
 
-  const endpoint = window.ACADEMICAL_GOOGLE_CONFIG?.arxivMetadataUrl;
+  const endpoint = window.ACADEMICAL_GOOGLE_CONFIG?.paperMetadataUrl
+    || window.ACADEMICAL_GOOGLE_CONFIG?.arxivMetadataUrl;
   if (!endpoint) return fallback;
 
   try {
     const url = new URL(endpoint, window.location.origin);
-    url.searchParams.set("id", fallback.arxivId);
-    const response = await fetch(url, { headers: { Accept: "application/atom+xml" } });
+    if (fallback.arxivId) {
+      url.searchParams.set("id", fallback.arxivId);
+      const response = await fetch(url, { headers: { Accept: "application/atom+xml" } });
+      if (!response.ok) throw new Error(`Metadata request failed (${response.status})`);
+      return parseArxivMetadata(await response.text(), fallback);
+    }
+
+    url.searchParams.set("doi", fallback.doi);
+    const response = await fetch(url, { headers: { Accept: "application/json" } });
     if (!response.ok) throw new Error(`Metadata request failed (${response.status})`);
-    return parseArxivMetadata(await response.text(), fallback);
+    return parseAcmMetadata(await response.json(), fallback);
   } catch (error) {
-    console.warn(`Could not load arXiv metadata for ${fallback.arxivId}:`, error);
+    const identifier = fallback.arxivId || fallback.doi;
+    console.warn(`Could not load paper metadata for ${identifier}:`, error);
     return fallback;
   }
+}
+
+function parseAcmMetadata(metadata, fallback) {
+  if (!metadata || metadata.source !== "acm" || !metadata.title) {
+    throw new Error("Worker returned invalid ACM metadata");
+  }
+
+  return {
+    ...fallback,
+    title: cleanPaperText(metadata.title) || fallback.title,
+    authors: Array.isArray(metadata.authors) ? metadata.authors.map(cleanPaperText).filter(Boolean) : [],
+    summary: cleanPaperText(metadata.summary || ""),
+    published: cleanPaperText(metadata.published || ""),
+    absUrl: metadata.absUrl || fallback.absUrl,
+    pdfUrl: metadata.pdfUrl || fallback.pdfUrl,
+  };
 }
 
 function parseArxivMetadata(xml, fallback) {

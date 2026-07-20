@@ -1087,6 +1087,45 @@ test('arXiv URLs load metadata through the Cloudflare Worker proxy', async ({ pa
   await expect(page.locator('#paperEditSource')).toHaveAttribute('href', 'https://arxiv.org/abs/2505.17716v1');
 });
 
+test('ACM DL URLs load Crossref metadata through the Cloudflare Worker proxy', async ({ page }) => {
+  await page.route('**/google-api-config.js', (route) => route.fulfill({
+    contentType: 'application/javascript',
+    body: 'window.ACADEMICAL_GOOGLE_CONFIG = { paperMetadataUrl: "https://academical-papers.example.workers.dev" };',
+  }));
+  await page.route(/workers\.dev/, async (route) => {
+    expect(new URL(route.request().url()).searchParams.get('doi')).toBe('10.1145/3728973');
+    expect(route.request().headers().accept).toBe('application/json');
+    await route.fulfill({
+      status: 200,
+      contentType: 'application/json; charset=utf-8',
+      body: JSON.stringify({
+        source: 'acm',
+        doi: '10.1145/3728973',
+        title: 'Hulk: Exploring Data-Sensitive Performance Anomalies in DBMSs via Data-Driven Analysis',
+        authors: ['Zhiyong Wu', 'Jie Liang', 'Jingzhou Fu', 'Mingzhe Wang', 'Yu Jiang'],
+        summary: 'A database performance testing paper.',
+        published: '2025-06-22',
+        absUrl: 'https://dl.acm.org/doi/abs/10.1145/3728973',
+        pdfUrl: 'https://dl.acm.org/doi/pdf/10.1145/3728973',
+      }),
+    });
+  });
+
+  await page.goto('/');
+  await page.keyboard.press('p');
+  await page.locator('#paperModalInput').fill('https://dl.acm.org/doi/abs/10.1145/3728973');
+  await page.locator('#paperModalForm').getByRole('button', { name: 'Add papers' }).click();
+
+  await expect(page.locator('.paper-task-title')).toContainText('Hulk: Exploring Data-Sensitive Performance Anomalies');
+  await expect(page.locator('.paper-task-meta')).toContainText('ACM:10.1145/3728973');
+  await expect(page.locator('.paper-task-meta')).toContainText('Zhiyong Wu, Jie Liang, …, Yu Jiang');
+  await expect(page.locator('.paper-task-meta')).toContainText('2025-06-22');
+  await expect(page.getByRole('link', { name: 'PDF' })).toHaveAttribute('href', 'https://dl.acm.org/doi/pdf/10.1145/3728973');
+
+  await page.getByRole('button', { name: /Edit Hulk:/ }).click();
+  await expect(page.locator('#paperEditSource')).toHaveAttribute('href', 'https://dl.acm.org/doi/abs/10.1145/3728973');
+});
+
 test('creating every weekday recurring event skips weekends', async ({ page }) => {
   await page.goto('/');
   await openCreateEventDialog(page);

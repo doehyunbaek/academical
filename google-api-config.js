@@ -7,6 +7,6 @@ window.ACADEMICAL_GOOGLE_CONFIG = {
     messagingSenderId: "53785424506",
     appId: "1:53785424506:web:9f9910d3c51480b6e901c3"
   },
-  arxivMetadataUrl: "https://academical-arxiv.doehyunbaek.workers.dev",
+  paperMetadataUrl: "https://academical-arxiv.doehyunbaek.workers.dev",
   scopes: ["profile", "email"],
 };
