@@ -1101,15 +1101,12 @@ textarea:focus-visible {
   overflow: hidden;
 }
 
-.month-grid--deadlines {
-  display: block;
-  padding: 28px 32px;
-  background: var(--surface);
-  overflow: auto;
+.sidebar-deadlines {
+  min-width: 0;
 }
 
 .deadline-view {
-  width: min(100%, 980px);
+  width: min(100%, 1100px);
   margin: 0 auto;
   display: grid;
   gap: 18px;

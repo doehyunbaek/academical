@@ -70,9 +70,8 @@ test('weeks start on Monday in month and week views', async ({ page }) => {
 test('keyboard shortcuts switch views and navigate periods', async ({ page }) => {
   await page.goto('/');
   await page.keyboard.press('1');
-  await expect(page.locator('#viewSelect')).toHaveValue('deadlines');
-  await expect(page.locator('#monthTitle')).toHaveText('Deadlines');
-  await expect(page.locator('.deadline-view')).toBeVisible();
+  await expect(page.locator('#viewSelect')).toHaveValue('heatmap');
+  await expect(page.locator('body')).toHaveClass(/view-heatmap/);
   await page.keyboard.press('2');
   await expect(page.locator('#viewSelect')).toHaveValue('week');
   await expect(page.locator('#monthTitle')).toHaveText('Jun 29 – Jul 5, 2026');
@@ -80,10 +79,10 @@ test('keyboard shortcuts switch views and navigate periods', async ({ page }) =>
   await expect(page.locator('#monthTitle')).toHaveText('July 6 – 12, 2026');
   await page.keyboard.press('4');
   await expect(page.locator('#viewSelect')).toHaveValue('four-week');
-  await page.keyboard.press('5');
+  await page.keyboard.press('1');
   await expect(page.locator('#viewSelect')).toHaveValue('heatmap');
   await expect(page.locator('body')).toHaveClass(/view-heatmap/);
-  await expect(page.locator('#monthTitle')).toHaveText('July 1 – 31, 2026');
+  await expect(page.locator('#monthTitle')).toHaveText('Jul 10, 2025 – Jul 10, 2026');
   await page.keyboard.press('3');
   await expect(page.locator('#viewSelect')).toHaveValue('month');
 });
@@ -108,12 +107,11 @@ test('four-week range title stays inline beside nav carets on compact header', a
   expect(titleMetrics.clientWidth).toBeGreaterThanOrEqual(titleMetrics.scrollWidth);
 });
 
-test('deadline view internalizes deadlines app entries', async ({ page }) => {
+test('Deadlines panel internalizes deadlines app entries', async ({ page }) => {
   await page.goto('/');
-  await page.keyboard.press('1');
+  await page.locator('.sidebar-tab[data-panel="deadlines"]').click();
 
-  await expect(page.locator('#viewSelect')).toHaveValue('deadlines');
-  await expect(page.locator('.weekday-row')).toBeHidden();
+  await expect(page.locator('.sidebar-panel[data-panel="deadlines"]')).toBeVisible();
   await expect(page.locator('.deadline-view-header')).toContainText('Research venue deadlines');
   await expect(page.locator('.deadline-card')).toHaveCount(11);
   await expect(page.locator('.deadline-card').first()).toContainText('ICSE 2027');
@@ -123,9 +121,9 @@ test('deadline view internalizes deadlines app entries', async ({ page }) => {
   await expect(page.locator('input[data-deadline-filter-tag="RPT"]')).not.toBeChecked();
 });
 
-test('deadline view filters by selected tags and persists the selection', async ({ page }) => {
+test('Deadlines panel filters by selected tags and persists the selection', async ({ page }) => {
   await page.goto('/');
-  await page.keyboard.press('1');
+  await page.locator('.sidebar-tab[data-panel="deadlines"]').click();
 
   await page.locator('input[data-deadline-filter-tag="JO"]').check();
   await expect(page.locator('.deadline-card')).toHaveCount(0);
@@ -136,19 +134,20 @@ test('deadline view filters by selected tags and persists the selection', async 
   await expect(page.locator('.deadline-card')).toHaveCount(11);
 
   await page.reload();
-  await page.keyboard.press('1');
+  await page.locator('.sidebar-tab[data-panel="deadlines"]').click();
   await expect(page.locator('input[data-deadline-filter-tag="CO"]')).toBeChecked();
   await expect(page.locator('.deadline-card')).toHaveCount(11);
 });
 
 test('heatmap view renders one square per day with worked-hour intensity', async ({ page }) => {
   await page.goto('/');
-  await page.keyboard.press('5');
+  await page.keyboard.press('1');
 
   await expect(page.locator('#viewSelect')).toHaveValue('heatmap');
   await expect(page.locator('.weekday-row')).toBeHidden();
-  await expect(page.locator('#monthTitle')).toHaveText('July 1 – 31, 2026');
-  await expect(page.locator('.heatmap-day')).toHaveCount(31);
+  await expect(page.locator('#monthTitle')).toHaveText('Jul 3, 2025 – Jul 3, 2026');
+  await expect(page.locator('.heatmap-summary')).toContainText('Rolling year');
+  await expect(page.locator('.heatmap-day')).toHaveCount(366);
   await expect(page.locator('.heatmap-day[data-date="2026-07-01"]')).toHaveAttribute('data-hours', '1');
   await expect(page.locator('.heatmap-day[data-date="2026-07-01"]')).toHaveAttribute('data-level', '1');
   await expect(page.locator('.heatmap-day[data-date="2026-07-03"]')).toHaveAttribute('data-hours', '0');
@@ -328,22 +327,22 @@ END:VCALENDAR`;
   for (const id of ['teaching', 'research', 'deadlines', 'personal', 'tasks']) {
     await page.locator(`#calendarToggles input[data-calendar="${id}"]`).uncheck();
   }
-  await page.keyboard.press('5');
+  await page.keyboard.press('1');
 
-  await expect(page.locator('#monthTitle')).toHaveText('Oct 13, 2025 – Jul 1, 2026');
-  await expect(page.locator('.heatmap-summary')).toContainText('Event span');
-  await expect(page.locator('.heatmap-day').first()).toHaveAttribute('data-date', '2025-10-13');
-  await expect(page.locator('.heatmap-day').last()).toHaveAttribute('data-date', '2026-07-01');
-
-  await page.keyboard.press('5');
   await expect(page.locator('#monthTitle')).toHaveText('Jul 3, 2025 – Jul 3, 2026');
   await expect(page.locator('.heatmap-summary')).toContainText('Rolling year');
   await expect(page.locator('.heatmap-day')).toHaveCount(366);
   await expect(page.locator('.heatmap-day').first()).toHaveAttribute('data-date', '2025-07-03');
   await expect(page.locator('.heatmap-day').last()).toHaveAttribute('data-date', '2026-07-03');
 
-  await page.keyboard.press('5');
+  await page.keyboard.press('1');
   await expect(page.locator('#monthTitle')).toHaveText('Oct 13, 2025 – Jul 1, 2026');
+  await expect(page.locator('.heatmap-summary')).toContainText('Event span');
+  await expect(page.locator('.heatmap-day').first()).toHaveAttribute('data-date', '2025-10-13');
+  await expect(page.locator('.heatmap-day').last()).toHaveAttribute('data-date', '2026-07-01');
+
+  await page.keyboard.press('1');
+  await expect(page.locator('#monthTitle')).toHaveText('Jul 3, 2025 – Jul 3, 2026');
 });
 
 test('create calendar modal can create a blank calendar', async ({ page }) => {
@@ -604,8 +603,8 @@ END:VCALENDAR`;
 test('sidebar panels can switch by click and Control-number shortcuts', async ({ page }) => {
   await page.goto('/');
   await expect(page.locator('.sidebar-tab[data-panel="calendar"]')).toHaveClass(/is-active/);
-  await expect(page.locator('.sidebar-tab[data-panel="upcoming"]')).toHaveCount(0);
-  await expect(page.locator('.sidebar-panel[data-panel="upcoming"]')).toHaveCount(0);
+  await expect(page.locator('.sidebar-tab[data-panel="deadlines"]')).toHaveCount(1);
+  await expect(page.locator('.sidebar-panel[data-panel="deadlines"]')).toHaveCount(1);
 
   await page.keyboard.press('Control+1');
   await expect(page.locator('body')).toHaveClass(/sidebar-collapsed/);
@@ -625,6 +624,8 @@ test('sidebar panels can switch by click and Control-number shortcuts', async ({
   await expect(page.locator('.sidebar-panel[data-panel="papers"]')).toBeVisible();
   await page.keyboard.press('Control+3');
   await expect(page.locator('.sidebar-panel[data-panel="analysis"]')).toBeVisible();
+  await page.keyboard.press('Control+4');
+  await expect(page.locator('.sidebar-panel[data-panel="deadlines"]')).toBeVisible();
 });
 
 test('settings show bottom-only sidebar panel guidance', async ({ page }) => {

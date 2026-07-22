@@ -14,7 +14,6 @@ const STORAGE_BOTTOM_SIDEBAR_HEIGHT = "academical.bottomSidebarHeight.v1";
 const STORAGE_DEADLINE_FILTER_TAGS = "academical.deadlineFilterTags.v1";
 
 const VIEW_LABELS = {
-  deadlines: "Deadlines",
   week: "Week",
   month: "Month",
   "four-week": "4 weeks",
@@ -282,6 +281,7 @@ const els = {
   deleteEvent: document.querySelector("#deleteEvent"),
   deletePaper: document.querySelector("#deletePaper"),
   deleteSeriesEvent: document.querySelector("#deleteSeriesEvent"),
+  deadlinePanel: document.querySelector("#deadlinePanel"),
   editCalendarColorInput: document.querySelector("#editCalendarColorInput"),
   editCalendarColorPalette: document.querySelector("#editCalendarColorPalette"),
   editCalendarForm: document.querySelector("#editCalendarForm"),
@@ -436,6 +436,7 @@ function init() {
   renderArchivedCalendars();
   bindEvents();
   renderPaperTasks();
+  renderDeadlinePanel();
   render();
   initFirebaseSync();
   setInterval(updateNowIndicator, 60_000);
@@ -628,7 +629,7 @@ function bindEvents() {
     if (isTypingTarget(event.target)) return;
 
     const key = event.key.toLowerCase();
-    if (event.ctrlKey && !event.metaKey && !event.altKey && ["1", "2", "3"].includes(key)) {
+    if (event.ctrlKey && !event.metaKey && !event.altKey && ["1", "2", "3", "4"].includes(key)) {
       event.preventDefault();
       selectSidebarPanelByPosition(Number(key) - 1);
       return;
@@ -658,7 +659,12 @@ function bindEvents() {
       soloCalendar(["q", "w", "e", "r"].indexOf(key));
     } else if (key === "1") {
       event.preventDefault();
-      setView("deadlines");
+      if (currentView === "heatmap") {
+        toggleHeatmapRangeMode();
+      } else {
+        heatmapRangeMode = "year";
+        setView("heatmap");
+      }
     } else if (key === "2") {
       event.preventDefault();
       setView("week");
@@ -668,13 +674,6 @@ function bindEvents() {
     } else if (key === "4") {
       event.preventDefault();
       setView("four-week");
-    } else if (key === "5") {
-      event.preventDefault();
-      if (currentView === "heatmap") {
-        toggleHeatmapRangeMode();
-      } else {
-        setView("heatmap");
-      }
     }
   });
 
@@ -839,7 +838,7 @@ function handleSidebarResizeKeydown(event) {
 }
 
 function setSidebarPanel(panel) {
-  if (!["calendar", "papers", "analysis"].includes(panel)) return;
+  if (!["calendar", "papers", "analysis", "deadlines"].includes(panel)) return;
   activeSidebarPanel = panel;
   document.querySelectorAll(".sidebar-panel").forEach((item) => {
     item.hidden = item.dataset.panel !== activeSidebarPanel;
@@ -850,6 +849,7 @@ function setSidebarPanel(panel) {
     button.setAttribute("aria-selected", String(selected));
   });
   if (panel === "analysis") renderSidebarTimeAnalysis();
+  if (panel === "deadlines") renderDeadlinePanel();
 }
 
 function selectSidebarPanelByPosition(position) {
@@ -3039,14 +3039,9 @@ function populateCalendarSelect() {
 
 function renderMonthGrid() {
   const weekScrollPosition = currentView === "week" ? getWeekScrollPosition() : null;
-  els.weekdayRow.hidden = ["deadlines", "week", "heatmap"].includes(currentView);
+  els.weekdayRow.hidden = ["week", "heatmap"].includes(currentView);
   els.monthGrid.className = `month-grid month-grid--${currentView}`;
   els.monthGrid.style.removeProperty("--month-grid-row-count");
-
-  if (currentView === "deadlines") {
-    renderDeadlineView();
-    return;
-  }
 
   if (currentView === "week") {
     renderWeekTimeline(weekScrollPosition);
@@ -3067,7 +3062,8 @@ function renderMonthGrid() {
   );
 }
 
-function renderDeadlineView() {
+function renderDeadlinePanel() {
+  if (!els.deadlinePanel) return;
   const allDeadlines = getDeadlineEntries();
   const deadlines = getFilteredDeadlineEntries(allDeadlines);
   const upcomingCount = deadlines.filter((entry) => !entry.isPast).length;
@@ -3100,7 +3096,7 @@ function renderDeadlineView() {
   }
 
   view.append(header, filters, list);
-  els.monthGrid.replaceChildren(view);
+  els.deadlinePanel.replaceChildren(view);
   updateDeadlineTimers();
 }
 
@@ -3120,7 +3116,7 @@ function createDeadlineFilters() {
     }
     deadlineFilterTags = [...selected].filter(isValidDeadlineFilterTag);
     saveDeadlineFilterTags();
-    renderDeadlineView();
+    renderDeadlinePanel();
   });
 
   const groups = [
@@ -3209,8 +3205,7 @@ function createDeadlineCard(entry) {
 }
 
 function updateDeadlineTimers() {
-  if (currentView !== "deadlines") return;
-  document.querySelectorAll(".deadline-countdown[data-deadline-at]").forEach((item) => {
+  els.deadlinePanel?.querySelectorAll(".deadline-countdown[data-deadline-at]").forEach((item) => {
     const deadline = new Date(item.dataset.deadlineAt);
     item.textContent = formatDeadlineDistance(deadline);
   });
@@ -4400,7 +4395,6 @@ function jumpToCurrentTime() {
 
 function navigatePeriod(direction) {
   heatmapDetailsAnchor = null;
-  if (currentView === "deadlines") return;
   if (currentView === "month") {
     visibleMonth = addMonths(visibleMonth, direction);
     selectedDate = new Date(
@@ -4461,7 +4455,6 @@ function getVisibleDateRange() {
 }
 
 function getHeaderTitle(start, end) {
-  if (currentView === "deadlines") return "Deadlines";
   if (currentView === "month") return monthFormatter.format(visibleMonth);
   return formatDateRange(start, end);
 }

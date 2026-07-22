@@ -48,7 +48,6 @@
         </div>
 
         <select class="view-select" id="viewSelect" aria-label="Calendar view">
-          <option value="deadlines">Deadlines</option>
           <option value="week">Week</option>
           <option value="month" selected>Month</option>
           <option value="four-week">4 weeks</option>
@@ -80,6 +79,7 @@
             <button class="sidebar-tab" type="button" data-panel="calendar">Calendar</button>
             <button class="sidebar-tab" type="button" data-panel="papers">Papers</button>
             <button class="sidebar-tab" type="button" data-panel="analysis">Time analysis</button>
+            <button class="sidebar-tab" type="button" data-panel="deadlines">Deadlines</button>
           </nav>
 
           <div class="sidebar-panel" data-panel="calendar">
@@ -132,6 +132,8 @@
               </div>
             </section>
           </div>
+
+          <div class="sidebar-panel sidebar-deadlines" id="deadlinePanel" data-panel="deadlines" hidden></div>
         </aside>
 
         <div class="sidebar-resizer" id="sidebarResizer" role="separator" aria-orientation="horizontal" aria-label="Resize sidebar panel" tabindex="0"></div>
