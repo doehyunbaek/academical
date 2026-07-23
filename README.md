@@ -18,7 +18,7 @@ Open <http://localhost:8000>.
 - Weeks start on Monday
 - Keyboard shortcuts: `/` focus event search, `j` future, `k` past, `t` current time, `p` open Add paper modal, `a` all calendars, `q`/`w`/`e`/`r` solo calendars 1–4, `Ctrl+1`–`Ctrl+4` sidebar panels, `1` GitHub heatmap, `2` week, `3` month, `4` four weeks, `Backspace` delete focused edit event
 - Google Calendar-style top bar, configurable left/bottom/right multipanel sidebar, month grid, GitHub-style worked-hours heatmap spanning the first-to-last visible selected-calendar event or a rolling current-date-minus-one-year range with compact near-cursor clicked-day details, and an expanded bottom sidebar in heatmap mode
-- Create/edit/delete events; Create event defaults to the earliest currently visible calendar; Time analysis sidebar panel summarizes all visible events in the current view and includes a color-banded working-hours-per-week scatter chart plus a weekly cumulative read/code/write/meet activity chart
+- Create/edit/delete events; drag all-day or timed event chips between dates in Month and 4-week views; Create event defaults to the earliest currently visible calendar; Time analysis sidebar panel summarizes all visible events in the current view and includes a color-banded working-hours-per-week scatter chart plus a weekly cumulative read/code/write/meet activity chart
 - Repeating events: daily, weekly, and every weekday
 - Deleting a recurring event occurrence removes only that instance; `Delete recurring` removes the full series
 - Search events
@@ -53,9 +53,9 @@ Firestore path:
 users/{uid}/academical/state
 ```
 
-## Paper metadata proxy
+## Metadata and deadline proxy
 
-`worker/index.js` provides a Cloudflare Worker that validates and proxies arXiv metadata, and resolves ACM Digital Library DOIs through Crossref. It caches successful responses and enables CORS for the static GitHub Pages client.
+`worker/index.js` provides a Cloudflare Worker that validates and proxies arXiv metadata, resolves ACM Digital Library DOIs through Crossref, and checks Researchr for newly published conference deadlines. It caches successful responses and enables CORS for the static GitHub Pages client.
 
 Authenticate and deploy it on the Cloudflare Workers free plan:
 
@@ -70,9 +70,10 @@ Wrangler prints a URL similar to:
 https://academical-arxiv.YOUR-SUBDOMAIN.workers.dev
 ```
 
-Copy that URL into `paperMetadataUrl` (preferred) or the backwards-compatible `arxivMetadataUrl` in `google-api-config.js`. Test the deployed proxy with:
+Copy that URL into `paperMetadataUrl` and `deadlineUpdatesUrl` (or the backwards-compatible `arxivMetadataUrl`) in `google-api-config.js`. Test the deployed proxy with:
 
 ```bash
 curl 'https://academical-arxiv.YOUR-SUBDOMAIN.workers.dev/?id=2505.17716'
 curl 'https://academical-arxiv.YOUR-SUBDOMAIN.workers.dev/?doi=10.1145%2F3728973'
+curl 'https://academical-arxiv.YOUR-SUBDOMAIN.workers.dev/?conference=OOPSLA&year=2027'
 ```

@@ -113,30 +113,133 @@ test('Deadlines panel internalizes deadlines app entries', async ({ page }) => {
 
   await expect(page.locator('.sidebar-panel[data-panel="deadlines"]')).toBeVisible();
   await expect(page.locator('.deadline-view-header')).toContainText('Research venue deadlines');
-  await expect(page.locator('.deadline-card')).toHaveCount(11);
-  await expect(page.locator('.deadline-card').first()).toContainText('ICSE 2027');
+  await expect(page.locator('.deadline-view-header')).toContainText('1 upcoming · 4 forecasts');
+  await expect(page.locator('.deadline-card')).toHaveCount(63);
+  await expect(page.locator('.deadline-card').first()).toContainText('FSE 2027');
   await expect(page.locator('.deadline-card').first()).toContainText('Deadline:');
   await expect(page.locator('.deadline-timezone').first()).toHaveText('AoE / UTC-12');
-  await expect(page.locator('input[data-deadline-filter-tag="CO"]')).not.toBeChecked();
-  await expect(page.locator('input[data-deadline-filter-tag="RPT"]')).not.toBeChecked();
+  await expect(page.locator('.deadline-filter-group legend')).toHaveCount(0);
+  await expect(page.locator('.deadline-filter-option')).toHaveCount(5);
+  await expect(page.locator('input[data-deadline-filter-tag="ICSE"]')).not.toBeChecked();
+  await expect(page.locator('input[data-deadline-filter-tag="OOPSLA"]')).not.toBeChecked();
+  await expect(page.getByText('Track', { exact: true })).toHaveCount(0);
 });
 
 test('Deadlines panel filters by selected tags and persists the selection', async ({ page }) => {
   await page.goto('/');
   await page.locator('.sidebar-tab[data-panel="deadlines"]').click();
 
-  await page.locator('input[data-deadline-filter-tag="JO"]').check();
-  await expect(page.locator('.deadline-card')).toHaveCount(0);
-  await expect(page.locator('.deadline-empty')).toContainText('No deadlines match');
+  await page.locator('input[data-deadline-filter-tag="OOPSLA"]').check();
+  await expect(page.locator('.deadline-card')).toHaveCount(19);
+  await expect(page.locator('.deadline-card').first()).toContainText('OOPSLA');
+  await expect(page.locator('.deadline-card--predicted')).toHaveCount(1);
+  await expect(page.locator('.deadline-card--predicted').first()).toContainText('High confidence');
 
-  await page.locator('input[data-deadline-filter-tag="JO"]').uncheck();
-  await page.locator('input[data-deadline-filter-tag="CO"]').check();
-  await expect(page.locator('.deadline-card')).toHaveCount(11);
+  await page.locator('input[data-deadline-filter-tag="OOPSLA"]').uncheck();
+  await page.locator('input[data-deadline-filter-tag="ICSE"]').check();
+  await expect(page.locator('.deadline-card')).toHaveCount(14);
+  const icsePrediction = page.locator('.deadline-card--predicted').filter({ hasText: 'ICSE 2028' });
+  await expect(icsePrediction).toContainText('Predicted deadline: Jul 1, 2027');
+  await expect(icsePrediction).toContainText('1 edition');
 
   await page.reload();
   await page.locator('.sidebar-tab[data-panel="deadlines"]').click();
-  await expect(page.locator('input[data-deadline-filter-tag="CO"]')).toBeChecked();
-  await expect(page.locator('.deadline-card')).toHaveCount(11);
+  await expect(page.locator('input[data-deadline-filter-tag="ICSE"]')).toBeChecked();
+  await expect(page.locator('.deadline-card')).toHaveCount(14);
+});
+
+test('Selected deadlines appear in the calendar and extend the Heatmap', async ({ page }) => {
+  await page.goto('/');
+  await page.locator('.sidebar-tab[data-panel="deadlines"]').click();
+
+  const fseDeadline = page.locator('.deadline-card').filter({ hasText: 'FSE 2027' });
+  await fseDeadline.getByText('Show in calendar').click();
+  await expect(fseDeadline.locator('[data-deadline-calendar-id]')).toBeChecked();
+  await expect(page.locator('input[data-calendar="deadlines"]')).toBeChecked();
+  await expect(page.locator('#deadlineDaysLeft')).toHaveText('91 days until deadline');
+  await expect(page.locator('#deadlineDaysLeft')).toBeVisible();
+
+  await page.locator('#viewSelect').selectOption('heatmap');
+  await expect(page.locator('.heatmap-summary')).toContainText('Today to deadline');
+  await expect(page.locator('.heatmap-summary')).toContainText('Jul 3 – Oct 2, 2026');
+  await expect(page.locator('.heatmap-deadline-metric').nth(0)).toContainText('Current time spent');
+  await expect(page.locator('.heatmap-deadline-metric').nth(0)).toContainText('9h');
+  await expect(page.locator('.heatmap-deadline-metric').nth(1)).toContainText('Remaining time');
+  await expect(page.locator('.heatmap-deadline-metric').nth(1)).toContainText('654.29h');
+  await expect(page.locator('.heatmap-deadline-metric').nth(2)).toContainText('Total time spent');
+  await expect(page.locator('.heatmap-deadline-metric').nth(2)).toContainText('663.29h');
+
+  await page.locator('.sidebar-tab[data-panel="calendar"]').click();
+  await page.locator('input[data-calendar="teaching"]').uncheck();
+  await expect(page.locator('.heatmap-deadline-metric').nth(0)).toContainText('7h');
+  await expect(page.locator('.heatmap-deadline-metric').nth(2)).toContainText('661.29h');
+
+  await expect(page.locator('.heatmap-day[data-date="2026-07-02"]')).toHaveCount(0);
+  await expect(page.locator('.heatmap-day[data-date="2026-07-03"]')).toHaveCount(1);
+  await expect(page.locator('.heatmap-day[data-date="2026-10-02"]')).toHaveCount(1);
+  await expect(page.locator('.heatmap-day[data-date="2026-10-03"]')).toHaveCount(0);
+  await page.locator('.heatmap-day[data-date="2026-10-02"]').click();
+  await expect(page.locator('.heatmap-details')).toContainText('FSE 2027 deadline');
+
+  await page.reload();
+  await page.locator('.sidebar-tab[data-panel="deadlines"]').click();
+  await expect(page.locator('.deadline-card').filter({ hasText: 'FSE 2027' }).locator('[data-deadline-calendar-id]')).toBeChecked();
+});
+
+test('Deadline predictions expose confidence based on historical variation', async ({ page }) => {
+  await page.route('https://academical-arxiv.doehyunbaek.workers.dev/**', (route) => route.fulfill({
+    status: 200,
+    contentType: 'application/json',
+    body: JSON.stringify({ available: false, deadlines: [] }),
+  }));
+  await page.goto('/');
+  await page.locator('.sidebar-tab[data-panel="deadlines"]').click();
+
+  await page.locator('input[data-deadline-filter-tag="ASE"]').check();
+  const prediction = page.locator('.deadline-card--predicted');
+  await expect(prediction).toHaveCount(1);
+  await expect(prediction).toContainText('Low confidence');
+  await expect(prediction).toContainText('Likely range:');
+  await expect(prediction).toContainText('5 editions');
+});
+
+test('Predicted deadlines check Researchr and become announced deadlines', async ({ page }) => {
+  const checked = [];
+  await page.route('https://academical-arxiv.doehyunbaek.workers.dev/**', async (route) => {
+    const url = new URL(route.request().url());
+    checked.push(`${url.searchParams.get('conference')}-${url.searchParams.get('year')}`);
+    const isOOPSLA = url.searchParams.get('conference') === 'OOPSLA';
+    await route.fulfill({
+      status: 200,
+      contentType: 'application/json',
+      body: JSON.stringify(isOOPSLA ? {
+        available: true,
+        sourceUrl: 'https://conf.researchr.org/dates/splash-2027',
+        deadlines: [{
+          date: '2026-10-16 23:59',
+          label: 'Submission (Round 1)',
+          link: 'https://conf.researchr.org/track/splash-2027/oopsla-2027',
+        }],
+      } : { available: false, deadlines: [] }),
+    });
+  });
+
+  await page.goto('/');
+  await page.locator('.sidebar-tab[data-panel="deadlines"]').click();
+  await page.locator('input[data-deadline-filter-tag="OOPSLA"]').check();
+
+  const announced = page.locator('.deadline-card').filter({ hasText: 'OOPSLA 2027' });
+  await expect(announced).toContainText('Announced · update available');
+  await expect(announced).toContainText('Add it to deadlines.json');
+  await expect(announced).toHaveClass(/deadline-card--announced/);
+  await expect(announced).not.toHaveClass(/deadline-card--predicted/);
+  expect(checked).toEqual(expect.arrayContaining(['ICSE-2028', 'ASE-2027', 'ISSTA-2027', 'OOPSLA-2027']));
+
+  const requestCount = checked.length;
+  await page.reload();
+  await page.locator('.sidebar-tab[data-panel="deadlines"]').click();
+  await expect(page.locator('.deadline-card').filter({ hasText: 'OOPSLA 2027' })).toContainText('Announced · update available');
+  expect(checked).toHaveLength(requestCount);
 });
 
 test('heatmap view renders one square per day with worked-hour intensity', async ({ page }) => {
@@ -392,6 +495,46 @@ test('calendar rows can be edited for name and color', async ({ page }) => {
   await page.reload();
   await expect(page.locator('.calendar-toggle-row').filter({ hasText: 'Lectures' })).toBeVisible();
   await expect(page.locator('.calendar-toggle-row').filter({ hasText: 'Lectures' }).locator('.calendar-dot')).toHaveCSS('background-color', 'rgb(102, 51, 153)');
+});
+
+test('edit calendar transfers all events to another calendar', async ({ page }) => {
+  await page.goto('/');
+  const teachingRow = page.locator('.calendar-toggle-row').filter({ hasText: 'Teaching' });
+  await teachingRow.hover();
+  await page.getByRole('button', { name: 'Rename Teaching calendar' }).click();
+
+  await expect(page.locator('#calendarTransferSummary')).toContainText('2 events');
+  await page.locator('#calendarTransferTarget').selectOption('research');
+  await page.locator('#transferCalendarEvents').click();
+  await expect(page.locator('#calendarTransferSummary')).toContainText('0 events');
+  await page.locator('#cancelEditCalendarModal').click();
+
+  await page.locator('input[data-calendar="teaching"]').uncheck();
+  await expect(page.locator('.event-chip').filter({ hasText: 'CS seminar prep' })).toBeVisible();
+  await expect(page.locator('.event-chip').filter({ hasText: 'Office hours' })).toBeVisible();
+
+  await page.reload();
+  await page.locator('input[data-calendar="teaching"]').uncheck();
+  await expect(page.locator('.event-chip').filter({ hasText: 'CS seminar prep' })).toBeVisible();
+});
+
+test('edit calendar exports calendar metadata and events as JSON', async ({ page }) => {
+  await page.goto('/');
+  const teachingRow = page.locator('.calendar-toggle-row').filter({ hasText: 'Teaching' });
+  await teachingRow.hover();
+  await page.getByRole('button', { name: 'Rename Teaching calendar' }).click();
+
+  const downloadPromise = page.waitForEvent('download');
+  await page.locator('#exportCalendarJson').click();
+  const download = await downloadPromise;
+  expect(download.suggestedFilename()).toBe('teaching.json');
+  const stream = await download.createReadStream();
+  const chunks = [];
+  for await (const chunk of stream) chunks.push(chunk);
+  const payload = JSON.parse(Buffer.concat(chunks).toString('utf8'));
+  expect(payload.calendar).toMatchObject({ id: 'teaching', name: 'Teaching', color: '#1a73e8', builtIn: true });
+  expect(payload.events).toHaveLength(2);
+  expect(payload.events.map((event) => event.title)).toEqual(expect.arrayContaining(['CS seminar prep', 'Office hours']));
 });
 
 test('create event modal selects earliest currently visible calendar', async ({ page }) => {
@@ -849,6 +992,58 @@ test('dragging a timed week event moves its date and 15 minute position', async 
   expect(moved.date).toBe('2026-07-03');
   expect(moved.time).toBe('10:15');
   await expect(page.locator('.week-day-column[data-date="2026-07-03"] .week-timed-event').filter({ hasText: 'CS seminar prep' })).toBeVisible();
+});
+
+test('dragging a timed month event moves it to the dropped date', async ({ page }) => {
+  await page.goto('/');
+
+  const eventChip = page.locator('.day-cell[data-date="2026-07-01"] .event-chip').filter({ hasText: 'CS seminar prep' });
+  const eventBox = await eventChip.boundingBox();
+  const targetDay = page.locator('.day-cell[data-date="2026-07-04"]');
+  const targetBox = await targetDay.boundingBox();
+  expect(eventBox).not.toBeNull();
+  expect(targetBox).not.toBeNull();
+
+  await page.mouse.move(eventBox.x + 10, eventBox.y + 10);
+  await page.mouse.down();
+  await page.mouse.move(targetBox.x + targetBox.width / 2, targetBox.y + 48, { steps: 8 });
+  await expect(page.locator('.month-event-drag-preview')).toBeVisible();
+  await page.mouse.up();
+
+  await expect(page.locator('#eventModal')).not.toHaveClass(/is-open/);
+  const moved = await page.evaluate(() => JSON.parse(localStorage.getItem('academical.events.v1')).find((event) => event.title === 'CS seminar prep'));
+  expect(moved.date).toBe('2026-07-04');
+  expect(moved.time).toBe('09:00');
+  await expect(page.locator('.day-cell[data-date="2026-07-01"] .event-chip').filter({ hasText: 'CS seminar prep' })).toHaveCount(0);
+  await expect(page.locator('.day-cell[data-date="2026-07-04"] .event-chip').filter({ hasText: 'CS seminar prep' })).toBeVisible();
+});
+
+test('dragging an all-day event in four-week view moves it to the dropped date', async ({ page }) => {
+  await page.goto('/');
+  await openCreateEventDialog(page, '2026-07-06');
+  await page.locator('#eventTitle').fill('All-day writing retreat');
+  await page.getByRole('button', { name: 'Save' }).click();
+  await page.locator('#viewSelect').selectOption('four-week');
+
+  const eventChip = page.locator('.day-cell[data-date="2026-07-06"] .event-chip').filter({ hasText: 'All-day writing retreat' });
+  const eventBox = await eventChip.boundingBox();
+  const targetDay = page.locator('.day-cell[data-date="2026-07-10"]');
+  const targetBox = await targetDay.boundingBox();
+  expect(eventBox).not.toBeNull();
+  expect(targetBox).not.toBeNull();
+
+  await page.mouse.move(eventBox.x + 10, eventBox.y + 10);
+  await page.mouse.down();
+  await page.mouse.move(targetBox.x + targetBox.width / 2, targetBox.y + 48, { steps: 8 });
+  await expect(page.locator('.month-event-drag-preview')).toBeVisible();
+  await page.mouse.up();
+
+  await expect(page.locator('#eventModal')).not.toHaveClass(/is-open/);
+  const moved = await page.evaluate(() => JSON.parse(localStorage.getItem('academical.events.v1')).find((event) => event.title === 'All-day writing retreat'));
+  expect(moved.date).toBe('2026-07-10');
+  expect(moved.time).toBe('');
+  await expect(page.locator('.day-cell[data-date="2026-07-06"] .event-chip').filter({ hasText: 'All-day writing retreat' })).toHaveCount(0);
+  await expect(page.locator('.day-cell[data-date="2026-07-10"] .event-chip').filter({ hasText: 'All-day writing retreat' })).toBeVisible();
 });
 
 test('event dialog end time controls duration and keyboard shortcuts adjust time and duration', async ({ page }) => {

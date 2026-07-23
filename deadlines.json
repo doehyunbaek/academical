@@ -1,0 +1,553 @@
+[
+  {
+    "name": "ICSE",
+    "description": "International Conference on Software Engineering - Research Track",
+    "year": 2027,
+    "link": "https://conf.researchr.org/track/icse-2027/icse-2027-research-track",
+    "deadlines": [
+      "2026-06-30 23:59"
+    ],
+    "date": "TBA",
+    "place": "TBA",
+    "predictionHistoryStartYear": 2027,
+    "note": "Mandatory abstract deadline on June 23, 2026. ICSE uses a single submission cycle from this edition; prediction history before 2027 is excluded. All dates are AoE (UTC-12)."
+  },
+  {
+    "name": "ICSE",
+    "description": "International Conference on Software Engineering - Research Track",
+    "year": 2026,
+    "link": "https://conf.researchr.org/track/icse-2026/icse-2026-research-track",
+    "deadlines": [
+      "2025-03-14 23:59",
+      "2025-07-18 23:59"
+    ],
+    "date": "April 12 - 18, 2026",
+    "place": "Rio de Janeiro, Brazil",
+    "note": "Mandatory abstract deadline on March 7 and optional abstract deadline on July 11, 2025. All dates are AoE (UTC-12)."
+  },
+  {
+    "name": "ICSE",
+    "description": "International Conference on Software Engineering - Research Track",
+    "year": 2025,
+    "link": "https://conf.researchr.org/track/icse-2025/icse-2025-research-track",
+    "deadlines": [
+      "2024-03-22 23:59",
+      "2024-08-02 23:59"
+    ],
+    "date": "April 27 - May 3, 2025",
+    "place": "Ottawa, Ontario, Canada",
+    "note": "Mandatory abstract deadlines on March 15 and July 26, 2024. All dates are AoE (UTC-12)."
+  },
+  {
+    "name": "ICSE",
+    "description": "International Conference on Software Engineering - Research Track",
+    "year": 2024,
+    "link": "https://conf.researchr.org/track/icse-2024/icse-2024-research-track",
+    "deadlines": [
+      "2023-03-29 23:59",
+      "2023-08-01 23:59"
+    ],
+    "date": "April 14 - 20, 2024",
+    "place": "Lisbon, Portugal",
+    "note": "First-cycle and second-cycle submissions. All dates are AoE (UTC-12)."
+  },
+  {
+    "name": "ICSE",
+    "description": "International Conference on Software Engineering - Technical Track",
+    "year": 2023,
+    "link": "https://conf.researchr.org/track/icse-2023/icse-2023-technical-track",
+    "deadlines": [
+      "2022-09-01 23:59"
+    ],
+    "date": "May 14 - 20, 2023",
+    "place": "Melbourne, Australia",
+    "note": "Technical Track submission deadline. All dates are AoE (UTC-12)."
+  },
+  {
+    "name": "ICSE",
+    "description": "International Conference on Software Engineering - Technical Track",
+    "year": 2022,
+    "link": "https://conf.researchr.org/track/icse-2022/icse-2022-papers",
+    "deadlines": [
+      "2021-09-03 23:59"
+    ],
+    "date": "May 21 - 29, 2022",
+    "place": "Pittsburgh, Pennsylvania, United States",
+    "note": "Required abstract deadline on August 27, 2021. All dates are AoE (UTC-12)."
+  },
+  {
+    "name": "ICSE",
+    "description": "International Conference on Software Engineering - Technical Track",
+    "year": 2021,
+    "link": "https://2021.icse-conferences.org/track/icse-2021-papers",
+    "deadlines": [
+      "2020-08-28 23:59"
+    ],
+    "date": "May 25 - 28, 2021",
+    "place": "Virtual",
+    "note": "Technical Track submission deadline. All dates are AoE (UTC-12)."
+  },
+  {
+    "name": "ICSE",
+    "description": "International Conference on Software Engineering - Technical Papers",
+    "year": 2020,
+    "link": "https://2020.icse-conferences.org/track/icse-2020-papers",
+    "deadlines": [
+      "2019-08-23 23:59"
+    ],
+    "date": "July 6 - 11, 2020",
+    "place": "Virtual",
+    "note": "Full paper submission. All dates are AoE (UTC-12)."
+  },
+  {
+    "name": "ICSE",
+    "description": "International Conference on Software Engineering - Technical Track",
+    "year": 2019,
+    "link": "https://2019.icse-conferences.org/track/icse-2019-Technical-Papers",
+    "deadlines": [
+      "2018-08-24 23:59"
+    ],
+    "date": "May 25 - 31, 2019",
+    "place": "Montreal, Canada",
+    "note": "Full paper submission. All dates are AoE (UTC-12)."
+  },
+  {
+    "name": "ICSE",
+    "description": "International Conference on Software Engineering - Technical Papers",
+    "year": 2018,
+    "link": "https://conf.researchr.org/track/icse-2018/icse-2018-Technical-Papers",
+    "deadlines": [
+      "2017-08-25 23:59"
+    ],
+    "date": "May 27 - June 3, 2018",
+    "place": "Gothenburg, Sweden",
+    "note": "Technical Papers submission deadline. All dates are AoE (UTC-12)."
+  },
+  {
+    "name": "FSE",
+    "description": "International Conference on the Foundations of Software Engineering - Research Papers",
+    "year": 2027,
+    "link": "https://conf.researchr.org/track/fse-2027/fse-2027-papers",
+    "deadlines": [
+      "2026-10-02 23:59"
+    ],
+    "date": "TBA",
+    "place": "TBA",
+    "note": "Full paper submission. All dates are AoE (UTC-12)."
+  },
+  {
+    "name": "FSE",
+    "description": "International Conference on the Foundations of Software Engineering - Research Papers",
+    "year": 2026,
+    "link": "https://conf.researchr.org/track/fse-2026/fse-2026-research-papers",
+    "deadlines": [
+      "2025-09-11 23:59"
+    ],
+    "date": "July 6 - 10, 2026",
+    "place": "Montreal, Canda",
+    "note": "Paper abstract deadline on September 4, 2025. All dates are AoE (UTC-12)."
+  },
+  {
+    "name": "FSE",
+    "description": "International Conference on the Foundations of Software Engineering - Research Papers",
+    "year": 2025,
+    "link": "https://conf.researchr.org/track/fse-2025/fse-2025-research-papers",
+    "deadlines": [
+      "2024-09-12 23:59"
+    ],
+    "date": "June 23 - 27, 2025",
+    "place": "Trondheim, Norway",
+    "note": "Full paper submission. All dates are AoE (UTC-12)."
+  },
+  {
+    "name": "FSE",
+    "description": "International Conference on the Foundations of Software Engineering - Research Papers",
+    "year": 2024,
+    "link": "https://2024.esec-fse.org/track/fse-2024-research-papers",
+    "deadlines": [
+      "2023-09-28 23:59"
+    ],
+    "date": "See conference page",
+    "place": "",
+    "note": "Full paper submission. All dates are AoE (UTC-12)."
+  },
+  {
+    "name": "FSE",
+    "description": "International Conference on the Foundations of Software Engineering - Research Papers",
+    "year": 2023,
+    "link": "https://2023.esec-fse.org/track/fse-2023-research-papers",
+    "deadlines": [
+      "2023-02-02 23:59"
+    ],
+    "date": "See conference page",
+    "place": "",
+    "note": "Full paper submission. All dates are AoE (UTC-12)."
+  },
+  {
+    "name": "FSE",
+    "description": "International Conference on the Foundations of Software Engineering - Research Papers",
+    "year": 2022,
+    "link": "https://2022.esec-fse.org/track/fse-2022-research-papers",
+    "deadlines": [
+      "2022-03-17 23:59"
+    ],
+    "date": "See conference page",
+    "place": "",
+    "note": "Full paper submission. All dates are AoE (UTC-12)."
+  },
+  {
+    "name": "FSE",
+    "description": "International Conference on the Foundations of Software Engineering - Research Papers",
+    "year": 2021,
+    "link": "https://2021.esec-fse.org/track/fse-2021-papers",
+    "deadlines": [
+      "2021-02-25 23:59"
+    ],
+    "date": "See conference page",
+    "place": "",
+    "note": "Research Papers submission deadline. All dates are AoE (UTC-12)."
+  },
+  {
+    "name": "FSE",
+    "description": "International Conference on the Foundations of Software Engineering - Research Papers",
+    "year": 2020,
+    "link": "https://2020.esec-fse.org/track/fse-2020-papers",
+    "deadlines": [
+      "2020-03-05 23:59"
+    ],
+    "date": "See conference page",
+    "place": "",
+    "note": "Research Papers submission deadline. All dates are AoE (UTC-12)."
+  },
+  {
+    "name": "FSE",
+    "description": "International Conference on the Foundations of Software Engineering - Research Papers",
+    "year": 2018,
+    "link": "https://2018.fseconference.org/track/fse-2018-research-papers",
+    "deadlines": [
+      "2018-03-09 23:59"
+    ],
+    "date": "See conference page",
+    "place": "",
+    "note": "Full paper submission. Researchr has no FSE 2019 dates page. All dates are AoE (UTC-12)."
+  },
+  {
+    "name": "ASE",
+    "description": "International Conference on Automated Software Engineering - Research Papers",
+    "year": 2026,
+    "link": "https://conf.researchr.org/track/ase-2026/ase-2026-research-track",
+    "deadlines": [
+      "2026-03-26 23:59"
+    ],
+    "date": "October 12 - 16, 2026",
+    "place": "Munich, Germany"
+  },
+  {
+    "name": "ASE",
+    "description": "International Conference on Automated Software Engineering - Research Papers",
+    "year": 2025,
+    "link": "https://conf.researchr.org/track/ase-2025/ase-2025-papers",
+    "deadlines": [
+      "2025-05-30 23:59"
+    ],
+    "date": "November 16 - 20, 2025",
+    "place": "Seoul, South Korea"
+  },
+  {
+    "name": "ASE",
+    "description": "International Conference on Automated Software Engineering - Research Papers",
+    "year": 2024,
+    "link": "https://conf.researchr.org/track/ase-2024/ase-2024-research",
+    "deadlines": [
+      "2024-06-07 23:59"
+    ],
+    "date": "See conference page",
+    "place": "",
+    "note": "Abstract submission deadline on May 31, 2024. All dates are AoE (UTC-12)."
+  },
+  {
+    "name": "ASE",
+    "description": "International Conference on Automated Software Engineering - Research Papers",
+    "year": 2023,
+    "link": "https://conf.researchr.org/track/ase-2023/ase-2023-papers",
+    "deadlines": [
+      "2023-05-05 23:59"
+    ],
+    "date": "See conference page",
+    "place": "",
+    "note": "Abstract submission deadline on April 28, 2023. All dates are AoE (UTC-12)."
+  },
+  {
+    "name": "ASE",
+    "description": "International Conference on Automated Software Engineering - Research Papers",
+    "year": 2022,
+    "link": "https://conf.researchr.org/track/ase-2022/ase-2022-research-papers",
+    "deadlines": [
+      "2022-05-06 23:59"
+    ],
+    "date": "See conference page",
+    "place": "",
+    "note": "Abstract submission deadline on April 29, 2022. All dates are AoE (UTC-12)."
+  },
+  {
+    "name": "ASE",
+    "description": "International Conference on Automated Software Engineering - Research Papers",
+    "year": 2021,
+    "link": "https://conf.researchr.org/track/ase-2021/ase-2021-papers",
+    "deadlines": [
+      "2021-04-23 23:59"
+    ],
+    "date": "See conference page",
+    "place": "",
+    "note": "Abstract deadline on April 16, 2021. All dates are AoE (UTC-12)."
+  },
+  {
+    "name": "ASE",
+    "description": "International Conference on Automated Software Engineering - Research Papers",
+    "year": 2020,
+    "link": "https://conf.researchr.org/track/ase-2020/ase-2020-papers",
+    "deadlines": [
+      "2020-05-08 23:59"
+    ],
+    "date": "See conference page",
+    "place": "",
+    "note": "Abstract submission deadline on May 1, 2020. All dates are AoE (UTC-12)."
+  },
+  {
+    "name": "ASE",
+    "description": "International Conference on Automated Software Engineering - Research Papers",
+    "year": 2019,
+    "link": "https://2019.aseconf.org/track/ase-2019-papers",
+    "deadlines": [
+      "2019-05-13 23:59"
+    ],
+    "date": "See conference page",
+    "place": "",
+    "note": "Abstract deadline on May 6, 2019. Researchr has no ASE 2018 dates page. All dates are AoE (UTC-12)."
+  },
+  {
+    "name": "ISSTA",
+    "description": "International Symposium on Software Testing and Analysis",
+    "year": 2026,
+    "link": "https://conf.researchr.org/track/issta-2026/issta-2026-research-papers",
+    "deadlines": [
+      "2026-01-29 23:59"
+    ],
+    "date": "October 3 - 9, 2026",
+    "place": "Oakland, California, United States"
+  },
+  {
+    "name": "ISSTA",
+    "description": "International Symposium on Software Testing and Analysis",
+    "year": 2025,
+    "link": "https://conf.researchr.org/track/issta-2025/issta-2025-papers#Call-for-Papers",
+    "deadlines": [
+      "2024-10-31 23:59"
+    ],
+    "date": "June 25 - 28, 2025",
+    "place": "Trondheim, Norway"
+  },
+  {
+    "name": "ISSTA",
+    "description": "International Symposium on Software Testing and Analysis - Technical Papers",
+    "year": 2024,
+    "link": "https://2024.issta.org/track/issta-2024-papers",
+    "deadlines": [
+      "2023-12-15 23:59",
+      "2024-04-12 23:59"
+    ],
+    "date": "See conference page",
+    "place": "",
+    "note": "Round 1 and Round 2 submissions. All dates are AoE (UTC-12)."
+  },
+  {
+    "name": "ISSTA",
+    "description": "International Symposium on Software Testing and Analysis - Technical Papers",
+    "year": 2023,
+    "link": "https://2023.issta.org/track/issta-2023-technical-papers",
+    "deadlines": [
+      "2022-11-10 23:59",
+      "2023-02-16 23:59"
+    ],
+    "date": "See conference page",
+    "place": "",
+    "note": "First-round and second-round submission deadlines. All dates are AoE (UTC-12)."
+  },
+  {
+    "name": "ISSTA",
+    "description": "International Symposium on Software Testing and Analysis - Technical Papers",
+    "year": 2022,
+    "link": "https://conf.researchr.org/track/issta-2022/issta-2022-technical-papers",
+    "deadlines": [
+      "2022-01-28 23:59"
+    ],
+    "date": "See conference page",
+    "place": "",
+    "note": "Technical Papers deadline. All dates are AoE (UTC-12)."
+  },
+  {
+    "name": "ISSTA",
+    "description": "International Symposium on Software Testing and Analysis - Technical Papers",
+    "year": 2021,
+    "link": "https://conf.researchr.org/track/issta-2021/issta-2021-technical-papers",
+    "deadlines": [
+      "2021-01-29 23:59"
+    ],
+    "date": "See conference page",
+    "place": "",
+    "note": "Technical Papers deadline. All dates are AoE (UTC-12)."
+  },
+  {
+    "name": "ISSTA",
+    "description": "International Symposium on Software Testing and Analysis - Technical Papers",
+    "year": 2020,
+    "link": "https://conf.researchr.org/track/issta-2020/issta-2020-papers",
+    "deadlines": [
+      "2020-01-27 23:59"
+    ],
+    "date": "See conference page",
+    "place": "",
+    "note": "Technical Papers submission deadline. All dates are AoE (UTC-12)."
+  },
+  {
+    "name": "ISSTA",
+    "description": "International Symposium on Software Testing and Analysis - Technical Papers",
+    "year": 2019,
+    "link": "https://conf.researchr.org/track/issta-2019/issta-2019-Technical-Papers",
+    "deadlines": [
+      "2019-01-28 23:59"
+    ],
+    "date": "See conference page",
+    "place": "",
+    "note": "Technical Papers submission deadline. All dates are AoE (UTC-12)."
+  },
+  {
+    "name": "ISSTA",
+    "description": "International Symposium on Software Testing and Analysis - Technical Papers",
+    "year": 2018,
+    "link": "https://conf.researchr.org/track/issta-2018/issta-2018-Technical-Papers",
+    "deadlines": [
+      "2018-01-29 23:59"
+    ],
+    "date": "See conference page",
+    "place": "",
+    "note": "Technical Papers submission deadline. All dates are AoE (UTC-12)."
+  },
+  {
+    "name": "OOPSLA",
+    "description": "Object-Oriented Programming, Systems, Languages, and Applications",
+    "year": 2026,
+    "link": "https://2026.splashcon.org/track/oopsla-2026",
+    "deadlines": [
+      "2025-10-10 23:59",
+      "2026-03-17 23:59"
+    ],
+    "date": "October 3 - 9, 2026",
+    "place": "Oakland, California, United States",
+    "note": "Round 1 and Round 2 submissions. All dates are AoE (UTC-12)."
+  },
+  {
+    "name": "OOPSLA",
+    "description": "Object-Oriented Programming, Systems, Languages, and Applications",
+    "year": 2025,
+    "link": "https://2025.splashcon.org/track/OOPSLA",
+    "deadlines": [
+      "2024-10-15 23:59",
+      "2025-03-25 23:59"
+    ],
+    "date": "October 12 - 18, 2025",
+    "place": "Singapore",
+    "note": "Round 1 and Round 2 submissions. All dates are AoE (UTC-12)."
+  },
+  {
+    "name": "OOPSLA",
+    "description": "Object-Oriented Programming, Systems, Languages, and Applications",
+    "year": 2024,
+    "link": "https://2024.splashcon.org/track/splash-2024-oopsla",
+    "deadlines": [
+      "2023-10-20 23:59",
+      "2024-04-05 23:59"
+    ],
+    "date": "See conference page",
+    "place": "",
+    "note": "Round 1 and Round 2 submissions. All dates are AoE (UTC-12)."
+  },
+  {
+    "name": "OOPSLA",
+    "description": "Object-Oriented Programming, Systems, Languages, and Applications",
+    "year": 2023,
+    "link": "https://2023.splashcon.org/track/splash-2023-oopsla",
+    "deadlines": [
+      "2022-10-28 23:59",
+      "2023-04-14 23:59"
+    ],
+    "date": "See conference page",
+    "place": "",
+    "note": "Round 1 and Round 2 submissions. All dates are AoE (UTC-12)."
+  },
+  {
+    "name": "OOPSLA",
+    "description": "Object-Oriented Programming, Systems, Languages, and Applications",
+    "year": 2022,
+    "link": "https://2022.splashcon.org/track/splash-2022-oopsla",
+    "deadlines": [
+      "2021-10-12 23:59",
+      "2022-04-15 23:59"
+    ],
+    "date": "See conference page",
+    "place": "",
+    "note": "Round 1 and Round 2 submissions. All dates are AoE (UTC-12)."
+  },
+  {
+    "name": "OOPSLA",
+    "description": "Object-Oriented Programming, Systems, Languages, and Applications",
+    "year": 2021,
+    "link": "https://2021.splashcon.org/track/splash-2021-oopsla",
+    "deadlines": [
+      "2021-04-16 23:59",
+      "2021-08-13 23:59"
+    ],
+    "date": "See conference page",
+    "place": "",
+    "note": "First-round and second-round paper submissions. All dates are AoE (UTC-12)."
+  },
+  {
+    "name": "OOPSLA",
+    "description": "Object-Oriented Programming, Systems, Languages, and Applications",
+    "year": 2020,
+    "link": "https://2020.splashcon.org/track/splash-2020-oopsla",
+    "deadlines": [
+      "2020-05-15 23:59",
+      "2020-09-14 23:59"
+    ],
+    "date": "See conference page",
+    "place": "",
+    "note": "First-round and second-round paper submissions. All dates are AoE (UTC-12)."
+  },
+  {
+    "name": "OOPSLA",
+    "description": "Object-Oriented Programming, Systems, Languages, and Applications",
+    "year": 2019,
+    "link": "https://2019.splashcon.org/track/splash-2019-oopsla",
+    "deadlines": [
+      "2019-04-05 23:59",
+      "2019-08-15 23:59"
+    ],
+    "date": "See conference page",
+    "place": "",
+    "note": "First-round and second-round paper submissions. All dates are AoE (UTC-12)."
+  },
+  {
+    "name": "OOPSLA",
+    "description": "Object-Oriented Programming, Systems, Languages, and Applications",
+    "year": 2018,
+    "link": "https://2018.splashcon.org/track/splash-2018-OOPSLA",
+    "deadlines": [
+      "2018-04-16 23:59",
+      "2018-07-31 23:59"
+    ],
+    "date": "See conference page",
+    "place": "",
+    "note": "First-round and second-round paper submissions. All dates are AoE (UTC-12)."
+  }
+]

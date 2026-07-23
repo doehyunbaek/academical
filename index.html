@@ -39,6 +39,8 @@
 
         <div class="topbar-spacer"></div>
 
+        <span class="deadline-days-left" id="deadlineDaysLeft" hidden></span>
+
         <div class="search-shell">
           <label class="search-box" for="searchInput">
             <span aria-hidden="true">⌕</span>
@@ -323,6 +325,18 @@
           <input id="editCalendarColorInput" type="hidden" value="blue" />
           <div class="color-palette" id="editCalendarColorPalette" role="listbox" aria-label="Edit calendar color"></div>
         </div>
+
+        <section class="calendar-transfer" aria-labelledby="calendarTransferTitle">
+          <div>
+            <h3 id="calendarTransferTitle">Transfer events</h3>
+            <p id="calendarTransferSummary">Move all events in this calendar to another calendar.</p>
+          </div>
+          <div class="calendar-transfer-controls">
+            <select id="calendarTransferTarget" aria-label="Transfer events to calendar"></select>
+            <button class="button button--outline" id="transferCalendarEvents" type="button">Transfer events</button>
+            <button class="button button--outline" id="exportCalendarJson" type="button">Export JSON</button>
+          </div>
+        </section>
 
         <footer class="event-dialog-footer">
           <span class="footer-spacer"></span>

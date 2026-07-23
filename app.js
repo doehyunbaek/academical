@@ -12,6 +12,9 @@ const STORAGE_SYNC_UPDATED_AT = "academical.sync.updatedAt.v1";
 const STORAGE_SIDEBAR_LOCATION = "academical.sidebarLocation.v1";
 const STORAGE_BOTTOM_SIDEBAR_HEIGHT = "academical.bottomSidebarHeight.v1";
 const STORAGE_DEADLINE_FILTER_TAGS = "academical.deadlineFilterTags.v1";
+const STORAGE_SELECTED_DEADLINES = "academical.selectedDeadlines.v1";
+const STORAGE_DEADLINE_UPDATE_PREFIX = "academical.deadlineUpdate.v1";
+const DEADLINE_UPDATE_INTERVAL_MS = 24 * 60 * 60 * 1000;
 
 const VIEW_LABELS = {
   week: "Week",
@@ -37,116 +40,13 @@ const ACTIVITY_CATEGORIES = [
   { key: "meet", label: "Meet", color: "#d84e4e" },
 ];
 const DEADLINE_TYPES = [
-  { name: "Conference", tag: "CO", type: "venue" },
-  { name: "Journal", tag: "JO", type: "venue" },
-  { name: "Workshop", tag: "WO", type: "venue" },
-  { name: "Research paper track", tag: "RPT", type: "track" },
-  { name: "Short paper track", tag: "SPT", type: "track" },
-  { name: "In practice track", tag: "IPT", type: "track" },
-  { name: "Society track", tag: "SOT", type: "track" },
-  { name: "Education track", tag: "EDT", type: "track" },
-  { name: "Journal first track", tag: "JFT", type: "track" },
-  { name: "Artifact track", tag: "ART", type: "track" },
-  { name: "Tool track", tag: "TOT", type: "track" },
-  { name: "New ideas and emerging results track", tag: "NIER", type: "track" },
-  { name: "Doctoral symposium", tag: "DOS", type: "track" },
-  { name: "New faculty symposium", tag: "NFS", type: "track" },
-  { name: "Student research competition", tag: "SRC", type: "track" },
-  { name: "Late breaking track", tag: "LBT", type: "track" },
-  { name: "Registered reports track", tag: "RRT", type: "track" },
-  { name: "Challenge track", tag: "CHT", type: "track" },
-  { name: "Tutorials and technical briefings track", tag: "TTBT", type: "track" },
-  { name: "Experience papers track", tag: "EXPT", type: "track" },
-  { name: "Replicability studies track", tag: "REST", type: "track" },
+  { name: "ICSE", tag: "ICSE", type: "venue" },
+  { name: "FSE", tag: "FSE", type: "venue" },
+  { name: "ASE", tag: "ASE", type: "venue" },
+  { name: "ISSTA", tag: "ISSTA", type: "venue" },
+  { name: "OOPSLA", tag: "OOPSLA", type: "venue" },
 ];
-const DEADLINE_CONFERENCES = [
-  {
-    name: "ICSE",
-    description: "International Conference on Software Engineering - Research Track",
-    year: 2027,
-    link: "https://icse2027-research.hotcrp.com/",
-    deadlines: ["2026-06-30 23:59"],
-    date: "TBA",
-    place: "TBA",
-    note: "Mandatory abstract deadline on June 23, 2026. All dates are AoE (UTC-12).",
-  },
-  {
-    name: "ICSE",
-    description: "International Conference on Software Engineering - Research Track",
-    year: 2026,
-    link: "https://conf.researchr.org/track/icse-2026/icse-2026-research-track",
-    deadlines: ["2025-03-14 23:59", "2025-07-18 23:59"],
-    date: "April 12 - 18, 2026",
-    place: "Rio de Janeiro, Brazil",
-    note: "Mandatory abstract deadline on March 7 (first deadline) and July 11 (second deadline) 2024.",
-  },
-  {
-    name: "ICSE",
-    description: "International Conference on Software Engineering - Research Track",
-    year: 2025,
-    link: "https://conf.researchr.org/track/icse-2025/icse-2025-research-track",
-    deadlines: ["2024-03-22 23:59", "2024-08-02 23:59"],
-    date: "April 27 - May 3, 2025",
-    place: "Ottawa, Ontario, Canada",
-    note: "Mandatory abstract deadline on March 15 (first deadline) and July 26 (second deadline) 2024.",
-  },
-  {
-    name: "FSE",
-    description: "International Conference on the Foundations of Software Engineering - Research Papers",
-    year: 2026,
-    link: "https://conf.researchr.org/track/fse-2026/fse-2026-research-papers",
-    deadlines: ["2025-09-11 23:59"],
-    date: "July 6 - 10, 2026",
-    place: "Montreal, Canda",
-    note: "Mandatory abstract deadline on September 4 2024.",
-  },
-  {
-    name: "FSE",
-    description: "International Conference on the Foundations of Software Engineering - Research Papers",
-    year: 2025,
-    link: "https://conf.researchr.org/track/fse-2025/fse-2025-research-papers",
-    deadlines: ["2024-09-12 23:59"],
-    date: "June 23 - 27, 2025",
-    place: "Trondheim, Norway",
-    note: "Mandatory abstract deadline on September 5 2024.",
-  },
-  {
-    name: "ASE",
-    description: "International Conference on Automated Software Engineering - Research Papers",
-    year: 2026,
-    link: "https://conf.researchr.org/track/ase-2026/ase-2026-research-track",
-    deadlines: ["2026-03-26 23:59"],
-    date: "October 12 - 16, 2026",
-    place: "Munich, Germany",
-  },
-  {
-    name: "ASE",
-    description: "International Conference on Automated Software Engineering - Research Papers",
-    year: 2025,
-    link: "https://conf.researchr.org/track/ase-2025/ase-2025-papers",
-    deadlines: ["2025-05-30 23:59"],
-    date: "November 16 - 20, 2025",
-    place: "Seoul, South Korea",
-  },
-  {
-    name: "ISSTA",
-    description: "International Symposium on Software Testing and Analysis",
-    year: 2026,
-    link: "https://conf.researchr.org/track/issta-2026/issta-2026-research-papers",
-    deadlines: ["2026-01-29 23:59"],
-    date: "October 3 - 9, 2026",
-    place: "Oakland, California, United States",
-  },
-  {
-    name: "ISSTA",
-    description: "International Symposium on Software Testing and Analysis",
-    year: 2025,
-    link: "https://conf.researchr.org/track/issta-2025/issta-2025-papers#Call-for-Papers",
-    deadlines: ["2024-10-31 23:59"],
-    date: "June 25 - 28, 2025",
-    place: "Trondheim, Norway",
-  },
-];
+let deadlineConferences = [];
 
 const defaultCalendars = [
   { id: "teaching", name: "Teaching", color: "#1a73e8", builtIn: true },
@@ -281,6 +181,7 @@ const els = {
   deleteEvent: document.querySelector("#deleteEvent"),
   deletePaper: document.querySelector("#deletePaper"),
   deleteSeriesEvent: document.querySelector("#deleteSeriesEvent"),
+  deadlineDaysLeft: document.querySelector("#deadlineDaysLeft"),
   deadlinePanel: document.querySelector("#deadlinePanel"),
   editCalendarColorInput: document.querySelector("#editCalendarColorInput"),
   editCalendarColorPalette: document.querySelector("#editCalendarColorPalette"),
@@ -288,6 +189,10 @@ const els = {
   editCalendarId: document.querySelector("#editCalendarId"),
   editCalendarModal: document.querySelector("#editCalendarModal"),
   editCalendarNameInput: document.querySelector("#editCalendarNameInput"),
+  calendarTransferSummary: document.querySelector("#calendarTransferSummary"),
+  calendarTransferTarget: document.querySelector("#calendarTransferTarget"),
+  transferCalendarEvents: document.querySelector("#transferCalendarEvents"),
+  exportCalendarJson: document.querySelector("#exportCalendarJson"),
   cancelEditCalendarModal: document.querySelector("#cancelEditCalendarModal"),
   closeEditCalendarModal: document.querySelector("#closeEditCalendarModal"),
   eventCalendar: document.querySelector("#eventCalendar"),
@@ -412,10 +317,13 @@ let searchQuery = "";
 let heatmapDetailsAnchor = null;
 let heatmapRangeMode = "events";
 let deadlineFilterTags = loadDeadlineFilterTags();
+let selectedDeadlineIds = loadSelectedDeadlineIds();
 let activeWeekRangeDrag = null;
 let activeWeekEventDrag = null;
+let activeMonthEventDrag = null;
 let suppressNextWeekSlotClick = false;
 let suppressNextWeekEventClick = false;
+let suppressNextMonthEventClick = false;
 let firebaseSync = createFirebaseSyncState();
 let activeEventPaperSnapshots = [];
 let editingPaperTaskId = "";
@@ -437,6 +345,7 @@ function init() {
   bindEvents();
   renderPaperTasks();
   renderDeadlinePanel();
+  void loadDeadlineConferences();
   render();
   initFirebaseSync();
   setInterval(updateNowIndicator, 60_000);
@@ -534,6 +443,8 @@ function bindEvents() {
     if (event.target === els.calendarModal) closeCalendarModal();
   });
   els.editCalendarForm.addEventListener("submit", saveEditedCalendar);
+  els.transferCalendarEvents.addEventListener("click", transferCalendarEvents);
+  els.exportCalendarJson.addEventListener("click", exportCalendarJson);
   els.closeEditCalendarModal.addEventListener("click", closeEditCalendarModal);
   els.cancelEditCalendarModal.addEventListener("click", closeEditCalendarModal);
   els.editCalendarModal.addEventListener("click", (event) => {
@@ -702,6 +613,25 @@ function renderHeader() {
   els.todayButton.setAttribute("aria-label", `Today, ${longDateFormatter.format(TODAY)}`);
   els.previousMonth.setAttribute("aria-label", `Previous ${VIEW_LABELS[currentView].toLowerCase()}`);
   els.nextMonth.setAttribute("aria-label", `Next ${VIEW_LABELS[currentView].toLowerCase()}`);
+  renderDeadlineDaysLeft();
+}
+
+function renderDeadlineDaysLeft() {
+  if (!els.deadlineDaysLeft) return;
+  const today = startOfDay(getNow());
+  const futureDeadlines = getSelectedDeadlineEvents()
+    .map((event) => fromDateKey(event.date))
+    .filter((date) => date >= today);
+  if (!futureDeadlines.length) {
+    els.deadlineDaysLeft.hidden = true;
+    els.deadlineDaysLeft.textContent = "";
+    return;
+  }
+
+  const nearestDeadline = futureDeadlines.reduce((nearest, date) => date < nearest ? date : nearest);
+  const days = Math.ceil((nearestDeadline - today) / 86_400_000);
+  els.deadlineDaysLeft.textContent = `${days} day${days === 1 ? "" : "s"} until deadline`;
+  els.deadlineDaysLeft.hidden = false;
 }
 
 function toggleAccountPopover() {
@@ -1353,9 +1283,78 @@ function openEditCalendarModal(calendarId) {
   els.editCalendarId.value = calendarId;
   els.editCalendarNameInput.value = calendar.name;
   setColorPaletteValue(els.editCalendarColorPalette, els.editCalendarColorInput, calendar.color, { silent: true });
+  renderCalendarTransferControls(calendarId);
   els.editCalendarModal.classList.add("is-open");
   els.editCalendarModal.setAttribute("aria-hidden", "false");
   requestAnimationFrame(() => els.editCalendarNameInput.focus());
+}
+
+function renderCalendarTransferControls(calendarId) {
+  const targets = getActiveCalendars().filter((calendar) => calendar.id !== calendarId);
+  const eventCount = events.filter((event) => event.calendar === calendarId).length;
+  els.calendarTransferSummary.textContent = `${eventCount} event${eventCount === 1 ? "" : "s"} can be moved to another calendar.`;
+  els.calendarTransferTarget.replaceChildren(...targets.map((calendar) => {
+    const option = document.createElement("option");
+    option.value = calendar.id;
+    option.textContent = calendar.name;
+    return option;
+  }));
+  els.calendarTransferTarget.disabled = targets.length === 0 || eventCount === 0;
+  els.transferCalendarEvents.disabled = targets.length === 0 || eventCount === 0;
+}
+
+function transferCalendarEvents() {
+  const sourceId = els.editCalendarId.value;
+  const targetId = els.calendarTransferTarget.value;
+  if (!sourceId || !targetId || sourceId === targetId) return;
+
+  const source = getCalendar(sourceId);
+  const target = getCalendar(targetId);
+  let movedCount = 0;
+  events = events.map((event) => {
+    if (event.calendar !== sourceId) return event;
+    movedCount += 1;
+    return { ...event, calendar: targetId };
+  });
+  if (!movedCount) return;
+
+  visibleCalendars[targetId] = true;
+  saveEvents();
+  saveVisibleCalendars();
+  renderCalendarToggles();
+  renderArchivedCalendars();
+  renderCalendarTransferControls(sourceId);
+  render();
+  showToast(`${movedCount} event${movedCount === 1 ? "" : "s"} transferred from ${source.name} to ${target.name}`);
+}
+
+function exportCalendarJson() {
+  const calendarId = els.editCalendarId.value;
+  const calendar = getCalendar(calendarId);
+  if (!calendarId || !calendar) return;
+
+  const payload = {
+    exportedAt: new Date().toISOString(),
+    calendar: {
+      id: calendar.id,
+      name: calendar.name,
+      color: calendar.color,
+      builtIn: Boolean(calendar.builtIn),
+    },
+    events: events.filter((event) => event.calendar === calendarId),
+  };
+  const blob = new Blob([`${JSON.stringify(payload, null, 2)}\n`], { type: "application/json" });
+  const url = URL.createObjectURL(blob);
+  const link = document.createElement("a");
+  link.href = url;
+  link.download = `${slugifyFilename(calendar.name || calendar.id)}.json`;
+  link.click();
+  URL.revokeObjectURL(url);
+  showToast(`${calendar.name} exported`);
+}
+
+function slugifyFilename(value) {
+  return String(value).trim().toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "") || "calendar";
 }
 
 function closeEditCalendarModal() {
@@ -2983,6 +2982,23 @@ function getWorkedHoursForDate(dateKey) {
   return getFilteredEventsForDate(dateKey).reduce((total, event) => total + getOccurrenceDurationHours(event), 0);
 }
 
+function getAllRecordedEventHours() {
+  return events
+    .filter((event) => !isCalendarDeleted(event.calendar) && visibleCalendars[event.calendar])
+    .reduce((total, event) => total + getOccurrenceDurationHours(event), 0);
+}
+
+function getRemainingDeadlineHours(today, deadline) {
+  const start = startOfDay(today);
+  const end = startOfDay(deadline);
+  if (end < start) return 0;
+
+  const inclusiveDays = Math.round((end - start) / 86_400_000) + 1;
+  const finalSprintDays = Math.min(30, inclusiveDays);
+  const regularDays = Math.max(0, inclusiveDays - finalSprintDays);
+  return (regularDays / 7) * 40 + finalSprintDays * 10;
+}
+
 function getHeatmapIntensityLevel(hours) {
   if (hours <= 0) return 0;
   if (hours <= 1) return 1;
@@ -3062,11 +3078,112 @@ function renderMonthGrid() {
   );
 }
 
+async function loadDeadlineConferences() {
+  try {
+    const response = await fetch("./deadlines.json");
+    if (!response.ok) throw new Error(`HTTP ${response.status}`);
+    const data = await response.json();
+    deadlineConferences = Array.isArray(data) ? data : [];
+    renderDeadlinePanel();
+    render();
+    await checkPredictedDeadlineUpdates();
+  } catch (error) {
+    console.error("Unable to load deadline data:", error);
+  }
+}
+
+async function checkPredictedDeadlineUpdates() {
+  const proxyUrl = window.ACADEMICAL_GOOGLE_CONFIG?.deadlineUpdatesUrl;
+  if (!proxyUrl) return;
+
+  const forecasts = getDeadlinePredictions();
+  const checks = await Promise.allSettled(forecasts.map(async (forecast) => {
+    const cachedUpdate = loadCachedDeadlineUpdate(forecast);
+    if (cachedUpdate) return { forecast, update: cachedUpdate };
+
+    const url = new URL(proxyUrl);
+    url.searchParams.set("conference", forecast.name);
+    url.searchParams.set("year", String(forecast.year));
+    const response = await fetch(url, { headers: { Accept: "application/json" } });
+    if (!response.ok) throw new Error(`HTTP ${response.status}`);
+    const update = await response.json();
+    saveCachedDeadlineUpdate(forecast, update);
+    return { forecast, update };
+  }));
+
+  let changed = false;
+  checks.forEach((check) => {
+    if (check.status !== "fulfilled") {
+      console.warn("Unable to check a predicted deadline:", check.reason);
+      return;
+    }
+
+    const { forecast, update } = check.value;
+    if (!update?.available || !Array.isArray(update.deadlines) || !update.deadlines.length) return;
+    const latest = deadlineConferences
+      .filter((conference) => conference.name === forecast.name)
+      .sort((a, b) => b.year - a.year)[0];
+    const publishedDeadlines = update.deadlines.map((deadline) => deadline.date).filter(Boolean);
+    if (!latest || !publishedDeadlines.length) return;
+
+    const announced = {
+      ...latest,
+      year: forecast.year,
+      link: update.deadlines[0].link || update.sourceUrl || forecast.link,
+      deadlines: publishedDeadlines,
+      date: "",
+      place: "",
+      note: "Researchr has announced this deadline. Add it to deadlines.json to make the update permanent.",
+      isAnnouncedUpdate: true,
+    };
+    const existingIndex = deadlineConferences.findIndex((conference) => (
+      conference.name === announced.name && conference.year === announced.year
+    ));
+    if (existingIndex >= 0) {
+      deadlineConferences[existingIndex] = announced;
+    } else {
+      deadlineConferences.push(announced);
+    }
+    changed = true;
+  });
+
+  if (changed) {
+    renderDeadlinePanel();
+    render();
+  }
+}
+
+function loadCachedDeadlineUpdate(forecast) {
+  try {
+    const cached = JSON.parse(localStorage.getItem(getDeadlineUpdateCacheKey(forecast)) || "null");
+    if (!cached || Date.now() - cached.checkedAt >= DEADLINE_UPDATE_INTERVAL_MS) return null;
+    return cached.update;
+  } catch {
+    return null;
+  }
+}
+
+function saveCachedDeadlineUpdate(forecast, update) {
+  try {
+    localStorage.setItem(getDeadlineUpdateCacheKey(forecast), JSON.stringify({
+      checkedAt: Date.now(),
+      update,
+    }));
+  } catch {
+    // A failed browser cache write should not prevent deadline updates.
+  }
+}
+
+function getDeadlineUpdateCacheKey(forecast) {
+  return `${STORAGE_DEADLINE_UPDATE_PREFIX}.${forecast.name}.${forecast.year}`;
+}
+
 function renderDeadlinePanel() {
   if (!els.deadlinePanel) return;
   const allDeadlines = getDeadlineEntries();
   const deadlines = getFilteredDeadlineEntries(allDeadlines);
-  const upcomingCount = deadlines.filter((entry) => !entry.isPast).length;
+  const upcomingCount = deadlines.filter((entry) => !entry.isPast && !entry.isPredicted).length;
+  const predictionCount = deadlines.filter((entry) => entry.isPredicted).length;
 
   const view = document.createElement("section");
   view.className = "deadline-view";
@@ -3076,14 +3193,14 @@ function renderDeadlinePanel() {
   header.className = "deadline-view-header";
   header.innerHTML = `
     <div>
-      <p class="deadline-kicker">Internalized from /deadlines</p>
       <h2>Research venue deadlines</h2>
-      <p>Countdowns to top Research Venues deadlines.</p>
     </div>
-    <strong>${upcomingCount} upcoming · ${deadlines.length}/${allDeadlines.length} shown</strong>
+    <strong>${upcomingCount} upcoming · ${predictionCount} forecast${predictionCount === 1 ? "" : "s"}</strong>
   `;
 
   const filters = createDeadlineFilters();
+  header.insertBefore(filters, header.lastElementChild);
+
   const list = document.createElement("div");
   list.className = "deadline-list";
   if (deadlines.length) {
@@ -3095,7 +3212,7 @@ function renderDeadlinePanel() {
     list.replaceChildren(empty);
   }
 
-  view.append(header, filters, list);
+  view.append(header, list);
   els.deadlinePanel.replaceChildren(view);
   updateDeadlineTimers();
 }
@@ -3119,15 +3236,10 @@ function createDeadlineFilters() {
     renderDeadlinePanel();
   });
 
-  const groups = [
-    ["venue", "Venue"],
-    ["track", "Track"],
-  ].map(([type, label]) => {
+  const groups = ["venue"].map((type) => {
     const group = document.createElement("fieldset");
     group.className = "deadline-filter-group";
-    const legend = document.createElement("legend");
-    legend.textContent = label;
-    group.append(legend, ...DEADLINE_TYPES.filter((item) => item.type === type).map(createDeadlineFilterOption));
+    group.append(...DEADLINE_TYPES.filter((item) => item.type === type).map(createDeadlineFilterOption));
     return group;
   });
 
@@ -3147,12 +3259,13 @@ function createDeadlineFilterOption(type) {
 
 function getFilteredDeadlineEntries(entries) {
   if (!deadlineFilterTags.length) return entries;
-  return entries.filter((entry) => deadlineFilterTags.every((tag) => entry.tags.includes(tag)));
+  return entries.filter((entry) => deadlineFilterTags.some((tag) => entry.tags.includes(tag)));
 }
 
 function getDeadlineEntries() {
   const now = getNow();
-  return DEADLINE_CONFERENCES.flatMap((conference) => {
+  const conferences = [...deadlineConferences, ...getDeadlinePredictions()];
+  return conferences.flatMap((conference) => {
     const deadlines = Array.isArray(conference.deadlines) ? conference.deadlines : [conference.deadlines];
     return deadlines.map((rawDeadline, index) => {
       const date = parseDeadlineDate(rawDeadline, conference.timezone);
@@ -3160,24 +3273,119 @@ function getDeadlineEntries() {
         ...conference,
         id: makeDeadlineId(conference, index),
         rawDeadline,
-        tags: normalizeDeadlineTags(conference.tags),
+        tags: normalizeDeadlineTags(conference.tags, conference.name),
         deadline: date,
         deadlineIndex: index,
         deadlineCount: deadlines.length,
+        prediction: conference.predictions?.[index] ?? null,
         isPast: date <= now,
       };
     });
   }).sort(compareDeadlineEntries);
 }
 
-function normalizeDeadlineTags(tags) {
+function getDeadlinePredictions() {
+  return DEADLINE_TYPES.map(({ name }) => {
+    const editions = deadlineConferences
+      .filter((conference) => conference.name === name)
+      .sort((a, b) => b.year - a.year);
+    const latest = editions[0];
+    if (!latest) return null;
+
+    const now = getNow();
+    const hasAnnouncedUpcomingDeadline = editions.some((conference) => {
+      const deadlines = Array.isArray(conference.deadlines) ? conference.deadlines : [conference.deadlines];
+      return deadlines.some((deadline) => parseDeadlineDate(deadline, conference.timezone) > now);
+    });
+    if (hasAnnouncedUpcomingDeadline) return null;
+
+    const targetYear = latest.year + 1;
+    const deadlineCount = Array.isArray(latest.deadlines) ? latest.deadlines.length : 1;
+    const predictionEditions = editions
+      .filter((conference) => conference.year >= (latest.predictionHistoryStartYear ?? -Infinity))
+      .slice(0, 5);
+    const cyclePredictions = Array.from({ length: deadlineCount }, (_, index) => {
+      const offsets = predictionEditions.flatMap((conference) => {
+        const deadlines = Array.isArray(conference.deadlines) ? conference.deadlines : [conference.deadlines];
+        const date = getDeadlineDateParts(deadlines[index]);
+        return date ? [getConferenceYearDayOffset(date, conference.year)] : [];
+      });
+      return predictDeadlineFromOffsets(offsets, targetYear);
+    });
+
+    const nextPrediction = cyclePredictions
+      .filter(Boolean)
+      .sort((a, b) => a.date.localeCompare(b.date))
+      .find((prediction) => parseDeadlineDate(`${prediction.date} 23:59`) > now)
+      ?? cyclePredictions.filter(Boolean).sort((a, b) => a.date.localeCompare(b.date))[0];
+    if (!nextPrediction) return null;
+
+    return {
+      name,
+      description: latest.description,
+      year: targetYear,
+      link: getDeadlineSeriesLink(name),
+      deadlines: [`${nextPrediction.date} 23:59`],
+      predictions: [nextPrediction],
+      date: "",
+      place: "",
+      note: "",
+      isPredicted: true,
+    };
+  }).filter(Boolean);
+}
+
+function getDeadlineDateParts(rawDeadline) {
+  const match = String(rawDeadline || "").match(/^(\d{4})-(\d{2})-(\d{2})/);
+  return match ? { year: Number(match[1]), month: Number(match[2]), day: Number(match[3]) } : null;
+}
+
+function getConferenceYearDayOffset(date, conferenceYear) {
+  return Math.round((Date.UTC(date.year, date.month - 1, date.day) - Date.UTC(conferenceYear, 0, 1)) / 86_400_000);
+}
+
+function predictDeadlineFromOffsets(offsets, targetYear) {
+  if (!offsets.length) return null;
+  const sorted = [...offsets].sort((a, b) => a - b);
+  const middle = Math.floor(sorted.length / 2);
+  const median = sorted.length % 2 ? sorted[middle] : Math.round((sorted[middle - 1] + sorted[middle]) / 2);
+  const spreadDays = sorted.at(-1) - sorted[0];
+  const confidence = sorted.length >= 4 && spreadDays <= 35
+    ? "High"
+    : sorted.length >= 3 && spreadDays <= 70
+      ? "Medium"
+      : "Low";
+  return {
+    date: formatPredictionDateKey(targetYear, median),
+    rangeStart: formatPredictionDateKey(targetYear, sorted[0]),
+    rangeEnd: formatPredictionDateKey(targetYear, sorted.at(-1)),
+    confidence,
+    sampleSize: sorted.length,
+    spreadDays,
+  };
+}
+
+function formatPredictionDateKey(year, dayOffset) {
+  return new Date(Date.UTC(year, 0, 1 + dayOffset)).toISOString().slice(0, 10);
+}
+
+function getDeadlineSeriesLink(name) {
+  return `https://conf.researchr.org/series/${name === "OOPSLA" ? "splash" : name.toLowerCase()}`;
+}
+
+function normalizeDeadlineTags(tags, venue) {
   const normalized = Array.isArray(tags) ? tags.filter(isValidDeadlineFilterTag) : [];
-  return normalized.length ? normalized : ["CO", "RPT"];
+  return normalized.length ? normalized : [venue].filter(isValidDeadlineFilterTag);
 }
 
 function createDeadlineCard(entry) {
   const card = document.createElement("article");
-  card.className = ["deadline-card", entry.isPast ? "deadline-card--past" : ""].filter(Boolean).join(" ");
+  card.className = [
+    "deadline-card",
+    entry.isPast ? "deadline-card--past" : "",
+    entry.isPredicted ? "deadline-card--predicted" : "",
+    entry.isAnnouncedUpdate ? "deadline-card--announced" : "",
+  ].filter(Boolean).join(" ");
   card.dataset.deadlineAt = entry.deadline.toISOString();
   card.id = entry.id;
 
@@ -3185,23 +3393,84 @@ function createDeadlineCard(entry) {
     ? `Deadline (${entry.deadlineIndex + 1} / ${entry.deadlineCount})`
     : "Deadline";
   const place = entry.place ? `// ${escapeHtml(entry.place)}` : "";
+  const meta = entry.date || entry.place
+    ? `<p class="deadline-meta">${escapeHtml(String(entry.date || "")).replace(/ - /g, " – ")} ${place}</p>`
+    : "";
   const note = entry.note ? `<p class="deadline-note">${escapeHtml(entry.note)}</p>` : "";
+  const predictionBadge = entry.isPredicted
+    ? `<span class="deadline-prediction-badge deadline-prediction-badge--${entry.prediction.confidence.toLowerCase()}">Predicted · ${escapeHtml(entry.prediction.confidence)} confidence</span>`
+    : "";
+  const announcedBadge = entry.isAnnouncedUpdate
+    ? `<span class="deadline-announced-badge">Announced · update available</span>`
+    : "";
+  const predictionRange = entry.isPredicted
+    ? `<p class="deadline-prediction-range">Likely range: <span>${formatPredictionRange(entry.prediction)}</span> · ${entry.prediction.sampleSize} edition${entry.prediction.sampleSize === 1 ? "" : "s"}</p>`
+    : "";
+  const calendarToggle = `
+    <label class="deadline-calendar-toggle">
+      <input type="checkbox" data-deadline-calendar-id="${escapeHtml(entry.id)}" ${selectedDeadlineIds.includes(entry.id) ? "checked" : ""} />
+      <span>Show in calendar</span>
+    </label>
+  `;
 
   card.innerHTML = `
     <div class="deadline-card-main">
       <h3><a href="${escapeHtml(entry.link)}" target="_blank" rel="noreferrer">${escapeHtml(entry.name)} ${entry.year}</a></h3>
+      ${predictionBadge}
+      ${announcedBadge}
       <p>${escapeHtml(entry.description)}</p>
-      <p class="deadline-meta">${escapeHtml(String(entry.date)).replace(/ - /g, " – ")} ${place}</p>
+      ${meta}
       ${note}
     </div>
     <div class="deadline-card-countdown">
       <strong class="deadline-countdown" data-deadline-at="${entry.deadline.toISOString()}">${formatDeadlineDistance(entry.deadline)}</strong>
-      <p>${deadlineLabel}: <span>${formatDeadlineDate(entry.deadline)}</span></p>
+      <p>${entry.isPredicted ? "Predicted deadline" : deadlineLabel}: <span>${formatDeadlineDate(entry.deadline)}</span></p>
+      ${predictionRange}
       <span class="deadline-timezone">AoE / UTC-12</span>
+      ${calendarToggle}
     </div>
   `;
 
+  card.querySelector("[data-deadline-calendar-id]").addEventListener("change", toggleDeadlineCalendarEvent);
   return card;
+}
+
+function toggleDeadlineCalendarEvent(event) {
+  const id = event.currentTarget.dataset.deadlineCalendarId;
+  const selected = new Set(selectedDeadlineIds);
+  if (event.currentTarget.checked) {
+    selected.add(id);
+    visibleCalendars.deadlines = true;
+    saveVisibleCalendars();
+    renderCalendarToggles();
+  } else {
+    selected.delete(id);
+  }
+  selectedDeadlineIds = [...selected];
+  saveSelectedDeadlineIds();
+  render();
+}
+
+function getSelectedDeadlineEvents() {
+  const selected = new Set(selectedDeadlineIds);
+  return getDeadlineEntries()
+    .filter((entry) => selected.has(entry.id))
+    .map((entry) => ({
+      id: `calendar-${entry.id}`,
+      deadlineId: entry.id,
+      title: `${entry.name} ${entry.year}${entry.deadlineCount > 1 ? ` deadline ${entry.deadlineIndex + 1}` : " deadline"}`,
+      date: String(entry.rawDeadline).slice(0, 10),
+      time: "23:59",
+      durationMinutes: 0,
+      calendar: "deadlines",
+      notes: entry.isPredicted ? "Predicted deadline" : entry.description,
+      repeat: "none",
+      readOnlyDeadline: true,
+    }));
+}
+
+function getCalendarEvents() {
+  return [...events, ...getSelectedDeadlineEvents()];
 }
 
 function updateDeadlineTimers() {
@@ -3228,6 +3497,15 @@ function parseDeadlineDate(rawDeadline, timezone = "") {
   const withSeconds = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}$/.test(normalized) ? `${normalized}:59` : normalized;
   const offset = timezone || "-12:00";
   return new Date(`${withSeconds}${offset}`);
+}
+
+function formatPredictionRange(prediction) {
+  const start = parseDeadlineDate(`${prediction.rangeStart} 23:59`);
+  const end = parseDeadlineDate(`${prediction.rangeEnd} 23:59`);
+  const formatter = new Intl.DateTimeFormat("en-US", { month: "short", day: "numeric", year: "numeric" });
+  return prediction.rangeStart === prediction.rangeEnd
+    ? formatter.format(start)
+    : `${formatter.format(start)} – ${formatter.format(end)}`;
 }
 
 function formatDeadlineDate(date) {
@@ -3264,6 +3542,19 @@ function makeDeadlineId(conference, index) {
 }
 
 function getHeatmapDateRange() {
+  const today = startOfDay(getNow());
+  const futureDeadlineDates = getSelectedDeadlineEvents()
+    .map((event) => fromDateKey(event.date))
+    .filter((date) => date >= today);
+  if (futureDeadlineDates.length) {
+    return {
+      start: today,
+      end: futureDeadlineDates.reduce((latest, date) => date > latest ? date : latest, today),
+      hasEvents: true,
+      mode: "deadline",
+    };
+  }
+
   if (heatmapRangeMode === "year") {
     const rangeEnd = startOfDay(viewAnchorDate);
     return {
@@ -3274,7 +3565,7 @@ function getHeatmapDateRange() {
     };
   }
 
-  const visibleEventDates = events
+  const visibleEventDates = getCalendarEvents()
     .filter((event) => isEventVisible(event))
     .flatMap((event) => [event.date, getEventRangeEndDateKey(event)]);
 
@@ -3339,11 +3630,31 @@ function renderHeatmapView() {
   heatmap.setAttribute("aria-label", `${formatDateRange(rangeStart, rangeEnd)} worked-hours heatmap`);
 
   const summary = document.createElement("div");
-  summary.className = "heatmap-summary";
-  summary.innerHTML = `
-    <strong>${formatHours(totalHours)}</strong>
-    <span>${mode === "year" ? "Rolling year" : "Event span"} · ${activeDays} active day${activeDays === 1 ? "" : "s"} · ${formatDateRange(rangeStart, rangeEnd)}${maxHours ? ` · max ${formatHours(maxHours)}/day` : ""}</span>
-  `;
+  summary.className = `heatmap-summary${mode === "deadline" ? " heatmap-summary--deadline" : ""}`;
+  if (mode === "deadline") {
+    const currentTimeSpent = getAllRecordedEventHours();
+    const remainingTime = getRemainingDeadlineHours(rangeStart, rangeEnd);
+    summary.innerHTML = `
+      <div class="heatmap-deadline-metric">
+        <span>Current time spent</span>
+        <strong>${formatHours(currentTimeSpent)}</strong>
+      </div>
+      <div class="heatmap-deadline-metric">
+        <span>Remaining time</span>
+        <strong>${formatHours(remainingTime)}</strong>
+      </div>
+      <div class="heatmap-deadline-metric heatmap-deadline-metric--total">
+        <span>Total time spent</span>
+        <strong>${formatHours(currentTimeSpent + remainingTime)}</strong>
+      </div>
+      <p>Today to deadline · ${formatDateRange(rangeStart, rangeEnd)}</p>
+    `;
+  } else {
+    summary.innerHTML = `
+      <strong>${formatHours(totalHours)}</strong>
+      <span>${mode === "year" ? "Rolling year" : "Event span"} · ${activeDays} active day${activeDays === 1 ? "" : "s"} · ${formatDateRange(rangeStart, rangeEnd)}${maxHours ? ` · max ${formatHours(maxHours)}/day` : ""}</span>
+    `;
+  }
 
   const monthRow = document.createElement("div");
   monthRow.className = "heatmap-month-row";
@@ -4069,13 +4380,19 @@ function getWeekColumnAtPoint(clientX) {
 }
 
 function moveWeekEventOccurrence(calendarEvent, targetDateKey, targetMinutes) {
+  moveEventOccurrence(calendarEvent, targetDateKey, formatMinutesInput(targetMinutes));
+}
+
+function moveEventOccurrence(calendarEvent, targetDateKey, targetTime = calendarEvent.time ?? "") {
   const eventIndex = events.findIndex((event) => event.id === calendarEvent.id);
-  if (eventIndex < 0) return;
+  if (eventIndex < 0) return false;
 
   const sourceEvent = events[eventIndex];
   const sourceDateKey = getEventDate(calendarEvent);
-  const targetTime = formatMinutesInput(targetMinutes);
+  const sourceTime = calendarEvent.time ?? "";
   const repeat = sourceEvent.repeat ?? "none";
+
+  if (targetDateKey === sourceDateKey && targetTime === sourceTime) return false;
 
   if (repeat === "none") {
     events.splice(eventIndex, 1, {
@@ -4110,6 +4427,7 @@ function moveWeekEventOccurrence(calendarEvent, targetDateKey, targetMinutes) {
   saveEvents();
   render();
   showToast("Event moved");
+  return true;
 }
 
 function createMovedStandaloneOccurrence(calendarEvent, targetDateKey, targetTime) {
@@ -4125,6 +4443,99 @@ function createMovedStandaloneOccurrence(calendarEvent, targetDateKey, targetTim
     durationMinutes: getOccurrenceDurationMinutes(calendarEvent),
     notes: calendarEvent.notes ?? "",
   };
+}
+
+function startMonthEventDrag(event, calendarEvent) {
+  if (event.button !== 0 || activeMonthEventDrag || activeWeekEventDrag || activeWeekRangeDrag) return;
+  if (!["month", "four-week"].includes(currentView)) return;
+
+  const sourceButton = event.currentTarget;
+  const preview = document.createElement("div");
+  preview.className = "month-event-drag-preview";
+  preview.style.setProperty("--event-color", getCalendar(calendarEvent.calendar).color);
+  preview.textContent = `${calendarEvent.time ? `${formatTime(calendarEvent.time)} · ` : ""}${calendarEvent.title}`;
+  preview.hidden = true;
+  document.body.append(preview);
+
+  activeMonthEventDrag = {
+    event: calendarEvent,
+    sourceButton,
+    preview,
+    sourceTime: calendarEvent.time ?? "",
+    targetDateKey: getEventDate(calendarEvent),
+    targetCell: null,
+    startX: event.clientX,
+    startY: event.clientY,
+    moved: false,
+  };
+
+  window.addEventListener("pointermove", handleMonthEventDragMove);
+  window.addEventListener("pointerup", handleMonthEventDragEnd);
+  window.addEventListener("pointercancel", cancelMonthEventDrag);
+}
+
+function handleMonthEventDragMove(event) {
+  if (!activeMonthEventDrag) return;
+
+  const drag = activeMonthEventDrag;
+  const distance = Math.hypot(event.clientX - drag.startX, event.clientY - drag.startY);
+  drag.moved = drag.moved || distance > 4;
+  if (!drag.moved) return;
+
+  event.preventDefault();
+  drag.sourceButton.classList.add("is-dragging");
+  updateMonthEventDragPreview(drag, event);
+}
+
+function handleMonthEventDragEnd(event) {
+  if (!activeMonthEventDrag) return;
+
+  const drag = activeMonthEventDrag;
+  if (drag.moved) updateMonthEventDragPreview(drag, event);
+  const targetDateKey = drag.targetCell?.dataset.date || "";
+  cleanupMonthEventDrag();
+
+  if (!drag.moved) return;
+
+  suppressNextMonthEventClick = true;
+  setTimeout(() => {
+    suppressNextMonthEventClick = false;
+  }, 0);
+
+  if (targetDateKey) moveEventOccurrence(drag.event, targetDateKey, drag.sourceTime);
+}
+
+function cancelMonthEventDrag() {
+  cleanupMonthEventDrag();
+}
+
+function cleanupMonthEventDrag() {
+  if (activeMonthEventDrag?.preview) activeMonthEventDrag.preview.remove();
+  if (activeMonthEventDrag?.sourceButton) activeMonthEventDrag.sourceButton.classList.remove("is-dragging");
+  if (activeMonthEventDrag?.targetCell) activeMonthEventDrag.targetCell.classList.remove("day-cell--drag-over");
+  activeMonthEventDrag = null;
+  window.removeEventListener("pointermove", handleMonthEventDragMove);
+  window.removeEventListener("pointerup", handleMonthEventDragEnd);
+  window.removeEventListener("pointercancel", cancelMonthEventDrag);
+}
+
+function updateMonthEventDragPreview(drag, event) {
+  const targetCell = getMonthDayCellAtPoint(event.clientX, event.clientY);
+  if (targetCell) drag.targetDateKey = targetCell.dataset.date || drag.targetDateKey;
+
+  if (drag.targetCell !== targetCell) {
+    drag.targetCell?.classList.remove("day-cell--drag-over");
+    targetCell?.classList.add("day-cell--drag-over");
+    drag.targetCell = targetCell;
+  }
+
+  drag.preview.hidden = false;
+  drag.preview.style.left = `${event.clientX + 12}px`;
+  drag.preview.style.top = `${event.clientY + 12}px`;
+}
+
+function getMonthDayCellAtPoint(clientX, clientY) {
+  return document.elementFromPoint(clientX, clientY)?.closest?.(".day-cell[data-date]") ?? null;
 }
 
 function createEventChip(calendarEvent) {
@@ -4153,8 +4564,20 @@ function createEventChip(calendarEvent) {
   title.textContent = calendarEvent.title;
 
   chip.append(title);
+  if (calendarEvent.readOnlyDeadline) {
+    chip.classList.add("event-chip--deadline");
+    chip.addEventListener("click", (event) => event.stopPropagation());
+    return chip;
+  }
+
+  chip.addEventListener("pointerdown", (event) => startMonthEventDrag(event, calendarEvent));
   chip.addEventListener("click", (event) => {
     event.stopPropagation();
+    if (suppressNextMonthEventClick) {
+      event.preventDefault();
+      suppressNextMonthEventClick = false;
+      return;
+    }
     selectedDate = fromDateKey(getEventDate(calendarEvent));
     openEventDialog(getEventDate(calendarEvent), calendarEvent);
   });
@@ -4500,7 +4923,7 @@ function getMaxVisibleEvents() {
 }
 
 function getFilteredEventsForDate(dateKey) {
-  return events
+  return getCalendarEvents()
     .filter((event) => doesEventOccurOnDate(event, dateKey))
     .map((event) => createEventOccurrence(event, dateKey))
     .filter((event) => isEventVisible(event))
@@ -4868,6 +5291,19 @@ function loadBottomSidebarHeight() {
 
 function saveBottomSidebarHeight() {
   if (bottomSidebarHeight) localStorage.setItem(STORAGE_BOTTOM_SIDEBAR_HEIGHT, String(bottomSidebarHeight));
+}
+
+function loadSelectedDeadlineIds() {
+  try {
+    const saved = JSON.parse(localStorage.getItem(STORAGE_SELECTED_DEADLINES) || "[]");
+    return Array.isArray(saved) ? saved.filter((id) => typeof id === "string") : [];
+  } catch {
+    return [];
+  }
+}
+
+function saveSelectedDeadlineIds() {
+  localStorage.setItem(STORAGE_SELECTED_DEADLINES, JSON.stringify(selectedDeadlineIds));
 }
 
 function loadDeadlineFilterTags() {

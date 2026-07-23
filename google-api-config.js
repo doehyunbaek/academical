@@ -8,5 +8,6 @@ window.ACADEMICAL_GOOGLE_CONFIG = {
     appId: "1:53785424506:web:9f9910d3c51480b6e901c3"
   },
   paperMetadataUrl: "https://academical-arxiv.doehyunbaek.workers.dev",
+  deadlineUpdatesUrl: "https://academical-arxiv.doehyunbaek.workers.dev",
   scopes: ["profile", "email"],
 };

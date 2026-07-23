@@ -332,6 +332,17 @@ textarea:focus-visible {
   padding: 22px;
 }
 
+.deadline-days-left {
+  flex: none;
+  padding: 5px 9px;
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--danger) 10%, var(--surface));
+  color: var(--danger);
+  font-size: 12px;
+  font-weight: 750;
+  white-space: nowrap;
+}
+
 .view-select {
   height: 36px;
   padding: 0 34px 0 14px;
@@ -1106,16 +1117,15 @@ textarea:focus-visible {
 }
 
 .deadline-view {
-  width: min(100%, 1100px);
-  margin: 0 auto;
+  width: 100%;
   display: grid;
   gap: 18px;
 }
 
 .deadline-view-header {
-  display: flex;
+  display: grid;
+  grid-template-columns: auto max-content 1fr;
   align-items: end;
-  justify-content: space-between;
   gap: 18px;
   padding-bottom: 18px;
   border-bottom: 1px solid var(--border-soft);
@@ -1136,7 +1146,7 @@ textarea:focus-visible {
 }
 
 .deadline-view-header strong {
-  flex: none;
+  justify-self: end;
   color: var(--primary);
   font-size: 14px;
 }
@@ -1151,18 +1161,19 @@ textarea:focus-visible {
 }
 
 .deadline-filters {
+  width: fit-content;
+  max-width: 100%;
   display: grid;
   gap: 12px;
-  padding: 14px;
+  padding: 10px 12px;
   border: 1px solid var(--border-soft);
   border-radius: 16px;
   background: #f8fafd;
 }
 
 .deadline-filter-group {
-  min-width: 0;
   display: flex;
-  flex-wrap: wrap;
+  flex-wrap: nowrap;
   gap: 8px;
   margin: 0;
   padding: 0;
@@ -1233,6 +1244,23 @@ textarea:focus-visible {
   opacity: 0.55;
 }
 
+.deadline-card--predicted,
+.deadline-card--announced {
+  padding-inline: 16px;
+  border-radius: 14px;
+  opacity: 1;
+}
+
+.deadline-card--predicted {
+  border: 1px dashed color-mix(in srgb, var(--primary) 45%, var(--border));
+  background: color-mix(in srgb, var(--primary) 4%, transparent);
+}
+
+.deadline-card--announced {
+  border: 1px solid color-mix(in srgb, #188038 45%, var(--border));
+  background: color-mix(in srgb, #188038 6%, transparent);
+}
+
 .deadline-card h3 {
   margin: 0 0 8px;
   color: var(--text);
@@ -1257,8 +1285,46 @@ textarea:focus-visible {
 }
 
 .deadline-meta,
-.deadline-note {
+.deadline-note,
+.deadline-prediction-range {
   margin-top: 6px !important;
+}
+
+.deadline-prediction-badge {
+  display: inline-flex;
+  margin-bottom: 8px;
+  padding: 3px 8px;
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--primary) 14%, var(--surface));
+  color: var(--primary);
+  font-size: 11px;
+  font-weight: 750;
+}
+
+.deadline-prediction-badge--medium {
+  background: color-mix(in srgb, #f9ab00 18%, var(--surface));
+  color: #a15c00;
+}
+
+.deadline-prediction-badge--low {
+  background: color-mix(in srgb, #d93025 14%, var(--surface));
+  color: #d93025;
+}
+
+.deadline-announced-badge {
+  display: inline-flex;
+  margin-bottom: 8px;
+  padding: 3px 8px;
+  border-radius: 999px;
+  background: color-mix(in srgb, #188038 15%, var(--surface));
+  color: #188038;
+  font-size: 11px;
+  font-weight: 750;
+}
+
+.deadline-prediction-range span {
+  color: var(--text);
+  font-weight: 650;
 }
 
 .deadline-card-countdown {
@@ -1292,6 +1358,29 @@ textarea:focus-visible {
   color: var(--text-muted);
   font-size: 11px;
   font-weight: 700;
+}
+
+.deadline-calendar-toggle {
+  justify-self: start;
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  margin-top: 5px;
+  color: var(--text-muted);
+  font-size: 12px;
+  font-weight: 700;
+  cursor: pointer;
+}
+
+.deadline-calendar-toggle input {
+  width: 15px;
+  height: 15px;
+  margin: 0;
+  accent-color: var(--primary);
+}
+
+.event-chip--deadline {
+  cursor: default;
 }
 
 .month-grid--four-week {
@@ -1346,6 +1435,39 @@ textarea:focus-visible {
   color: var(--text);
   font-size: 18px;
   font-weight: 700;
+}
+
+.heatmap-summary--deadline {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(150px, max-content));
+  align-items: stretch;
+  gap: 10px;
+}
+
+.heatmap-deadline-metric {
+  display: grid;
+  gap: 4px;
+  padding: 10px 12px;
+  border: 1px solid var(--border-soft);
+  border-radius: 12px;
+  background: var(--surface-2);
+}
+
+.heatmap-deadline-metric span {
+  font-size: 11px;
+  font-weight: 750;
+  letter-spacing: 0.03em;
+  text-transform: uppercase;
+}
+
+.heatmap-deadline-metric--total {
+  border-color: color-mix(in srgb, var(--primary) 35%, var(--border-soft));
+  background: color-mix(in srgb, var(--primary) 7%, var(--surface));
+}
+
+.heatmap-summary--deadline > p {
+  grid-column: 1 / -1;
+  margin: 0;
 }
 
 .heatmap-month-row,
@@ -1914,6 +2036,11 @@ textarea:focus-visible {
   font-weight: 700;
 }
 
+.day-cell--drag-over {
+  background: #f8fbff;
+  box-shadow: inset 0 0 0 2px rgba(26, 115, 232, 0.28);
+}
+
 .date-row {
   display: flex;
   align-items: center;
@@ -1986,6 +2113,38 @@ textarea:focus-visible {
   text-align: left;
   overflow: hidden;
   position: relative;
+  cursor: grab;
+}
+
+.event-chip:active {
+  cursor: grabbing;
+}
+
+.event-chip.is-dragging {
+  opacity: 0.42;
+}
+
+.month-event-drag-preview {
+  position: fixed;
+  z-index: 90;
+  max-width: min(280px, calc(100vw - 24px));
+  padding: 5px 9px;
+  border: 1px solid color-mix(in srgb, var(--event-color) 55%, transparent);
+  border-left: 4px solid var(--event-color);
+  border-radius: 8px;
+  background: color-mix(in srgb, var(--event-color) 18%, white);
+  color: var(--text);
+  font-size: 12px;
+  font-weight: 800;
+  box-shadow: var(--shadow-1);
+  overflow: hidden;
+  pointer-events: none;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.month-event-drag-preview[hidden] {
+  display: none;
 }
 
 .event-chip--all-day {
@@ -2159,6 +2318,46 @@ textarea:focus-visible {
   color: var(--text-muted);
   font-size: 13px;
   line-height: 1.4;
+}
+
+.calendar-transfer {
+  display: grid;
+  gap: 10px;
+  padding: 12px;
+  border: 1px solid var(--border-soft);
+  border-radius: var(--radius-md);
+  background: #f8fafd;
+}
+
+.calendar-transfer h3,
+.calendar-transfer p {
+  margin: 0;
+}
+
+.calendar-transfer h3 {
+  font-size: 14px;
+}
+
+.calendar-transfer p {
+  margin-top: 4px;
+  color: var(--text-muted);
+  font-size: 13px;
+}
+
+.calendar-transfer-controls {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.calendar-transfer-controls select {
+  min-width: 150px;
+  flex: 1;
+  padding: 0 10px;
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  background: var(--surface);
+  color: var(--text);
 }
 
 @keyframes dialog-in {
@@ -2715,6 +2914,24 @@ textarea:focus-visible {
 
   .calendar-panel {
     min-height: 0;
+  }
+
+  .deadline-view-header {
+    grid-template-columns: 1fr;
+    align-items: start;
+  }
+
+  .deadline-view-header strong {
+    justify-self: start;
+  }
+
+  .deadline-filters {
+    width: fit-content;
+    max-width: 100%;
+  }
+
+  .deadline-filter-group {
+    flex-wrap: wrap;
   }
 
   .month-grid {
