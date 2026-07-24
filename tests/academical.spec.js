@@ -30,6 +30,55 @@ test('/ focuses the event search box', async ({ page }) => {
   await expect(page.locator('#searchInput')).toBeFocused();
 });
 
+test('o opens DBLP search and only Enter sends a request', async ({ page }) => {
+  let requests = 0;
+  await page.route('https://dblp.uni-trier.de/search/publ/api**', async (route) => {
+    requests += 1;
+    const url = new URL(route.request().url());
+    expect(url.searchParams.get('q')).toBe('program repair');
+    expect(url.searchParams.get('format')).toBe('json');
+    expect(url.searchParams.get('h')).toBe('100');
+    await route.fulfill({
+      contentType: 'application/json',
+      body: JSON.stringify({
+        result: {
+          hits: {
+            '@total': '50910',
+            hit: [{
+              info: {
+                title: 'Automated Program Repair.',
+                authors: { author: [{ text: 'Ada Lovelace' }, { text: 'Grace Hopper' }] },
+                venue: 'ICSE',
+                year: '2026',
+                type: 'Conference and Workshop Papers',
+                url: 'https://dblp.org/rec/conf/icse/example',
+              },
+            }],
+          },
+        },
+      }),
+    });
+  });
+
+  await page.goto('/');
+  await page.keyboard.press('o');
+  await expect(page.locator('#dblpSearchInput')).toBeFocused();
+  await page.locator('#dblpSearchInput').fill('program repair');
+  await page.waitForTimeout(100);
+  expect(requests).toBe(0);
+
+  await page.keyboard.press('Enter');
+  await expect(page.locator('#dblpSearchCount')).toHaveText('1 paper loaded · 50,910 matches');
+  await expect(page.locator('.dblp-search-result-title')).toHaveText('Automated Program Repair.');
+  await expect(page.locator('.dblp-search-result-authors')).toHaveText('Ada Lovelace, Grace Hopper');
+  await expect(page.locator('.dblp-search-result-title')).toHaveAttribute('href', 'https://dblp.uni-trier.de/rec/conf/icse/example');
+  expect(requests).toBe(1);
+
+  await page.locator('#dblpSearchInput').fill('program repair updated');
+  await page.waitForTimeout(100);
+  expect(requests).toBe(1);
+});
+
 test('search displays matching events with calendar, date, and time details', async ({ page }) => {
   await page.goto('/');
   await page.locator('#searchInput').fill('Reading group');

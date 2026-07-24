@@ -2224,6 +2224,75 @@ textarea:focus-visible {
   display: grid;
 }
 
+.event-dialog.dblp-search-dialog {
+  width: min(720px, 100%);
+}
+
+.dblp-search-count {
+  margin-left: 6px;
+  color: var(--text-muted);
+  font-size: 13px;
+  font-weight: 500;
+  white-space: nowrap;
+}
+
+.dblp-search-count[hidden] {
+  display: none;
+}
+
+.dblp-search-hint {
+  margin: -8px 0 0;
+  color: var(--text-muted);
+  font-size: 13px;
+}
+
+.dblp-search-results {
+  min-height: 96px;
+  max-height: min(480px, 55dvh);
+  overflow-y: auto;
+  border: 1px solid var(--border-soft);
+  border-radius: 14px;
+}
+
+.dblp-search-results > .empty-state {
+  padding: 24px;
+}
+
+.dblp-search-result {
+  display: grid;
+  gap: 5px;
+  padding: 14px 16px;
+  border-bottom: 1px solid var(--border-soft);
+}
+
+.dblp-search-result:last-child {
+  border-bottom: 0;
+}
+
+.dblp-search-result-title {
+  color: var(--primary);
+  font-size: 15px;
+  font-weight: 650;
+  line-height: 1.35;
+  text-decoration: none;
+}
+
+.dblp-search-result-title:hover,
+.dblp-search-result-title:focus-visible {
+  text-decoration: underline;
+}
+
+.dblp-search-result-authors,
+.dblp-search-result-details {
+  margin: 0;
+  font-size: 13px;
+  line-height: 1.4;
+}
+
+.dblp-search-result-details {
+  color: var(--text-muted);
+}
+
 .event-dialog {
   width: min(520px, 100%);
   max-height: calc(100dvh - 48px);

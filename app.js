@@ -15,6 +15,7 @@ const STORAGE_DEADLINE_FILTER_TAGS = "academical.deadlineFilterTags.v1";
 const STORAGE_SELECTED_DEADLINES = "academical.selectedDeadlines.v1";
 const STORAGE_DEADLINE_UPDATE_PREFIX = "academical.deadlineUpdate.v1";
 const DEADLINE_UPDATE_INTERVAL_MS = 24 * 60 * 60 * 1000;
+const DBLP_SEARCH_ENDPOINT = "https://dblp.uni-trier.de/search/publ/api";
 
 const VIEW_LABELS = {
   week: "Week",
@@ -181,6 +182,11 @@ const els = {
   deleteEvent: document.querySelector("#deleteEvent"),
   deletePaper: document.querySelector("#deletePaper"),
   deleteSeriesEvent: document.querySelector("#deleteSeriesEvent"),
+  dblpSearchCount: document.querySelector("#dblpSearchCount"),
+  dblpSearchInput: document.querySelector("#dblpSearchInput"),
+  dblpSearchModal: document.querySelector("#dblpSearchModal"),
+  dblpSearchResults: document.querySelector("#dblpSearchResults"),
+  closeDblpSearchModal: document.querySelector("#closeDblpSearchModal"),
   deadlineDaysLeft: document.querySelector("#deadlineDaysLeft"),
   deadlinePanel: document.querySelector("#deadlinePanel"),
   editCalendarColorInput: document.querySelector("#editCalendarColorInput"),
@@ -329,6 +335,8 @@ let activeEventPaperSnapshots = [];
 let editingPaperTaskId = "";
 let draggedCalendarId = "";
 let activeSidebarResize = null;
+let activeDblpSearchController = null;
+let dblpSearchRequestId = 0;
 
 init();
 
@@ -388,6 +396,15 @@ function bindEvents() {
   els.cancelSettingsModal.addEventListener("click", closeSettingsModal);
   els.settingsModal.addEventListener("click", (event) => {
     if (event.target === els.settingsModal) closeSettingsModal();
+  });
+  els.closeDblpSearchModal.addEventListener("click", closeDblpSearchModal);
+  els.dblpSearchModal.addEventListener("click", (event) => {
+    if (event.target === els.dblpSearchModal) closeDblpSearchModal();
+  });
+  els.dblpSearchInput.addEventListener("keydown", (event) => {
+    if (event.key !== "Enter" || event.isComposing) return;
+    event.preventDefault();
+    void searchDblp(els.dblpSearchInput.value);
   });
 
   els.todayButton.addEventListener("click", () => {
@@ -478,6 +495,7 @@ function bindEvents() {
     const isCalendarModalOpen = els.calendarModal.classList.contains("is-open");
     const isEditCalendarModalOpen = els.editCalendarModal.classList.contains("is-open");
     const isSettingsModalOpen = els.settingsModal.classList.contains("is-open");
+    const isDblpSearchModalOpen = els.dblpSearchModal.classList.contains("is-open");
 
     if (event.key === "Escape" && !els.accountPopover.hidden) {
       closeAccountPopover();
@@ -487,6 +505,11 @@ function bindEvents() {
     if (event.key === "Escape" && heatmapDetailsAnchor) {
       heatmapDetailsAnchor = null;
       renderMonthGrid();
+      return;
+    }
+
+    if (event.key === "Escape" && isDblpSearchModalOpen) {
+      closeDblpSearchModal();
       return;
     }
 
@@ -515,7 +538,7 @@ function bindEvents() {
       return;
     }
 
-    if (isPaperModalOpen || isCalendarModalOpen || isEditCalendarModalOpen || isSettingsModalOpen) return;
+    if (isDblpSearchModalOpen || isPaperModalOpen || isCalendarModalOpen || isEditCalendarModalOpen || isSettingsModalOpen) return;
 
     if (isModalOpen) {
       if (event.key === "Enter" && !event.shiftKey && !event.isComposing) {
@@ -562,6 +585,9 @@ function bindEvents() {
     } else if (key === "p") {
       event.preventDefault();
       openPaperModal();
+    } else if (key === "o") {
+      event.preventDefault();
+      openDblpSearchModal();
     } else if (key === "a") {
       event.preventDefault();
       selectAllCalendars();
@@ -1780,6 +1806,123 @@ function unescapeIcsText(value) {
 function makeCustomCalendarId(name) {
   const slug = name.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "").slice(0, 32) || "calendar";
   return `custom-${slug}-${Date.now()}-${Math.random().toString(16).slice(2, 8)}`;
+}
+
+function openDblpSearchModal() {
+  els.dblpSearchModal.classList.add("is-open");
+  els.dblpSearchModal.setAttribute("aria-hidden", "false");
+  requestAnimationFrame(() => els.dblpSearchInput.focus());
+}
+
+function closeDblpSearchModal() {
+  activeDblpSearchController?.abort();
+  activeDblpSearchController = null;
+  dblpSearchRequestId += 1;
+  els.dblpSearchModal.classList.remove("is-open");
+  els.dblpSearchModal.setAttribute("aria-hidden", "true");
+}
+
+async function searchDblp(rawQuery) {
+  const query = rawQuery.trim();
+  if (!query) {
+    renderDblpSearchMessage("Enter a query to search DBLP.");
+    return;
+  }
+
+  activeDblpSearchController?.abort();
+  const controller = new AbortController();
+  const requestId = ++dblpSearchRequestId;
+  activeDblpSearchController = controller;
+  renderDblpSearchMessage("Searching DBLP…", true);
+
+  try {
+    const url = new URL(DBLP_SEARCH_ENDPOINT);
+    url.searchParams.set("q", query);
+    url.searchParams.set("format", "json");
+    url.searchParams.set("h", "100");
+    const response = await fetch(url, {
+      headers: { Accept: "application/json" },
+      signal: controller.signal,
+    });
+    if (!response.ok) throw new Error(`DBLP request failed (${response.status})`);
+
+    const data = await response.json();
+    if (requestId !== dblpSearchRequestId) return;
+    const hits = Array.isArray(data?.result?.hits?.hit) ? data.result.hits.hit : [];
+    const totalMatches = Number.parseInt(data?.result?.hits?.["@total"], 10);
+    renderDblpSearchResults(hits, totalMatches);
+  } catch (error) {
+    if (error.name === "AbortError" || requestId !== dblpSearchRequestId) return;
+    console.warn("Could not search DBLP:", error);
+    renderDblpSearchMessage("DBLP search is unavailable. Please try again.");
+  } finally {
+    if (requestId === dblpSearchRequestId) activeDblpSearchController = null;
+  }
+}
+
+function renderDblpSearchResults(hits, totalMatches) {
+  els.dblpSearchCount.hidden = false;
+  const loadedLabel = `${hits.length} paper${hits.length === 1 ? "" : "s"} loaded`;
+  const matchesLabel = Number.isFinite(totalMatches) ? ` · ${totalMatches.toLocaleString()} matches` : "";
+  els.dblpSearchCount.textContent = `${loadedLabel}${matchesLabel}`;
+  if (!hits.length) {
+    renderDblpSearchMessage("No matching publications.", false, true);
+    return;
+  }
+  els.dblpSearchResults.replaceChildren(...hits.map(createDblpSearchResult));
+  els.dblpSearchResults.setAttribute("aria-busy", "false");
+}
+
+function renderDblpSearchMessage(text, busy = false, keepCount = false) {
+  if (!keepCount) {
+    els.dblpSearchCount.hidden = true;
+    els.dblpSearchCount.textContent = "";
+  }
+  const message = document.createElement("p");
+  message.className = "empty-state";
+  message.textContent = text;
+  els.dblpSearchResults.replaceChildren(message);
+  els.dblpSearchResults.setAttribute("aria-busy", String(busy));
+}
+
+function createDblpSearchResult(hit) {
+  const info = hit?.info ?? {};
+  const article = document.createElement("article");
+  article.className = "dblp-search-result";
+
+  const title = document.createElement("a");
+  title.className = "dblp-search-result-title";
+  title.href = normalizeDblpUrl(info.url);
+  title.target = "_blank";
+  title.rel = "noreferrer";
+  title.textContent = cleanPaperText(String(info.title ?? "Untitled publication"));
+
+  const authors = document.createElement("p");
+  authors.className = "dblp-search-result-authors";
+  authors.textContent = getDblpAuthors(info.authors).join(", ") || "Unknown authors";
+
+  const details = document.createElement("p");
+  details.className = "dblp-search-result-details";
+  details.textContent = [info.venue, info.year, info.type].filter(Boolean).join(" · ");
+
+  article.append(title, authors);
+  if (details.textContent) article.append(details);
+  return article;
+}
+
+function getDblpAuthors(authors) {
+  const values = authors?.author == null ? [] : [].concat(authors.author);
+  return values.map((author) => cleanPaperText(typeof author === "string" ? author : author?.text ?? "")).filter(Boolean);
+}
+
+function normalizeDblpUrl(value) {
+  try {
+    const url = new URL(value || "https://dblp.uni-trier.de/");
+    if (url.hostname === "dblp.org" || url.hostname.endsWith(".dblp.org")) url.hostname = "dblp.uni-trier.de";
+    return url.href;
+  } catch {
+    return "https://dblp.uni-trier.de/";
+  }
 }
 
 function openPaperModal(task = null) {
