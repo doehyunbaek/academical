@@ -2882,6 +2882,10 @@ textarea:focus-visible {
   grid-template-columns: minmax(0, 1fr) 140px 140px;
 }
 
+.field-grid--recurrence {
+  grid-template-columns: minmax(0, 1fr) 160px 160px;
+}
+
 .event-dialog-footer {
   display: flex;
   align-items: center;
@@ -3064,7 +3068,8 @@ textarea:focus-visible {
     padding-inline: 18px;
   }
 
-  .field-grid {
+  .field-grid,
+  .field-grid--recurrence {
     grid-template-columns: 1fr;
   }
 

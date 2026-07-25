@@ -221,6 +221,8 @@ const els = {
   eventPaperAssignmentCount: document.querySelector("#eventPaperAssignmentCount"),
   eventPaperAssignmentList: document.querySelector("#eventPaperAssignmentList"),
   eventRepeat: document.querySelector("#eventRepeat"),
+  eventRepeatUntil: document.querySelector("#eventRepeatUntil"),
+  eventRepeatUntilField: document.querySelector("#eventRepeatUntilField"),
   eventTime: document.querySelector("#eventTime"),
   eventTitle: document.querySelector("#eventTitle"),
   monthGrid: document.querySelector("#monthGrid"),
@@ -624,6 +626,9 @@ function bindEvents() {
   });
 
   els.eventForm.addEventListener("submit", saveEventFromDialog);
+  els.eventRepeat.addEventListener("change", updateEventRepeatUntilField);
+  els.eventDate.addEventListener("change", updateEventRepeatUntilField);
+  els.eventRepeatUntil.addEventListener("input", updateEventRepeatUntilField);
   els.deleteEvent.addEventListener("click", deleteActiveEvent);
   els.deleteSeriesEvent.addEventListener("click", deleteRecurringSeries);
 }
@@ -4916,6 +4921,18 @@ function setEventDurationHoursShortcut(hours) {
   showToast(`${hours}h duration`);
 }
 
+function updateEventRepeatUntilField() {
+  const isRecurring = els.eventRepeat.value !== "none";
+  els.eventRepeatUntilField.hidden = !isRecurring;
+  els.eventRepeatUntil.disabled = !isRecurring;
+  els.eventRepeatUntil.min = els.eventDate.value;
+  els.eventRepeatUntil.setCustomValidity(
+    isRecurring && els.eventRepeatUntil.value && els.eventRepeatUntil.value < els.eventDate.value
+      ? "Repeat end date must be on or after the event date."
+      : "",
+  );
+}
+
 function openEventDialog(dateKey, existingEvent = null, options = {}) {
   els.eventForm.reset();
   els.eventId.value = existingEvent?.id ?? "";
@@ -4927,6 +4944,8 @@ function openEventDialog(dateKey, existingEvent = null, options = {}) {
   updateEventEndTimeFromDuration();
   els.eventCalendar.value = existingEvent?.calendar ?? getDefaultEventCalendarId();
   els.eventRepeat.value = existingEvent?.repeat ?? "none";
+  els.eventRepeatUntil.value = existingEvent?.repeatUntil ?? "";
+  updateEventRepeatUntilField();
   els.eventNotes.value = existingEvent?.notes ?? "";
   activeEventPaperSnapshots = getExistingEventPaperSnapshots(existingEvent);
   const selectedPaperIds = existingEvent?.paperTaskIds ?? activeEventPaperSnapshots.map((paper) => paper.id);
@@ -4981,12 +5000,14 @@ function saveEventFromDialog(event) {
     time: els.eventTime.value,
     calendar: els.eventCalendar.value,
     repeat,
+    repeatUntil: isRecurring ? els.eventRepeatUntil.value : "",
     paperTaskIds: isRecurring && selectedPapers.length ? existingEvent?.paperTaskIds ?? [] : selectedPapers.map((paper) => paper.id),
     papers: isRecurring && selectedPapers.length ? existingEvent?.papers ?? [] : selectedPapers,
     durationMinutes,
     instanceOverrides: existingEvent?.instanceOverrides ?? {},
     notes: els.eventNotes.value.trim(),
   };
+  if (!formEvent.repeatUntil) delete formEvent.repeatUntil;
 
   if (isRecurring && selectedPapers.length) {
     formEvent.instanceOverrides = {

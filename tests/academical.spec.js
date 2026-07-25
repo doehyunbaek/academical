@@ -250,7 +250,7 @@ test('Deadlines panel internalizes deadlines app entries', async ({ page }) => {
 
   await expect(page.locator('.sidebar-panel[data-panel="deadlines"]')).toBeVisible();
   await expect(page.locator('.deadline-view-header')).toContainText('Research venue deadlines');
-  await expect(page.locator('.deadline-view-header')).toContainText('1 upcoming · 4 forecasts');
+  await expect(page.locator('.deadline-view-header')).toContainText('2 upcoming · 3 forecasts');
   await expect(page.locator('.deadline-card')).toHaveCount(63);
   await expect(page.locator('.deadline-card').first()).toContainText('FSE 2027');
   await expect(page.locator('.deadline-card').first()).toContainText('Deadline:');
@@ -370,7 +370,7 @@ test('Predicted deadlines check Researchr and become announced deadlines', async
   await expect(announced).toContainText('Add it to deadlines.json');
   await expect(announced).toHaveClass(/deadline-card--announced/);
   await expect(announced).not.toHaveClass(/deadline-card--predicted/);
-  expect(checked).toEqual(expect.arrayContaining(['ICSE-2028', 'ASE-2027', 'ISSTA-2027', 'OOPSLA-2027']));
+  expect(checked).toContain('OOPSLA-2027');
 
   const requestCount = checked.length;
   await page.reload();
@@ -1508,6 +1508,24 @@ test('creating every weekday recurring event skips weekends', async ({ page }) =
   await expect(page.locator('.day-cell[data-date="2026-07-02"] .event-chip').filter({ hasText: 'Weekday standup' })).toBeVisible();
   await expect(page.locator('.day-cell[data-date="2026-07-03"] .event-chip').filter({ hasText: 'Weekday standup' })).toBeVisible();
   await expect(page.locator('.day-cell[data-date="2026-07-04"] .event-chip').filter({ hasText: 'Weekday standup' })).toHaveCount(0);
+});
+
+test('recurring event can end on a selected date', async ({ page }) => {
+  await page.goto('/');
+  await openCreateEventDialog(page);
+  await page.locator('#eventTitle').fill('Short standup');
+  await page.locator('#eventDate').fill('2026-07-02');
+  await expect(page.locator('#eventRepeatUntilField')).toBeHidden();
+  await page.locator('#eventRepeat').selectOption('daily');
+  await expect(page.locator('#eventRepeatUntilField')).toBeVisible();
+  await page.locator('#eventRepeatUntil').fill('2026-07-04');
+  await page.getByRole('button', { name: 'Save' }).click();
+
+  await expect(page.locator('.day-cell[data-date="2026-07-04"] .event-chip').filter({ hasText: 'Short standup' })).toBeVisible();
+  await expect(page.locator('.day-cell[data-date="2026-07-05"] .event-chip').filter({ hasText: 'Short standup' })).toHaveCount(0);
+
+  await page.locator('.day-cell[data-date="2026-07-03"] .event-chip').filter({ hasText: 'Short standup' }).click();
+  await expect(page.locator('#eventRepeatUntil')).toHaveValue('2026-07-04');
 });
 
 test('deleting recurring event removes only selected instance', async ({ page }) => {

@@ -328,6 +328,18 @@
   {
     "name": "ISSTA",
     "description": "International Symposium on Software Testing and Analysis",
+    "year": 2027,
+    "link": "https://www.acm.org/conferences/upcoming-submission-deadlines?startDate0=20270101&eventType0=CallsForPapers&view0=month",
+    "deadlines": [
+      "2027-01-29 23:59"
+    ],
+    "date": "TBA",
+    "place": "Singapore, Singapore",
+    "note": "Deadline listed by ACM."
+  },
+  {
+    "name": "ISSTA",
+    "description": "International Symposium on Software Testing and Analysis",
     "year": 2026,
     "link": "https://conf.researchr.org/track/issta-2026/issta-2026-research-papers",
     "deadlines": [

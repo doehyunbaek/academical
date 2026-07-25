@@ -189,7 +189,7 @@
           </label>
         </div>
 
-        <div class="field-grid">
+        <div class="field-grid field-grid--recurrence">
           <label class="field" for="eventCalendar">
             <span>Calendar</span>
             <select id="eventCalendar" name="calendar" required></select>
@@ -203,6 +203,11 @@
               <option value="weekly">Weekly</option>
               <option value="weekdays">Every weekday</option>
             </select>
+          </label>
+
+          <label class="field" id="eventRepeatUntilField" for="eventRepeatUntil" hidden>
+            <span>Repeat ends</span>
+            <input id="eventRepeatUntil" name="repeatUntil" type="date" />
           </label>
         </div>
 
