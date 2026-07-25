@@ -3267,7 +3267,9 @@ function getOccurrenceDurationHours(event = {}) {
 }
 
 function getWorkedHoursForDate(dateKey) {
-  return getFilteredEventsForDate(dateKey).reduce((total, event) => total + getOccurrenceDurationHours(event), 0);
+  return getFilteredEventsForDate(dateKey)
+    .filter((event) => event.time)
+    .reduce((total, event) => total + getOccurrenceDurationHours(event), 0);
 }
 
 function getAllRecordedEventHours() {

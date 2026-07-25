@@ -403,6 +403,41 @@ test('heatmap view renders one square per day with worked-hour intensity', async
   await expect(page.locator('.heatmap-details')).toContainText('9 AM · Teaching · 1h');
 });
 
+test('heatmap worked hours ignore all-day events', async ({ page }) => {
+  await page.addInitScript(() => {
+    localStorage.setItem('academical.events.v1', JSON.stringify([
+      {
+        id: 'timed-heatmap-work',
+        title: 'Timed heatmap work',
+        date: '2026-07-01',
+        time: '09:00',
+        calendar: 'research',
+        durationMinutes: 180,
+        notes: '',
+      },
+      {
+        id: 'all-day-heatmap-marker',
+        title: 'All-day heatmap marker',
+        date: '2026-07-01',
+        time: '',
+        calendar: 'research',
+        durationMinutes: 240,
+        notes: '',
+      },
+    ]));
+  });
+
+  await page.goto('/');
+  await page.keyboard.press('1');
+
+  await expect(page.locator('.heatmap-summary > strong')).toHaveText('3h');
+  await expect(page.locator('.heatmap-day[data-date="2026-07-01"]')).toHaveAttribute('data-hours', '3');
+
+  await page.locator('.heatmap-day[data-date="2026-07-01"]').click();
+  await expect(page.locator('.heatmap-details-header strong')).toHaveText('3h worked');
+  await expect(page.locator('.heatmap-details')).toContainText('All-day heatmap marker');
+});
+
 test('calendar filter shortcuts select all or solo first four calendars', async ({ page }) => {
   await page.goto('/');
 
