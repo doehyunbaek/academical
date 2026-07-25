@@ -450,12 +450,14 @@ test('hover cross button archives one calendar and collapsed archive section can
   await expect(page.locator('.event-chip').filter({ hasText: 'CS seminar prep' })).toHaveCount(0);
   await expect(page.locator('.event-chip').filter({ hasText: 'Reading group' })).toBeVisible();
 
+  await page.keyboard.press('a');
+  await expect(page.locator('#archivedCalendarList input[data-calendar="teaching"]')).toBeChecked();
+  await expect(page.locator('.event-chip').filter({ hasText: 'CS seminar prep' })).toBeVisible();
+
   await page.locator('#archivedCalendarsToggle').click();
   await expect(page.locator('#archivedCalendarList')).toBeVisible();
   await expect(page.locator('.archived-calendar-item')).toHaveCount(1);
-  await expect(page.locator('#archivedCalendarList input[data-calendar="teaching"]')).not.toBeChecked();
-  await page.locator('#archivedCalendarList input[data-calendar="teaching"]').check();
-  await expect(page.locator('.event-chip').filter({ hasText: 'CS seminar prep' })).toBeVisible();
+  await expect(page.locator('#archivedCalendarList input[data-calendar="teaching"]')).toBeChecked();
   await page.locator('#archivedCalendarList input[data-calendar="teaching"]').uncheck();
   await expect(page.locator('.event-chip').filter({ hasText: 'CS seminar prep' })).toHaveCount(0);
   await page.getByRole('button', { name: 'Restore Teaching calendar' }).click();

@@ -1414,9 +1414,9 @@ function saveEditedCalendar(event) {
 }
 
 function selectAllCalendars() {
-  const activeIds = new Set(getActiveCalendars().map((calendar) => calendar.id));
-  visibleCalendars = Object.fromEntries(calendars.map((calendar) => [calendar.id, activeIds.has(calendar.id)]));
-  persistCalendarVisibility("All active calendars selected");
+  const availableIds = new Set(getAvailableCalendars().map((calendar) => calendar.id));
+  visibleCalendars = Object.fromEntries(calendars.map((calendar) => [calendar.id, availableIds.has(calendar.id)]));
+  persistCalendarVisibility("All calendars selected");
 }
 
 function soloCalendar(index) {
