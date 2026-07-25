@@ -14,8 +14,13 @@ const STORAGE_BOTTOM_SIDEBAR_HEIGHT = "academical.bottomSidebarHeight.v1";
 const STORAGE_DEADLINE_FILTER_TAGS = "academical.deadlineFilterTags.v1";
 const STORAGE_SELECTED_DEADLINES = "academical.selectedDeadlines.v1";
 const STORAGE_DEADLINE_UPDATE_PREFIX = "academical.deadlineUpdate.v1";
+const STORAGE_DBLP_SEARCH_ENDPOINT = "academical.dblpSearchEndpoint.v1";
 const DEADLINE_UPDATE_INTERVAL_MS = 24 * 60 * 60 * 1000;
-const DBLP_SEARCH_ENDPOINT = "https://dblp.uni-trier.de/search/publ/api";
+const DBLP_SEARCH_ENDPOINTS = [
+  "https://dblp.uni-trier.de/search/publ/api",
+  "https://dblp.org/search/publ/api",
+];
+const DBLP_REQUEST_TIMEOUT_MS = 15_000;
 
 const VIEW_LABELS = {
   week: "Week",
@@ -184,7 +189,9 @@ const els = {
   deleteSeriesEvent: document.querySelector("#deleteSeriesEvent"),
   dblpSearchCount: document.querySelector("#dblpSearchCount"),
   dblpSearchInput: document.querySelector("#dblpSearchInput"),
+  dblpLoadMore: document.querySelector("#dblpLoadMore"),
   dblpSearchModal: document.querySelector("#dblpSearchModal"),
+  dblpPreferredVenuesInput: document.querySelector("#dblpPreferredVenuesInput"),
   dblpSearchResults: document.querySelector("#dblpSearchResults"),
   closeDblpSearchModal: document.querySelector("#closeDblpSearchModal"),
   deadlineDaysLeft: document.querySelector("#deadlineDaysLeft"),
@@ -337,6 +344,7 @@ let draggedCalendarId = "";
 let activeSidebarResize = null;
 let activeDblpSearchController = null;
 let dblpSearchRequestId = 0;
+let dblpSearchState = null;
 
 init();
 
@@ -398,6 +406,7 @@ function bindEvents() {
     if (event.target === els.settingsModal) closeSettingsModal();
   });
   els.closeDblpSearchModal.addEventListener("click", closeDblpSearchModal);
+  els.dblpLoadMore.addEventListener("click", () => void loadMoreDblpResults());
   els.dblpSearchModal.addEventListener("click", (event) => {
     if (event.target === els.dblpSearchModal) closeDblpSearchModal();
   });
@@ -1836,21 +1845,12 @@ async function searchDblp(rawQuery) {
   renderDblpSearchMessage("Searching DBLP…", true);
 
   try {
-    const url = new URL(DBLP_SEARCH_ENDPOINT);
-    url.searchParams.set("q", query);
-    url.searchParams.set("format", "json");
-    url.searchParams.set("h", "100");
-    const response = await fetch(url, {
-      headers: { Accept: "application/json" },
-      signal: controller.signal,
-    });
-    if (!response.ok) throw new Error(`DBLP request failed (${response.status})`);
-
-    const data = await response.json();
+    const currentYear = getNow().getFullYear();
+    const years = Array.from({ length: 5 }, (_, index) => currentYear - index);
+    const result = await fetchDblpPage(query, years, 0, controller.signal);
     if (requestId !== dblpSearchRequestId) return;
-    const hits = Array.isArray(data?.result?.hits?.hit) ? data.result.hits.hit : [];
-    const totalMatches = Number.parseInt(data?.result?.hits?.["@total"], 10);
-    renderDblpSearchResults(hits, totalMatches);
+    dblpSearchState = { query, years, hits: result.hits, totalMatches: result.totalMatches };
+    renderDblpSearchResults(result.hits, result.totalMatches, years.at(-1), years[0]);
   } catch (error) {
     if (error.name === "AbortError" || requestId !== dblpSearchRequestId) return;
     console.warn("Could not search DBLP:", error);
@@ -1860,16 +1860,117 @@ async function searchDblp(rawQuery) {
   }
 }
 
-function renderDblpSearchResults(hits, totalMatches) {
+async function loadMoreDblpResults() {
+  if (!dblpSearchState || dblpSearchState.hits.length >= dblpSearchState.totalMatches) return;
+  activeDblpSearchController?.abort();
+  const controller = new AbortController();
+  const requestId = ++dblpSearchRequestId;
+  activeDblpSearchController = controller;
+  els.dblpLoadMore.disabled = true;
+  els.dblpLoadMore.textContent = "Loading…";
+
+  try {
+    const { query, years, hits } = dblpSearchState;
+    const result = await fetchDblpPage(query, years, hits.length, controller.signal);
+    if (requestId !== dblpSearchRequestId) return;
+    dblpSearchState.hits.push(...result.hits);
+    dblpSearchState.totalMatches = result.totalMatches;
+    renderDblpSearchResults(
+      dblpSearchState.hits,
+      result.totalMatches,
+      years.at(-1),
+      years[0],
+    );
+  } catch (error) {
+    if (error.name === "AbortError" || requestId !== dblpSearchRequestId) return;
+    console.warn("Could not load more DBLP results:", error);
+    els.dblpLoadMore.textContent = "Retry load more";
+  } finally {
+    if (requestId === dblpSearchRequestId) {
+      activeDblpSearchController = null;
+      els.dblpLoadMore.disabled = false;
+      if (els.dblpLoadMore.textContent === "Loading…") els.dblpLoadMore.textContent = "Load more";
+    }
+  }
+}
+
+async function fetchDblpPage(query, years, offset, signal) {
+  const savedEndpoint = localStorage.getItem(STORAGE_DBLP_SEARCH_ENDPOINT);
+  const endpoints = DBLP_SEARCH_ENDPOINTS.includes(savedEndpoint)
+    ? [savedEndpoint, ...DBLP_SEARCH_ENDPOINTS.filter((endpoint) => endpoint !== savedEndpoint)]
+    : DBLP_SEARCH_ENDPOINTS;
+  let lastError;
+
+  for (const endpoint of endpoints) {
+    try {
+      const result = await fetchDblpPageFromEndpoint(endpoint, query, years, offset, signal);
+      localStorage.setItem(STORAGE_DBLP_SEARCH_ENDPOINT, endpoint);
+      return result;
+    } catch (error) {
+      if (signal.aborted) throw error;
+      lastError = error;
+      console.warn(`DBLP endpoint failed; trying fallback: ${endpoint}`, error);
+    }
+  }
+  throw lastError ?? new Error("All DBLP endpoints failed");
+}
+
+async function fetchDblpPageFromEndpoint(endpoint, query, years, offset, signal) {
+  const yearFilter = years.map((year) => `year:${year}:`).join("|");
+  const url = new URL(endpoint);
+  url.searchParams.set("q", `${query} (${yearFilter})`);
+  url.searchParams.set("format", "json");
+  url.searchParams.set("h", "1000");
+  url.searchParams.set("f", String(offset));
+  url.searchParams.set("c", "0");
+  const requestSignal = AbortSignal.any([signal, AbortSignal.timeout(DBLP_REQUEST_TIMEOUT_MS)]);
+  const response = await fetch(url, {
+    headers: { Accept: "application/json" },
+    signal: requestSignal,
+  });
+  if (!response.ok) throw new Error(`DBLP request failed (${response.status})`);
+
+  const data = await response.json();
+  return {
+    hits: Array.isArray(data?.result?.hits?.hit) ? data.result.hits.hit : [],
+    totalMatches: Number.parseInt(data?.result?.hits?.["@total"], 10) || 0,
+  };
+}
+
+function renderDblpSearchResults(hits, totalMatches, startYear, endYear) {
   els.dblpSearchCount.hidden = false;
-  const loadedLabel = `${hits.length} paper${hits.length === 1 ? "" : "s"} loaded`;
-  const matchesLabel = Number.isFinite(totalMatches) ? ` · ${totalMatches.toLocaleString()} matches` : "";
-  els.dblpSearchCount.textContent = `${loadedLabel}${matchesLabel}`;
+  const preferredVenues = getDblpPreferredVenues();
+  const rankedHits = hits.map((hit, index) => ({
+    hit,
+    index,
+    venuePriority: getDblpVenuePriority(hit, preferredVenues),
+    year: getDblpPublicationYear(hit),
+  }));
+  const preferredHits = rankedHits
+    .filter(({ venuePriority }) => venuePriority !== -1)
+    .sort((left, right) => right.year - left.year || left.index - right.index);
+  const otherHits = rankedHits
+    .filter(({ venuePriority }) => venuePriority === -1)
+    .sort((left, right) => right.year - left.year || left.index - right.index);
+  const loadedLabel = totalMatches > hits.length
+    ? `${hits.length.toLocaleString()} of ${totalMatches.toLocaleString()} papers loaded`
+    : `${hits.length} paper${hits.length === 1 ? "" : "s"} loaded`;
+  const preferredLabel = ` · ${preferredHits.length} preferred`;
+  const matchesLabel = Number.isFinite(totalMatches) ? ` · ${totalMatches.toLocaleString()} DBLP matches` : "";
+  const yearLabel = Number.isFinite(startYear) && Number.isFinite(endYear) ? ` · ${startYear}–${endYear}` : "";
+  els.dblpSearchCount.textContent = `${loadedLabel}${preferredLabel}${matchesLabel}${yearLabel}`;
+  els.dblpLoadMore.hidden = hits.length >= totalMatches;
+  els.dblpLoadMore.disabled = false;
+  els.dblpLoadMore.textContent = "Load more";
   if (!hits.length) {
     renderDblpSearchMessage("No matching publications.", false, true);
     return;
   }
-  els.dblpSearchResults.replaceChildren(...hits.map(createDblpSearchResult));
+
+  els.dblpSearchResults.replaceChildren(
+    ...preferredHits.map(({ hit }) => createDblpSearchResult(hit, true)),
+    ...otherHits.map(({ hit }) => createDblpSearchResult(hit)),
+  );
   els.dblpSearchResults.setAttribute("aria-busy", "false");
 }
 
@@ -1885,10 +1986,10 @@ function renderDblpSearchMessage(text, busy = false, keepCount = false) {
   els.dblpSearchResults.setAttribute("aria-busy", String(busy));
 }
 
-function createDblpSearchResult(hit) {
+function createDblpSearchResult(hit, preferred = false) {
   const info = hit?.info ?? {};
   const article = document.createElement("article");
-  article.className = "dblp-search-result";
+  article.className = `dblp-search-result${preferred ? " dblp-search-result--preferred" : ""}`;
 
   const title = document.createElement("a");
   title.className = "dblp-search-result-title";
@@ -1903,11 +2004,55 @@ function createDblpSearchResult(hit) {
 
   const details = document.createElement("p");
   details.className = "dblp-search-result-details";
-  details.textContent = [info.venue, info.year, info.type].filter(Boolean).join(" · ");
+  details.textContent = [getDblpDisplayVenue(info), info.year, info.type].filter(Boolean).join(" · ");
 
   article.append(title, authors);
   if (details.textContent) article.append(details);
   return article;
+}
+
+function getDblpDisplayVenue(info) {
+  const venue = String(info?.venue ?? "").trim();
+  const issue = String(info?.number ?? "").trim();
+  if (venue.toUpperCase() === "PROC. ACM PROGRAM. LANG." && /^OOPSLA\d*$/i.test(issue)) return "OOPSLA";
+  return venue;
+}
+
+function getDblpPreferredVenues() {
+  return els.dblpPreferredVenuesInput.value
+    .split(",")
+    .map((venue) => venue.trim().toUpperCase())
+    .filter((venue, index, venues) => venue && venues.indexOf(venue) === index);
+}
+
+function getDblpVenuePriority(hit, preferredVenues) {
+  const info = hit?.info ?? {};
+  if (isDblpShortPaper(info.pages)) return -1;
+  const venue = String(info.venue ?? "").trim().toUpperCase();
+  const issue = String(info.number ?? "").trim().toUpperCase();
+  return preferredVenues.findIndex((preferredVenue) => isDblpMainTrackVenue(venue, issue, preferredVenue));
+}
+
+function isDblpShortPaper(pages) {
+  const [firstPage, lastPage] = String(pages ?? "").split(/[-–—]/);
+  if (!firstPage || !lastPage) return false;
+  const start = Number.parseInt(firstPage.match(/\d+$/)?.[0], 10);
+  const end = Number.parseInt(lastPage.match(/\d+$/)?.[0], 10);
+  return Number.isFinite(start) && Number.isFinite(end) && end >= start && end - start + 1 <= 6;
+}
+
+function isDblpMainTrackVenue(venue, issue, preferredVenue) {
+  if (venue === preferredVenue) return true;
+  // DBLP uses both FSE and ESEC/SIGSOFT FSE for the main software-engineering conference.
+  if (preferredVenue === "FSE" && /^(ESEC\/)?SIGSOFT FSE$/.test(venue)) return true;
+  // OOPSLA papers are published in PACMPL issues named OOPSLA1 or OOPSLA2.
+  if (preferredVenue === "OOPSLA" && venue === "PROC. ACM PROGRAM. LANG." && /^OOPSLA\d*$/.test(issue)) return true;
+  return false;
+}
+
+function getDblpPublicationYear(hit) {
+  const year = Number.parseInt(hit?.info?.year, 10);
+  return Number.isFinite(year) ? year : Number.NEGATIVE_INFINITY;
 }
 
 function getDblpAuthors(authors) {

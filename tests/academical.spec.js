@@ -35,25 +35,71 @@ test('o opens DBLP search and only Enter sends a request', async ({ page }) => {
   await page.route('https://dblp.uni-trier.de/search/publ/api**', async (route) => {
     requests += 1;
     const url = new URL(route.request().url());
-    expect(url.searchParams.get('q')).toBe('program repair');
+    expect(url.searchParams.get('q')).toBe('program repair (year:2026:|year:2025:|year:2024:|year:2023:|year:2022:)');
     expect(url.searchParams.get('format')).toBe('json');
-    expect(url.searchParams.get('h')).toBe('100');
+    expect(url.searchParams.get('h')).toBe('1000');
+    expect(url.searchParams.get('f')).toBe('0');
+    expect(url.searchParams.get('c')).toBe('0');
     await route.fulfill({
       contentType: 'application/json',
       body: JSON.stringify({
         result: {
           hits: {
-            '@total': '50910',
-            hit: [{
-              info: {
-                title: 'Automated Program Repair.',
-                authors: { author: [{ text: 'Ada Lovelace' }, { text: 'Grace Hopper' }] },
-                venue: 'ICSE',
-                year: '2026',
-                type: 'Conference and Workshop Papers',
-                url: 'https://dblp.org/rec/conf/icse/example',
+            '@total': '5',
+            hit: [
+              {
+                info: {
+                  title: 'Older Program Repair.',
+                  authors: { author: 'Alan Turing' },
+                  venue: 'ICSE',
+                  year: '2022',
+                  type: 'Conference and Workshop Papers',
+                  url: 'https://dblp.org/rec/conf/icse/older',
+                },
               },
-            }],
+              {
+                info: {
+                  title: 'Automated Program Repair.',
+                  authors: { author: [{ text: 'Ada Lovelace' }, { text: 'Grace Hopper' }] },
+                  venue: 'ICSE',
+                  year: '2026',
+                  type: 'Conference and Workshop Papers',
+                  url: 'https://dblp.org/rec/conf/icse/example',
+                },
+              },
+              {
+                info: {
+                  title: 'Workshop Program Repair.',
+                  authors: { author: 'Edsger Dijkstra' },
+                  venue: 'FORGE@ICSE',
+                  year: '2027',
+                  type: 'Journal Articles',
+                  url: 'https://dblp.org/rec/journals/example/newest',
+                },
+              },
+              {
+                info: {
+                  title: 'Template-Based Fuzzing.',
+                  authors: { author: 'Wai Kin Wong' },
+                  venue: 'Proc. ACM Program. Lang.',
+                  number: 'OOPSLA2',
+                  year: '2025',
+                  type: 'Journal Articles',
+                  url: 'https://dblp.org/rec/journals/pacmpl/example',
+                },
+              },
+              {
+                info: {
+                  title: 'Tool Demo Paper.',
+                  authors: { author: 'Roland Kuhn' },
+                  venue: 'ISSTA',
+                  pages: '1475-1478',
+                  year: '2023',
+                  type: 'Conference and Workshop Papers',
+                  url: 'https://dblp.org/rec/conf/issta/demo',
+                },
+              },
+            ],
           },
         },
       }),
@@ -68,15 +114,57 @@ test('o opens DBLP search and only Enter sends a request', async ({ page }) => {
   expect(requests).toBe(0);
 
   await page.keyboard.press('Enter');
-  await expect(page.locator('#dblpSearchCount')).toHaveText('1 paper loaded · 50,910 matches');
-  await expect(page.locator('.dblp-search-result-title')).toHaveText('Automated Program Repair.');
-  await expect(page.locator('.dblp-search-result-authors')).toHaveText('Ada Lovelace, Grace Hopper');
-  await expect(page.locator('.dblp-search-result-title')).toHaveAttribute('href', 'https://dblp.uni-trier.de/rec/conf/icse/example');
+  await expect(page.locator('#dblpSearchCount')).toHaveText('5 papers loaded · 3 preferred · 5 DBLP matches · 2022–2026');
+  await expect(page.locator('.dblp-search-group-heading')).toHaveCount(0);
+  await expect(page.locator('.dblp-search-result-title')).toHaveText([
+    'Automated Program Repair.',
+    'Template-Based Fuzzing.',
+    'Older Program Repair.',
+    'Workshop Program Repair.',
+    'Tool Demo Paper.',
+  ]);
+  await expect(page.locator('.dblp-search-result--preferred')).toHaveCount(3);
+  await expect(page.locator('.dblp-search-result').filter({ hasText: 'Tool Demo Paper.' }))
+    .not.toHaveClass(/dblp-search-result--preferred/);
+  await expect(page.locator('.dblp-search-result').filter({ hasText: 'Template-Based Fuzzing.' }).locator('.dblp-search-result-details'))
+    .toHaveText('OOPSLA · 2025 · Journal Articles');
+  await expect(page.locator('.dblp-search-result-authors').first()).toHaveText('Ada Lovelace, Grace Hopper');
+  await expect(page.locator('.dblp-search-result-title').first()).toHaveAttribute('href', 'https://dblp.uni-trier.de/rec/conf/icse/example');
   expect(requests).toBe(1);
 
   await page.locator('#dblpSearchInput').fill('program repair updated');
   await page.waitForTimeout(100);
   expect(requests).toBe(1);
+});
+
+test('DBLP search falls back and remembers the working API endpoint', async ({ page }) => {
+  let mirrorRequests = 0;
+  let canonicalRequests = 0;
+  await page.route('https://dblp.uni-trier.de/search/publ/api**', async (route) => {
+    mirrorRequests += 1;
+    await route.abort('connectionfailed');
+  });
+  await page.route('https://dblp.org/search/publ/api**', async (route) => {
+    canonicalRequests += 1;
+    await route.fulfill({
+      contentType: 'application/json',
+      body: JSON.stringify({ result: { hits: { '@total': '0', hit: [] } } }),
+    });
+  });
+
+  await page.goto('/');
+  await page.keyboard.press('o');
+  await page.locator('#dblpSearchInput').fill('fallback test');
+  await page.keyboard.press('Enter');
+  await expect(page.locator('#dblpSearchCount')).toContainText('0 papers loaded');
+  expect(mirrorRequests).toBe(1);
+  expect(canonicalRequests).toBe(1);
+  await expect.poll(() => page.evaluate(() => localStorage.getItem('academical.dblpSearchEndpoint.v1')))
+    .toBe('https://dblp.org/search/publ/api');
+
+  await page.keyboard.press('Enter');
+  await expect.poll(() => canonicalRequests).toBe(2);
+  expect(mirrorRequests).toBe(1);
 });
 
 test('search displays matching events with calendar, date, and time details', async ({ page }) => {

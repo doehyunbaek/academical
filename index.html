@@ -234,14 +234,22 @@
         <header class="event-dialog-header">
           <span class="dialog-drag" aria-hidden="true"></span>
           <h2 id="dblpSearchDialogTitle">Search DBLP <span class="dblp-search-count" id="dblpSearchCount" hidden></span></h2>
-          <button class="icon-button" id="closeDblpSearchModal" type="button" aria-label="Close DBLP search dialog">×</button>
+          <div class="dblp-search-header-actions">
+            <button class="button dblp-load-more" id="dblpLoadMore" type="button" hidden>Load more</button>
+            <button class="icon-button" id="closeDblpSearchModal" type="button" aria-label="Close DBLP search dialog">×</button>
+          </div>
         </header>
 
-        <label class="field" for="dblpSearchInput">
-          <span>Publication title, author, or venue</span>
-          <input id="dblpSearchInput" type="search" placeholder="Type a query, then press Enter" autocomplete="off" />
-        </label>
-        <p class="dblp-search-hint">Press Enter to search. Typing does not send requests.</p>
+        <div class="dblp-search-fields">
+          <label class="field dblp-search-query-field" for="dblpSearchInput">
+            <span>Publication title, author, or venue</span>
+            <input id="dblpSearchInput" type="search" placeholder="Type a query, then press Enter" autocomplete="off" />
+          </label>
+          <label class="field dblp-search-venues-field" for="dblpPreferredVenuesInput">
+            <span>Main research venues</span>
+            <input id="dblpPreferredVenuesInput" type="text" value="ICSE, FSE, ASE, ISSTA, OOPSLA" autocomplete="off" />
+          </label>
+        </div>
         <div class="dblp-search-results" id="dblpSearchResults" aria-live="polite">
           <p class="empty-state">Enter a query to search DBLP.</p>
         </div>
