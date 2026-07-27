@@ -2228,6 +2228,32 @@ textarea:focus-visible {
   width: min(720px, 100%);
 }
 
+.recurrence-scope-backdrop {
+  z-index: 70;
+}
+
+.event-dialog.recurrence-scope-dialog {
+  width: min(430px, 100%);
+}
+
+.recurrence-scope-copy {
+  margin: -4px 0 0;
+  color: var(--text-muted);
+  font-size: 14px;
+}
+
+.recurrence-scope-actions {
+  display: grid;
+  gap: 8px;
+}
+
+.recurrence-scope-option {
+  width: 100%;
+  min-height: 44px;
+  justify-content: flex-start;
+  text-align: left;
+}
+
 .dblp-search-count {
   margin-left: 6px;
   color: var(--text-muted);

@@ -1528,6 +1528,82 @@ test('recurring event can end on a selected date', async ({ page }) => {
   await expect(page.locator('#eventRepeatUntil')).toHaveValue('2026-07-04');
 });
 
+test('editing one recurring event asks for scope and updates only that instance', async ({ page }) => {
+  await page.goto('/');
+  await openCreateEventDialog(page);
+  await page.locator('#eventTitle').fill('Daily standup');
+  await page.locator('#eventDate').fill('2026-07-02');
+  await page.locator('#eventRepeat').selectOption('daily');
+  await page.getByRole('button', { name: 'Save' }).click();
+
+  await page.locator('.day-cell[data-date="2026-07-03"] .event-chip').filter({ hasText: 'Daily standup' }).click();
+  await page.locator('#eventTitle').fill('Special standup');
+  await page.getByRole('button', { name: 'Save' }).click();
+
+  await expect(page.locator('#recurrenceScopeModal')).toHaveClass(/is-open/);
+  await expect(page.getByRole('button', { name: 'Only this event' })).toBeVisible();
+  await expect(page.getByRole('button', { name: 'This and following events' })).toBeVisible();
+  await expect(page.getByRole('button', { name: 'All events', exact: true })).toBeVisible();
+  await page.getByRole('button', { name: 'Only this event' }).click();
+
+  await expect(page.locator('.day-cell[data-date="2026-07-02"] .event-chip').filter({ hasText: 'Daily standup' })).toBeVisible();
+  await expect(page.locator('.day-cell[data-date="2026-07-03"] .event-chip').filter({ hasText: 'Special standup' })).toBeVisible();
+  await expect(page.locator('.day-cell[data-date="2026-07-04"] .event-chip').filter({ hasText: 'Daily standup' })).toBeVisible();
+});
+
+test('editing a recurring event does not move the current calendar view', async ({ page }) => {
+  await page.goto('/');
+  await openCreateEventDialog(page);
+  await page.locator('#eventTitle').fill('Daily standup');
+  await page.locator('#eventDate').fill('2026-07-02');
+  await page.locator('#eventRepeat').selectOption('daily');
+  await page.getByRole('button', { name: 'Save' }).click();
+
+  const currentTitle = await page.locator('#monthTitle').textContent();
+  await page.locator('.day-cell[data-date="2026-07-03"] .event-chip').filter({ hasText: 'Daily standup' }).click();
+  await page.locator('#eventDate').fill('2026-08-03');
+  await page.getByRole('button', { name: 'Save' }).click();
+  await page.getByRole('button', { name: 'Only this event' }).click();
+
+  await expect(page.locator('#monthTitle')).toHaveText(currentTitle);
+});
+
+test('editing this and following recurring events splits the series', async ({ page }) => {
+  await page.goto('/');
+  await openCreateEventDialog(page);
+  await page.locator('#eventTitle').fill('Daily standup');
+  await page.locator('#eventDate').fill('2026-07-02');
+  await page.locator('#eventRepeat').selectOption('daily');
+  await page.getByRole('button', { name: 'Save' }).click();
+
+  await page.locator('.day-cell[data-date="2026-07-03"] .event-chip').filter({ hasText: 'Daily standup' }).click();
+  await page.locator('#eventTitle').fill('New standup');
+  await page.getByRole('button', { name: 'Save' }).click();
+  await page.getByRole('button', { name: 'This and following events' }).click();
+
+  await expect(page.locator('.day-cell[data-date="2026-07-02"] .event-chip').filter({ hasText: 'Daily standup' })).toBeVisible();
+  await expect(page.locator('.day-cell[data-date="2026-07-03"] .event-chip').filter({ hasText: 'New standup' })).toBeVisible();
+  await expect(page.locator('.day-cell[data-date="2026-07-04"] .event-chip').filter({ hasText: 'New standup' })).toBeVisible();
+});
+
+test('editing all recurring events updates the whole series', async ({ page }) => {
+  await page.goto('/');
+  await openCreateEventDialog(page);
+  await page.locator('#eventTitle').fill('Daily standup');
+  await page.locator('#eventDate').fill('2026-07-02');
+  await page.locator('#eventRepeat').selectOption('daily');
+  await page.getByRole('button', { name: 'Save' }).click();
+
+  await page.locator('.day-cell[data-date="2026-07-03"] .event-chip').filter({ hasText: 'Daily standup' }).click();
+  await page.locator('#eventTitle').fill('Renamed standup');
+  await page.getByRole('button', { name: 'Save' }).click();
+  await page.getByRole('button', { name: 'All events', exact: true }).click();
+
+  await expect(page.locator('.day-cell[data-date="2026-07-02"] .event-chip').filter({ hasText: 'Renamed standup' })).toBeVisible();
+  await expect(page.locator('.day-cell[data-date="2026-07-03"] .event-chip').filter({ hasText: 'Renamed standup' })).toBeVisible();
+  await expect(page.locator('.day-cell[data-date="2026-07-04"] .event-chip').filter({ hasText: 'Renamed standup' })).toBeVisible();
+});
+
 test('deleting recurring event removes only selected instance', async ({ page }) => {
   await page.goto('/');
   await openCreateEventDialog(page);
@@ -1645,6 +1721,7 @@ test('assigning paper to recurring read event updates only selected instance', a
   await page.locator('.day-cell[data-date="2026-07-03"] .event-chip').filter({ hasText: 'read session' }).click();
   await page.locator('.paper-assignment-option').filter({ hasText: 'Paper A' }).locator('input').check();
   await page.getByRole('button', { name: 'Save' }).click();
+  await page.getByRole('button', { name: 'Only this event' }).click();
 
   await expect(page.locator('.day-cell[data-date="2026-07-02"] .event-chip').filter({ hasText: 'read session' })).toBeVisible();
   await expect(page.locator('.day-cell[data-date="2026-07-03"] .event-chip').filter({ hasText: 'read: Paper A' })).toBeVisible();

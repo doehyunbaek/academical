@@ -223,6 +223,10 @@ const els = {
   eventRepeat: document.querySelector("#eventRepeat"),
   eventRepeatUntil: document.querySelector("#eventRepeatUntil"),
   eventRepeatUntilField: document.querySelector("#eventRepeatUntilField"),
+  recurrenceScopeModal: document.querySelector("#recurrenceScopeModal"),
+  closeRecurrenceScope: document.querySelector("#closeRecurrenceScope"),
+  cancelRecurrenceScope: document.querySelector("#cancelRecurrenceScope"),
+  recurrenceScopeOptions: document.querySelectorAll("[data-recurrence-scope]"),
   eventTime: document.querySelector("#eventTime"),
   eventTitle: document.querySelector("#eventTitle"),
   monthGrid: document.querySelector("#monthGrid"),
@@ -341,6 +345,7 @@ let suppressNextWeekEventClick = false;
 let suppressNextMonthEventClick = false;
 let firebaseSync = createFirebaseSyncState();
 let activeEventPaperSnapshots = [];
+let pendingRecurringEdit = null;
 let editingPaperTaskId = "";
 let draggedCalendarId = "";
 let activeSidebarResize = null;
@@ -499,6 +504,14 @@ function bindEvents() {
   els.eventModal.addEventListener("click", (event) => {
     if (event.target === els.eventModal) closeEventDialog();
   });
+  els.closeRecurrenceScope.addEventListener("click", closeRecurrenceScopeModal);
+  els.cancelRecurrenceScope.addEventListener("click", closeRecurrenceScopeModal);
+  els.recurrenceScopeModal.addEventListener("click", (event) => {
+    if (event.target === els.recurrenceScopeModal) closeRecurrenceScopeModal();
+  });
+  els.recurrenceScopeOptions.forEach((button) => {
+    button.addEventListener("click", () => applyRecurringEdit(button.dataset.recurrenceScope));
+  });
 
   document.addEventListener("keydown", (event) => {
     const isModalOpen = els.eventModal.classList.contains("is-open");
@@ -507,6 +520,12 @@ function bindEvents() {
     const isEditCalendarModalOpen = els.editCalendarModal.classList.contains("is-open");
     const isSettingsModalOpen = els.settingsModal.classList.contains("is-open");
     const isDblpSearchModalOpen = els.dblpSearchModal.classList.contains("is-open");
+    const isRecurrenceScopeModalOpen = els.recurrenceScopeModal.classList.contains("is-open");
+
+    if (event.key === "Escape" && isRecurrenceScopeModalOpen) {
+      closeRecurrenceScopeModal();
+      return;
+    }
 
     if (event.key === "Escape" && !els.accountPopover.hidden) {
       closeAccountPopover();
@@ -549,7 +568,7 @@ function bindEvents() {
       return;
     }
 
-    if (isDblpSearchModalOpen || isPaperModalOpen || isCalendarModalOpen || isEditCalendarModalOpen || isSettingsModalOpen) return;
+    if (isRecurrenceScopeModalOpen || isDblpSearchModalOpen || isPaperModalOpen || isCalendarModalOpen || isEditCalendarModalOpen || isSettingsModalOpen) return;
 
     if (isModalOpen) {
       if (event.key === "Enter" && !event.shiftKey && !event.isComposing) {
@@ -4939,7 +4958,7 @@ function openEventDialog(dateKey, existingEvent = null, options = {}) {
   els.eventOccurrenceDate.value = existingEvent ? getEventDate(existingEvent) : dateKey;
   els.eventDurationMinutes.value = String(options.durationMinutes ?? getOccurrenceDurationMinutes(existingEvent));
   els.eventTitle.value = existingEvent?.title ?? "";
-  els.eventDate.value = existingEvent?.date ?? dateKey;
+  els.eventDate.value = existingEvent ? getEventDate(existingEvent) : dateKey;
   els.eventTime.value = options.time ?? existingEvent?.time ?? "";
   updateEventEndTimeFromDuration();
   els.eventCalendar.value = existingEvent?.calendar ?? getDefaultEventCalendarId();
@@ -4985,55 +5004,161 @@ function saveEventFromDialog(event) {
   if (!selectedPapers.length && existingEvent && isReadEventTitle(els.eventTitle.value)) {
     selectedPapers = activeEventPaperSnapshots;
   }
-  const paperTasksChanged = selectedPapers.length ? markAssignedPapersAsRead(selectedPapers) : false;
-  const occurrenceDate = els.eventOccurrenceDate.value || els.eventDate.value;
-  const repeat = els.eventRepeat.value;
-  const isRecurring = repeat !== "none";
-  const assignedTitle = selectedPapers.length ? getReadEventTitleForPapers(els.eventTitle.value, selectedPapers) : els.eventTitle.value.trim();
-  updateEventDurationFromEndTime();
-  const durationMinutes = getEventDialogDurationMinutes();
 
+  updateEventDurationFromEndTime();
+  const repeat = els.eventRepeat.value;
+  const assignedTitle = selectedPapers.length ? getReadEventTitleForPapers(els.eventTitle.value, selectedPapers) : els.eventTitle.value.trim();
   const formEvent = {
     id,
-    title: isRecurring && selectedPapers.length ? existingEvent?.title ?? els.eventTitle.value.trim() : assignedTitle,
+    title: assignedTitle,
     date: els.eventDate.value,
     time: els.eventTime.value,
     calendar: els.eventCalendar.value,
     repeat,
-    repeatUntil: isRecurring ? els.eventRepeatUntil.value : "",
-    paperTaskIds: isRecurring && selectedPapers.length ? existingEvent?.paperTaskIds ?? [] : selectedPapers.map((paper) => paper.id),
-    papers: isRecurring && selectedPapers.length ? existingEvent?.papers ?? [] : selectedPapers,
-    durationMinutes,
-    instanceOverrides: existingEvent?.instanceOverrides ?? {},
+    repeatUntil: repeat !== "none" ? els.eventRepeatUntil.value : "",
+    paperTaskIds: selectedPapers.map((paper) => paper.id),
+    papers: selectedPapers,
+    durationMinutes: getEventDialogDurationMinutes(),
     notes: els.eventNotes.value.trim(),
   };
   if (!formEvent.repeatUntil) delete formEvent.repeatUntil;
-
-  if (isRecurring && selectedPapers.length) {
-    formEvent.instanceOverrides = {
-      ...formEvent.instanceOverrides,
-      [occurrenceDate]: {
-        title: assignedTitle,
-        paperTaskIds: selectedPapers.map((paper) => paper.id),
-        papers: selectedPapers,
-      },
-    };
-  }
-
   if (!formEvent.title || !formEvent.date || !formEvent.calendar) return;
 
-  if (existingIndex >= 0) {
-    formEvent.excludedDates = existingEvent.excludedDates ?? [];
-    events.splice(existingIndex, 1, formEvent);
-    showToast(isRecurring && selectedPapers.length ? "Event instance updated" : "Event updated");
-  } else {
-    events.push(formEvent);
-    showToast(isRecurring && selectedPapers.length ? "Event instance created" : "Event created");
+  const edit = {
+    existingIndex,
+    existingEvent,
+    occurrenceDate: els.eventOccurrenceDate.value || formEvent.date,
+    formEvent,
+    selectedPapers,
+  };
+
+  if (existingEvent && (existingEvent.repeat ?? "none") !== "none") {
+    pendingRecurringEdit = edit;
+    openRecurrenceScopeModal();
+    return;
   }
 
-  selectedDate = fromDateKey(formEvent.date);
-  viewAnchorDate = new Date(selectedDate);
-  visibleMonth = startOfMonth(selectedDate);
+  commitStandardEventEdit(edit);
+}
+
+function openRecurrenceScopeModal() {
+  els.recurrenceScopeModal.classList.add("is-open");
+  els.recurrenceScopeModal.setAttribute("aria-hidden", "false");
+  requestAnimationFrame(() => els.recurrenceScopeOptions[0]?.focus());
+}
+
+function closeRecurrenceScopeModal() {
+  pendingRecurringEdit = null;
+  els.recurrenceScopeModal.classList.remove("is-open");
+  els.recurrenceScopeModal.setAttribute("aria-hidden", "true");
+  if (els.eventModal.classList.contains("is-open")) els.eventForm.focus();
+}
+
+function applyRecurringEdit(scope) {
+  const edit = pendingRecurringEdit;
+  if (!edit) return;
+  pendingRecurringEdit = null;
+  els.recurrenceScopeModal.classList.remove("is-open");
+  els.recurrenceScopeModal.setAttribute("aria-hidden", "true");
+
+  const { existingEvent, existingIndex, occurrenceDate, formEvent } = edit;
+  if (scope === "only") {
+    applyOnlyThisEventEdit(existingIndex, existingEvent, occurrenceDate, formEvent);
+  } else if (scope === "following") {
+    applyFollowingEventsEdit(existingIndex, existingEvent, occurrenceDate, formEvent);
+  } else if (scope === "all") {
+    applyAllEventsEdit(existingIndex, existingEvent, occurrenceDate, formEvent);
+  } else {
+    return;
+  }
+  finishEventEdit(
+    edit.selectedPapers,
+    formEvent.date,
+    scope === "only" ? "Event instance updated" : "Recurring events updated",
+    { preserveView: true },
+  );
+}
+
+function applyOnlyThisEventEdit(existingIndex, existingEvent, occurrenceDate, formEvent) {
+  const override = {
+    title: formEvent.title,
+    time: formEvent.time,
+    calendar: formEvent.calendar,
+    paperTaskIds: formEvent.paperTaskIds,
+    papers: formEvent.papers,
+    durationMinutes: formEvent.durationMinutes,
+    notes: formEvent.notes,
+  };
+
+  if (formEvent.date === occurrenceDate) {
+    events.splice(existingIndex, 1, {
+      ...existingEvent,
+      instanceOverrides: {
+        ...(existingEvent.instanceOverrides ?? {}),
+        [occurrenceDate]: override,
+      },
+    });
+    return;
+  }
+
+  const excludedDates = new Set(existingEvent.excludedDates ?? []);
+  excludedDates.add(occurrenceDate);
+  events.splice(existingIndex, 1, { ...existingEvent, excludedDates: [...excludedDates].sort() });
+  events.push({ ...formEvent, id: makeId(), repeat: "none" });
+}
+
+function applyFollowingEventsEdit(existingIndex, existingEvent, occurrenceDate, formEvent) {
+  const previousDate = toDateKey(addDays(fromDateKey(occurrenceDate), -1));
+  const priorSeries = {
+    ...existingEvent,
+    repeatUntil: existingEvent.repeatUntil && existingEvent.repeatUntil < previousDate ? existingEvent.repeatUntil : previousDate,
+    instanceOverrides: filterDateMap(existingEvent.instanceOverrides, (date) => date < occurrenceDate),
+    excludedDates: (existingEvent.excludedDates ?? []).filter((date) => date < occurrenceDate),
+  };
+  const followingSeries = {
+    ...formEvent,
+    id: makeId(),
+    instanceOverrides: filterDateMap(existingEvent.instanceOverrides, (date) => date > occurrenceDate),
+    excludedDates: (existingEvent.excludedDates ?? []).filter((date) => date > occurrenceDate),
+  };
+  const replacement = occurrenceDate > existingEvent.date ? [priorSeries, followingSeries] : [followingSeries];
+  events.splice(existingIndex, 1, ...replacement);
+}
+
+function applyAllEventsEdit(existingIndex, existingEvent, occurrenceDate, formEvent) {
+  const dayShift = Math.round((fromDateKey(formEvent.date) - fromDateKey(occurrenceDate)) / 86400000);
+  const seriesDate = toDateKey(addDays(fromDateKey(existingEvent.date), dayShift));
+  events.splice(existingIndex, 1, {
+    ...existingEvent,
+    ...formEvent,
+    id: existingEvent.id,
+    date: seriesDate,
+    instanceOverrides: existingEvent.instanceOverrides ?? {},
+    excludedDates: existingEvent.excludedDates ?? [],
+  });
+}
+
+function filterDateMap(value, predicate) {
+  return Object.fromEntries(Object.entries(value ?? {}).filter(([date]) => predicate(date)));
+}
+
+function commitStandardEventEdit(edit) {
+  const { existingIndex, existingEvent, formEvent, selectedPapers } = edit;
+  if (existingIndex >= 0) {
+    events.splice(existingIndex, 1, { ...existingEvent, ...formEvent });
+  } else {
+    events.push(formEvent);
+  }
+  finishEventEdit(selectedPapers, formEvent.date, existingIndex >= 0 ? "Event updated" : "Event created");
+}
+
+function finishEventEdit(selectedPapers, date, message, options = {}) {
+  const paperTasksChanged = selectedPapers.length ? markAssignedPapersAsRead(selectedPapers) : false;
+  if (!options.preserveView) {
+    selectedDate = fromDateKey(date);
+    viewAnchorDate = new Date(selectedDate);
+    visibleMonth = startOfMonth(selectedDate);
+  }
   if (paperTasksChanged) {
     savePaperTasks();
     renderPaperTasks();
@@ -5041,6 +5166,7 @@ function saveEventFromDialog(event) {
   saveEvents();
   closeEventDialog();
   render();
+  showToast(message);
 }
 
 function deleteActiveEvent() {

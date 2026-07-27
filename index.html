@@ -234,6 +234,26 @@
       </form>
     </div>
 
+    <div class="modal-backdrop recurrence-scope-backdrop" id="recurrenceScopeModal" aria-hidden="true">
+      <section class="event-dialog recurrence-scope-dialog" role="dialog" aria-modal="true" aria-labelledby="recurrenceScopeTitle" tabindex="-1">
+        <header class="event-dialog-header">
+          <span class="dialog-drag" aria-hidden="true"></span>
+          <h2 id="recurrenceScopeTitle">Edit recurring event</h2>
+          <button class="icon-button" id="closeRecurrenceScope" type="button" aria-label="Close dialog">×</button>
+        </header>
+        <p class="recurrence-scope-copy">Which events would you like to change?</p>
+        <div class="recurrence-scope-actions">
+          <button class="button recurrence-scope-option" type="button" data-recurrence-scope="only">Only this event</button>
+          <button class="button recurrence-scope-option" type="button" data-recurrence-scope="following">This and following events</button>
+          <button class="button recurrence-scope-option" type="button" data-recurrence-scope="all">All events</button>
+        </div>
+        <footer class="event-dialog-footer">
+          <span class="footer-spacer"></span>
+          <button class="button" id="cancelRecurrenceScope" type="button">Cancel</button>
+        </footer>
+      </section>
+    </div>
+
     <div class="modal-backdrop" id="dblpSearchModal" aria-hidden="true">
       <section class="event-dialog dblp-search-dialog" role="dialog" aria-modal="true" aria-labelledby="dblpSearchDialogTitle" tabindex="-1">
         <header class="event-dialog-header">
