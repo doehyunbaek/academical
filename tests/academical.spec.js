@@ -1457,6 +1457,29 @@ test('arXiv URLs load metadata through the Cloudflare Worker proxy', async ({ pa
   await expect(page.locator('#paperEditSource')).toHaveAttribute('href', 'https://arxiv.org/abs/2505.17716v1');
 });
 
+test('arXiv rate limiting aborts paper addition instead of using fallback metadata', async ({ page }) => {
+  await page.route('**/google-api-config.js', (route) => route.fulfill({
+    contentType: 'application/javascript',
+    body: 'window.ACADEMICAL_GOOGLE_CONFIG = { arxivMetadataUrl: "https://academical-arxiv.example.workers.dev" };',
+  }));
+  await page.route(/workers\.dev/, (route) => route.fulfill({
+    status: 429,
+    contentType: 'application/json',
+    body: JSON.stringify({ error: 'arXiv returned HTTP 429' }),
+  }));
+
+  await page.goto('/');
+  await page.keyboard.press('p');
+  await page.locator('#paperModalInput').fill('https://arxiv.org/abs/2505.17716');
+  await page.locator('#paperModalForm').getByRole('button', { name: 'Add papers' }).click();
+
+  await expect(page.locator('#paperModal')).toHaveClass(/is-open/);
+  await expect(page.locator('#paperModalInput')).toHaveValue('https://arxiv.org/abs/2505.17716');
+  await expect(page.locator('.paper-task-title')).toHaveCount(0);
+  await expect(page.locator('#toast')).toContainText('Paper not added');
+  await expect(page.locator('#paperModalSubmit')).toBeEnabled();
+});
+
 test('ACM DL URLs load Crossref metadata through the Cloudflare Worker proxy', async ({ page }) => {
   await page.route('**/google-api-config.js', (route) => route.fulfill({
     contentType: 'application/javascript',

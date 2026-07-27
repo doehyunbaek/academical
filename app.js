@@ -2344,7 +2344,18 @@ async function addPaperTasksFromInput(event) {
   const createdAt = new Date().toISOString();
   const newTasks = [];
 
-  const resolvedPapers = await Promise.all(inputs.map(resolvePaperMetadata));
+  let resolvedPapers;
+  try {
+    resolvedPapers = await Promise.all(inputs.map(resolvePaperMetadata));
+  } catch (error) {
+    submitButton.disabled = false;
+    submitButton.textContent = "Add papers";
+    if (error?.status === 429) {
+      showToast("arXiv is rate limiting requests. Paper not added; try again later.");
+      return;
+    }
+    throw error;
+  }
 
   for (const [index, paperInput] of inputs.entries()) {
     const metadata = resolvedPapers[index];
@@ -2509,7 +2520,11 @@ async function resolvePaperMetadata(input) {
     if (fallback.arxivId) {
       url.searchParams.set("id", fallback.arxivId);
       const response = await fetch(url, { headers: { Accept: "application/atom+xml" } });
-      if (!response.ok) throw new Error(`Metadata request failed (${response.status})`);
+      if (!response.ok) {
+        const error = new Error(`Metadata request failed (${response.status})`);
+        error.status = response.status;
+        throw error;
+      }
       return parseArxivMetadata(await response.text(), fallback);
     }
 
@@ -2520,6 +2535,7 @@ async function resolvePaperMetadata(input) {
   } catch (error) {
     const identifier = fallback.arxivId || fallback.doi;
     console.warn(`Could not load paper metadata for ${identifier}:`, error);
+    if (fallback.arxivId && error?.status === 429) throw error;
     return fallback;
   }
 }
