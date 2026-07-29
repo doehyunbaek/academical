@@ -17,6 +17,66 @@ test('calendar loads with Firebase sync UI', async ({ page }) => {
   await expect(page.locator('.right-rail')).toHaveCount(0);
 });
 
+test('Firestore differences require an explicit conflict choice before writing', async ({ page }) => {
+  await page.route('https://www.gstatic.com/firebasejs/**', (route) => route.fulfill({ contentType: 'application/javascript', body: '' }));
+  await page.addInitScript(() => {
+    localStorage.setItem('academical.events.v1', JSON.stringify([
+      { id: 'local-event', title: 'Browser event', date: '2026-07-28', time: '09:00', repeat: 'none', calendar: 'personal' },
+    ]));
+    localStorage.setItem('academical.paperTasks.v1', '[]');
+    localStorage.setItem('academical.sync.updatedAt.v1', '2026-07-29T09:00:00.000Z');
+
+    const remote = {
+      updatedAt: '2026-07-28T09:00:00.000Z',
+      events: [{ id: 'cloud-event', title: 'Cloud event', date: '2026-07-29', time: '10:00', repeat: 'none', calendar: 'research' }],
+      paperTasks: [],
+      customCalendars: [],
+      calendarNameOverrides: {},
+      calendarColorOverrides: {},
+      calendarOrderIds: [],
+      visibleCalendars: {},
+      archivedCalendarIds: [],
+      deletedCalendarIds: [],
+    };
+    window.__firestoreWrites = [];
+    const doc = {
+      get: async () => ({ exists: true, data: () => remote }),
+      set: async (value) => window.__firestoreWrites.push(value),
+      onSnapshot: () => () => {},
+    };
+    const auth = {
+      setPersistence: () => Promise.resolve(),
+      onAuthStateChanged: (callback) => queueMicrotask(() => callback({ uid: 'test-user', email: 'test@example.com' })),
+      signOut: async () => {},
+      signInWithPopup: async () => {},
+    };
+    function GoogleAuthProvider() {}
+    GoogleAuthProvider.prototype.addScope = () => {};
+    const firebase = {
+      apps: [],
+      initializeApp: () => ({}),
+      app: () => ({}),
+      auth: () => auth,
+      firestore: () => ({ collection: () => ({ doc: () => ({ collection: () => ({ doc: () => doc }) }) }) }),
+    };
+    firebase.auth.Auth = { Persistence: { LOCAL: 'local' } };
+    firebase.auth.GoogleAuthProvider = GoogleAuthProvider;
+    window.firebase = firebase;
+  });
+
+  await page.goto('/');
+  await expect(page.locator('#syncConflictModal')).toBeVisible();
+  await expect(page.locator('#syncConflictLocalCount')).toHaveText('1 event');
+  await expect(page.locator('#syncConflictCloudCount')).toHaveText('1 event');
+  expect(await page.evaluate(() => window.__firestoreWrites.length)).toBe(0);
+
+  await page.locator('[data-sync-conflict-action="merge"]').click();
+  await expect(page.locator('#syncConflictModal')).toBeHidden();
+  await expect.poll(() => page.evaluate(() => window.__firestoreWrites.length)).toBe(1);
+  const syncedIds = await page.evaluate(() => window.__firestoreWrites[0].events.map((event) => event.id).sort());
+  expect(syncedIds).toEqual(['cloud-event', 'local-event']);
+});
+
 test('today marker follows the actual current date', async ({ page }) => {
   await page.goto('/');
   await expect(page.locator('#brandDay')).toHaveText('3');

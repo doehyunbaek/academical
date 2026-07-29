@@ -275,6 +275,12 @@ const els = {
   toast: document.querySelector("#toast"),
   syncAuthButton: document.querySelector("#syncAuthButton"),
   syncStatus: document.querySelector("#syncStatus"),
+  syncConflictModal: document.querySelector("#syncConflictModal"),
+  syncConflictLocalCount: document.querySelector("#syncConflictLocalCount"),
+  syncConflictLocalTime: document.querySelector("#syncConflictLocalTime"),
+  syncConflictCloudCount: document.querySelector("#syncConflictCloudCount"),
+  syncConflictCloudTime: document.querySelector("#syncConflictCloudTime"),
+  syncConflictActions: document.querySelectorAll("[data-sync-conflict-action]"),
   userAvatar: document.querySelector("#userAvatar"),
   viewSelect: document.querySelector("#viewSelect"),
   weekdayRow: document.querySelector(".weekday-row"),
@@ -485,6 +491,9 @@ function bindEvents() {
   });
   els.archivedCalendarsToggle.addEventListener("click", toggleArchivedCalendars);
   els.syncAuthButton.addEventListener("click", toggleFirebaseAuth);
+  els.syncConflictActions.forEach((button) => {
+    button.addEventListener("click", () => resolveSyncConflict(button.dataset.syncConflictAction));
+  });
   els.paperModalForm.addEventListener("submit", addPaperTasksFromInput);
   els.paperModalInput.addEventListener("keydown", (event) => {
     if (event.key === "Enter" && !event.shiftKey) {
@@ -898,6 +907,7 @@ function createFirebaseSyncState() {
     unsubscribe: null,
     applyingRemote: false,
     syncTimer: null,
+    conflictResolver: null,
   };
 }
 
@@ -927,6 +937,7 @@ function initFirebaseSync() {
         startCloudSync().catch(handleFirebaseSyncError);
       } else {
         stopCloudListener();
+        if (firebaseSync.conflictResolver) resolveSyncConflict("");
       }
       updateFirebaseSyncUi();
     });
@@ -1021,30 +1032,162 @@ async function startCloudSync() {
   const docRef = userStateDocRef();
   const snapshot = await docRef.get();
   const remote = snapshot.exists ? snapshot.data() : null;
-  const localUpdatedAt = getLocalSyncUpdatedAt();
 
-  if (remote?.updatedAt && isRemoteNewer(remote.updatedAt, localUpdatedAt)) {
-    applyRemoteState(remote);
-    updateFirebaseSyncUi("Downloaded from Firestore");
-  } else {
+  if (!remote) {
     await docRef.set(getCloudStatePayload(), { merge: true });
     updateFirebaseSyncUi("Uploaded local data to Firestore");
+  } else if (cloudStatesDiffer(getCloudStatePayload(), remote)) {
+    const resolved = await promptForSyncConflict(remote);
+    if (!resolved) return;
+    const shouldContinue = await applySyncConflictChoice(resolved, remote, docRef);
+    if (!shouldContinue) return;
+  } else if (remote.updatedAt && isRemoteNewer(remote.updatedAt, getLocalSyncUpdatedAt())) {
+    setLocalSyncUpdatedAt(remote.updatedAt);
+    updateFirebaseSyncUi("Already in sync");
   }
 
   stopCloudListener();
-  firebaseSync.unsubscribe = docRef.onSnapshot((nextSnapshot) => {
-    if (!nextSnapshot.exists || firebaseSync.applyingRemote) return;
+  firebaseSync.unsubscribe = docRef.onSnapshot(async (nextSnapshot) => {
+    if (!nextSnapshot.exists || firebaseSync.applyingRemote || firebaseSync.conflictResolver) return;
     const remoteState = nextSnapshot.data();
-    if (remoteState?.updatedAt && isRemoteNewer(remoteState.updatedAt, getLocalSyncUpdatedAt())) {
-      applyRemoteState(remoteState);
-      renderCalendarToggles();
-      renderArchivedCalendars();
-      renderPaperTasks();
-      populateCalendarSelect();
-      render();
-      updateFirebaseSyncUi("Synced from Firestore");
+    if (!cloudStatesDiffer(getCloudStatePayload(), remoteState)) {
+      if (remoteState.updatedAt && isRemoteNewer(remoteState.updatedAt, getLocalSyncUpdatedAt())) {
+        setLocalSyncUpdatedAt(remoteState.updatedAt);
+      }
+      return;
+    }
+
+    try {
+      const resolved = await promptForSyncConflict(remoteState);
+      if (!resolved) return;
+      await applySyncConflictChoice(resolved, remoteState, docRef);
+    } catch (error) {
+      handleFirebaseSyncError(error);
     }
   }, handleFirebaseSyncError);
+}
+
+function cloudStatesDiffer(localState, remoteState) {
+  const syncedKeys = [
+    "events",
+    "paperTasks",
+    "customCalendars",
+    "calendarNameOverrides",
+    "calendarColorOverrides",
+    "calendarOrderIds",
+    "visibleCalendars",
+    "archivedCalendarIds",
+    "deletedCalendarIds",
+  ];
+  return syncedKeys.some((key) => JSON.stringify(localState[key] ?? null) !== JSON.stringify(remoteState[key] ?? null));
+}
+
+function promptForSyncConflict(remoteState) {
+  if (firebaseSync.conflictResolver) return Promise.resolve(null);
+  const localState = getCloudStatePayload();
+  els.syncConflictLocalCount.textContent = formatSyncItemCount(localState.events, "event");
+  els.syncConflictCloudCount.textContent = formatSyncItemCount(remoteState.events, "event");
+  els.syncConflictLocalTime.textContent = formatSyncModifiedTime(localState.updatedAt);
+  els.syncConflictCloudTime.textContent = formatSyncModifiedTime(remoteState.updatedAt);
+  els.syncConflictModal.classList.add("is-open");
+  els.syncConflictModal.setAttribute("aria-hidden", "false");
+  updateFirebaseSyncUi("Sync paused: choose which data to keep");
+  requestAnimationFrame(() => els.syncConflictActions[els.syncConflictActions.length - 1]?.focus());
+  return new Promise((resolve) => {
+    firebaseSync.conflictResolver = resolve;
+  });
+}
+
+function resolveSyncConflict(action) {
+  if (!firebaseSync.conflictResolver) return;
+  const resolve = firebaseSync.conflictResolver;
+  firebaseSync.conflictResolver = null;
+  els.syncConflictModal.classList.remove("is-open");
+  els.syncConflictModal.setAttribute("aria-hidden", "true");
+  resolve(action);
+}
+
+async function applySyncConflictChoice(action, remoteState, docRef) {
+  if (action === "download") {
+    downloadSyncCopies(getCloudStatePayload(), remoteState);
+    stopCloudListener();
+    updateFirebaseSyncUi("Sync paused after downloading both copies");
+    return false;
+  }
+
+  if (action === "cloud") {
+    applyRemoteState(remoteState);
+    renderSyncedState();
+    updateFirebaseSyncUi("Using Firestore data");
+    return true;
+  }
+
+  const nextState = action === "merge" ? mergeCloudStates(getCloudStatePayload(), remoteState) : getCloudStatePayload();
+  applyRemoteState({ ...nextState, updatedAt: touchLocalSyncUpdatedAt() });
+  renderSyncedState();
+  await docRef.set(getCloudStatePayload(), { merge: true });
+  updateFirebaseSyncUi(action === "merge" ? "Merged and synced to Firestore" : "Uploaded browser data to Firestore");
+  return true;
+}
+
+function mergeCloudStates(localState, remoteState) {
+  return {
+    ...remoteState,
+    ...localState,
+    events: mergeSyncRecords(localState.events, remoteState.events),
+    paperTasks: mergeSyncRecords(localState.paperTasks, remoteState.paperTasks),
+    customCalendars: mergeSyncRecords(localState.customCalendars, remoteState.customCalendars),
+    calendarNameOverrides: { ...(remoteState.calendarNameOverrides || {}), ...(localState.calendarNameOverrides || {}) },
+    calendarColorOverrides: { ...(remoteState.calendarColorOverrides || {}), ...(localState.calendarColorOverrides || {}) },
+    calendarOrderIds: mergeUniqueValues(localState.calendarOrderIds, remoteState.calendarOrderIds),
+    visibleCalendars: { ...(remoteState.visibleCalendars || {}), ...(localState.visibleCalendars || {}) },
+    archivedCalendarIds: mergeUniqueValues(localState.archivedCalendarIds, remoteState.archivedCalendarIds),
+    deletedCalendarIds: mergeUniqueValues(localState.deletedCalendarIds, remoteState.deletedCalendarIds),
+  };
+}
+
+function mergeSyncRecords(localRecords, remoteRecords) {
+  const merged = Array.isArray(localRecords) ? [...localRecords] : [];
+  const localIds = new Set(merged.map((record) => record?.id).filter(Boolean));
+  (Array.isArray(remoteRecords) ? remoteRecords : []).forEach((record) => {
+    if (!record?.id || localIds.has(record.id)) return;
+    localIds.add(record.id);
+    merged.push(record);
+  });
+  return merged;
+}
+
+function mergeUniqueValues(localValues, remoteValues) {
+  return [...new Set([...(Array.isArray(localValues) ? localValues : []), ...(Array.isArray(remoteValues) ? remoteValues : [])])];
+}
+
+function renderSyncedState() {
+  renderCalendarToggles();
+  renderArchivedCalendars();
+  renderPaperTasks();
+  populateCalendarSelect();
+  render();
+}
+
+function formatSyncItemCount(items, label) {
+  const count = Array.isArray(items) ? items.length : 0;
+  return `${count} ${label}${count === 1 ? "" : "s"}`;
+}
+
+function formatSyncModifiedTime(updatedAt) {
+  const date = new Date(updatedAt || "");
+  return Number.isNaN(date.getTime()) ? "Modified time unavailable" : `Modified ${date.toLocaleString()}`;
+}
+
+function downloadSyncCopies(localState, remoteState) {
+  const payload = { exportedAt: new Date().toISOString(), browser: localState, firestore: remoteState };
+  const blob = new Blob([`${JSON.stringify(payload, null, 2)}\n`], { type: "application/json" });
+  const url = URL.createObjectURL(blob);
+  const link = document.createElement("a");
+  link.href = url;
+  link.download = `academical-sync-conflict-${new Date().toISOString().replace(/[:.]/g, "-")}.json`;
+  link.click();
+  URL.revokeObjectURL(url);
 }
 
 function stopCloudListener() {
@@ -1080,13 +1223,13 @@ function applyRemoteState(remoteState) {
 }
 
 function queueCloudSync() {
-  if (!firebaseSync.user || !firebaseSync.firestore || firebaseSync.applyingRemote) return;
+  if (!firebaseSync.user || !firebaseSync.firestore || firebaseSync.applyingRemote || firebaseSync.conflictResolver) return;
   clearTimeout(firebaseSync.syncTimer);
   firebaseSync.syncTimer = setTimeout(syncCloudStateNow, 600);
 }
 
 async function syncCloudStateNow() {
-  if (!firebaseSync.user || !firebaseSync.firestore || firebaseSync.applyingRemote) return;
+  if (!firebaseSync.user || !firebaseSync.firestore || firebaseSync.applyingRemote || firebaseSync.conflictResolver) return;
   try {
     await userStateDocRef().set(getCloudStatePayload(), { merge: true });
     updateFirebaseSyncUi("Synced to Firestore");

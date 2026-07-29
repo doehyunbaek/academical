@@ -2236,6 +2236,58 @@ textarea:focus-visible {
   width: min(430px, 100%);
 }
 
+.sync-conflict-backdrop {
+  z-index: 90;
+}
+
+.event-dialog.sync-conflict-dialog {
+  width: min(650px, 100%);
+}
+
+.sync-conflict-description,
+.sync-conflict-note {
+  margin: -4px 0 0;
+  color: var(--text-muted);
+  font-size: 14px;
+  line-height: 1.5;
+}
+
+.sync-conflict-comparison {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 12px;
+}
+
+.sync-conflict-comparison section {
+  display: grid;
+  gap: 5px;
+  padding: 16px;
+  border: 1px solid var(--border-soft);
+  border-radius: 14px;
+  background: var(--surface-2);
+}
+
+.sync-conflict-comparison h3 {
+  margin: 0;
+  font-size: 14px;
+}
+
+.sync-conflict-comparison strong {
+  font-size: 18px;
+}
+
+.sync-conflict-comparison span {
+  color: var(--text-muted);
+  font-size: 13px;
+}
+
+.sync-conflict-actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+}
+
 .recurrence-scope-copy {
   margin: -4px 0 0;
   color: var(--text-muted);
@@ -2284,6 +2336,14 @@ textarea:focus-visible {
   .dblp-search-fields {
     align-items: stretch;
     flex-direction: column;
+  }
+
+  .sync-conflict-comparison {
+    grid-template-columns: 1fr;
+  }
+
+  .sync-conflict-actions .footer-spacer {
+    display: none;
   }
 }
 

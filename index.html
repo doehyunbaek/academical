@@ -398,6 +398,38 @@
       </form>
     </div>
 
+    <div class="modal-backdrop sync-conflict-backdrop" id="syncConflictModal" aria-hidden="true">
+      <section class="event-dialog sync-conflict-dialog" role="alertdialog" aria-modal="true" aria-labelledby="syncConflictTitle" aria-describedby="syncConflictDescription" tabindex="-1">
+        <header class="event-dialog-header">
+          <span class="dialog-drag" aria-hidden="true"></span>
+          <h2 id="syncConflictTitle">Choose which data to sync</h2>
+        </header>
+
+        <p class="sync-conflict-description" id="syncConflictDescription">Your browser and Firestore contain different data. Nothing will be overwritten until you choose.</p>
+        <div class="sync-conflict-comparison">
+          <section>
+            <h3>This browser</h3>
+            <strong id="syncConflictLocalCount">0 events</strong>
+            <span id="syncConflictLocalTime">Modified time unavailable</span>
+          </section>
+          <section>
+            <h3>Firestore</h3>
+            <strong id="syncConflictCloudCount">0 events</strong>
+            <span id="syncConflictCloudTime">Modified time unavailable</span>
+          </section>
+        </div>
+        <p class="sync-conflict-note">Merge keeps browser versions when the same event exists in both copies and adds records found only in Firestore.</p>
+
+        <footer class="sync-conflict-actions">
+          <button class="button button--outline" type="button" data-sync-conflict-action="download">Download both</button>
+          <span class="footer-spacer"></span>
+          <button class="button button--outline" type="button" data-sync-conflict-action="cloud">Use cloud</button>
+          <button class="button button--outline" type="button" data-sync-conflict-action="local">Use local</button>
+          <button class="button button--primary" type="button" data-sync-conflict-action="merge">Merge</button>
+        </footer>
+      </section>
+    </div>
+
     <div class="modal-backdrop" id="settingsModal" aria-hidden="true">
       <form class="event-dialog settings-dialog" id="settingsForm" role="dialog" aria-modal="true" aria-labelledby="settingsDialogTitle" tabindex="-1">
         <header class="event-dialog-header">
