@@ -1537,11 +1537,19 @@ test('papers panel derives assigned paper status from the current calendar time'
 
   await page.keyboard.press('q');
   await expect(page.locator('#readPaperList')).not.toContainText('Current event paper');
-  await expect(page.locator('#paperTaskList')).toContainText('Current event paper');
+  await expect(page.locator('#paperTaskList')).not.toContainText('Current event paper');
+  await expect(page.locator('#paperTaskCount')).toHaveText('0');
+  await expect(page.locator('#readPaperCount')).toHaveText('1');
 
   await page.keyboard.press('w');
   await expect(page.locator('#readPaperList')).toContainText('Current event paper');
   await expect(page.locator('#paperTaskList')).not.toContainText('Current event paper');
+  await expect(page.locator('#paperTaskCount')).toHaveText('1');
+  await expect(page.locator('#readPaperCount')).toHaveText('1');
+
+  await page.keyboard.press('a');
+  await expect(page.locator('#paperTaskCount')).toHaveText('1');
+  await expect(page.locator('#readPaperCount')).toHaveText('2');
 });
 
 test('p opens Add paper modal and Enter submits', async ({ page }) => {
@@ -1926,7 +1934,7 @@ test('read paper follows its read event calendar when it differs from paper owne
 
   await page.keyboard.press('q');
   await expect(page.locator('#readPaperList')).not.toContainText('Cross-calendar paper');
-  await expect(page.locator('#paperTaskList')).toContainText('Cross-calendar paper');
+  await expect(page.locator('#paperTaskList')).not.toContainText('Cross-calendar paper');
 
   await page.keyboard.press('w');
   await expect(page.locator('#readPaperList')).toContainText('Cross-calendar paper');

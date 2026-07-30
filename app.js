@@ -2373,14 +2373,18 @@ function deleteEditingPaperTask() {
 function renderPaperTasks({ recalculateCalendar = activeSidebarPanel === "papers" } = {}) {
   if (recalculateCalendar) calendarReadAtByPaperId = getCalendarReadAtByPaperId();
   const isRead = (task) => calendarReadAtByPaperId.has(task.id) || (task.done && !isPaperAssignedToCalendar(task.id));
+  const isReadCalendarVisible = (task) => {
+    const calendarRead = calendarReadAtByPaperId.get(task.id);
+    return calendarRead ? Boolean(visibleCalendars[calendarRead.calendar]) : isPaperTaskCalendarVisible(task);
+  };
   const activeTasks = paperTasks
     .filter((task) => isPaperTaskCalendarVisible(task) && !isRead(task) && paperMatchesFilter(task))
     .sort((a, b) => b.createdAt.localeCompare(a.createdAt));
   const readPapers = paperTasks
-    .filter((task) => isRead(task) && (calendarReadAtByPaperId.has(task.id) || isPaperTaskCalendarVisible(task)) && paperMatchesFilter(task))
+    .filter((task) => isRead(task) && isReadCalendarVisible(task) && paperMatchesFilter(task))
     .sort((a, b) => {
-      const readAtA = calendarReadAtByPaperId.get(a.id) || a.readAt || a.createdAt;
-      const readAtB = calendarReadAtByPaperId.get(b.id) || b.readAt || b.createdAt;
+      const readAtA = calendarReadAtByPaperId.get(a.id)?.readAt || a.readAt || a.createdAt;
+      const readAtB = calendarReadAtByPaperId.get(b.id)?.readAt || b.readAt || b.createdAt;
       return readAtB.localeCompare(readAtA);
     });
 
@@ -2401,7 +2405,7 @@ function getCalendarReadAtByPaperId(now = getNow()) {
   const todayKey = toDateKey(now);
 
   events.forEach((event) => {
-    if (!visibleCalendars[event.calendar] || event.date > todayKey) return;
+    if (event.date > todayKey) return;
     const firstDate = fromDateKey(event.date);
     const lastDate = fromDateKey(todayKey);
     const dayCount = Math.round((lastDate - firstDate) / 86_400_000) + 1;
@@ -2420,7 +2424,9 @@ function getCalendarReadAtByPaperId(now = getNow()) {
       paperIds.forEach((paperId) => {
         if (!paperId) return;
         const readAt = start.toISOString();
-        if (readAt > (readAtByPaperId.get(paperId) || "")) readAtByPaperId.set(paperId, readAt);
+        if (readAt > (readAtByPaperId.get(paperId)?.readAt || "")) {
+          readAtByPaperId.set(paperId, { readAt, calendar: occurrence.calendar });
+        }
       });
     });
   });
