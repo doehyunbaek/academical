@@ -77,6 +77,70 @@ test('Firestore differences require an explicit conflict choice before writing',
   expect(syncedIds).toEqual(['cloud-event', 'local-event']);
 });
 
+test('Firestore comparison ignores property order and stale calendar overrides', async ({ page }) => {
+  await page.route('https://www.gstatic.com/firebasejs/**', (route) => route.fulfill({ contentType: 'application/javascript', body: '' }));
+  await page.addInitScript(() => {
+    const calendarId = 'custom-current';
+    localStorage.setItem('academical.events.v1', JSON.stringify([
+      { id: 'shared-event', title: 'Shared event', date: '2026-07-28', time: '09:00', repeat: 'none', calendar: calendarId },
+    ]));
+    localStorage.setItem('academical.paperTasks.v1', '[]');
+    localStorage.setItem('academical.customCalendars.v1', JSON.stringify([
+      { id: calendarId, name: 'Current', color: 'blue', imported: true },
+    ]));
+    localStorage.setItem('academical.calendarRenames.v1', JSON.stringify({ [calendarId]: 'Renamed' }));
+    localStorage.setItem('academical.calendarColors.v1', JSON.stringify({ [calendarId]: 'green' }));
+    localStorage.setItem('academical.calendarOrder.v1', '[]');
+    localStorage.setItem('academical.archivedCalendars.v1', '[]');
+    localStorage.setItem('academical.deletedCalendars.v1', '[]');
+    localStorage.setItem('academical.sync.updatedAt.v1', '2026-07-29T09:00:00.000Z');
+
+    const remote = {
+      updatedAt: '2026-07-29T09:00:00.000Z',
+      events: [{ calendar: calendarId, repeat: 'none', time: '09:00', date: '2026-07-28', title: 'Shared event', id: 'shared-event' }],
+      paperTasks: [],
+      customCalendars: [{ imported: true, color: 'blue', name: 'Current', id: calendarId }],
+      calendarNameOverrides: { staleCalendar: 'Deleted calendar', [calendarId]: 'Renamed' },
+      calendarColorOverrides: { staleCalendar: 'red', [calendarId]: 'green' },
+      calendarOrderIds: [],
+      visibleCalendars: { teaching: true, research: true, deadlines: true, personal: true, tasks: true, [calendarId]: true },
+      archivedCalendarIds: [],
+      deletedCalendarIds: [],
+    };
+    window.__firestoreWrites = [];
+    window.__firestoreListenerAttached = false;
+    const doc = {
+      get: async () => ({ exists: true, data: () => remote }),
+      set: async (value) => window.__firestoreWrites.push(value),
+      onSnapshot: () => {
+        window.__firestoreListenerAttached = true;
+        return () => {};
+      },
+    };
+    const auth = {
+      setPersistence: () => Promise.resolve(),
+      onAuthStateChanged: (callback) => queueMicrotask(() => callback({ uid: 'test-user', email: 'test@example.com' })),
+    };
+    function GoogleAuthProvider() {}
+    GoogleAuthProvider.prototype.addScope = () => {};
+    const firebase = {
+      apps: [],
+      initializeApp: () => ({}),
+      app: () => ({}),
+      auth: () => auth,
+      firestore: () => ({ collection: () => ({ doc: () => ({ collection: () => ({ doc: () => doc }) }) }) }),
+    };
+    firebase.auth.Auth = { Persistence: { LOCAL: 'local' } };
+    firebase.auth.GoogleAuthProvider = GoogleAuthProvider;
+    window.firebase = firebase;
+  });
+
+  await page.goto('/');
+  await expect.poll(() => page.evaluate(() => window.__firestoreListenerAttached)).toBe(true);
+  await expect(page.locator('#syncConflictModal')).toBeHidden();
+  expect(await page.evaluate(() => window.__firestoreWrites.length)).toBe(0);
+});
+
 test('today marker follows the actual current date', async ({ page }) => {
   await page.goto('/');
   await expect(page.locator('#brandDay')).toHaveText('3');

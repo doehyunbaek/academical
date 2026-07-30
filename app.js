@@ -1068,18 +1068,30 @@ async function startCloudSync() {
 }
 
 function cloudStatesDiffer(localState, remoteState) {
-  const syncedKeys = [
-    "events",
-    "paperTasks",
-    "customCalendars",
-    "calendarNameOverrides",
-    "calendarColorOverrides",
-    "calendarOrderIds",
-    "visibleCalendars",
-    "archivedCalendarIds",
-    "deletedCalendarIds",
-  ];
-  return syncedKeys.some((key) => JSON.stringify(localState[key] ?? null) !== JSON.stringify(remoteState[key] ?? null));
+  return stableSerialize(getComparableCloudState(localState)) !== stableSerialize(getComparableCloudState(remoteState));
+}
+
+function getComparableCloudState(state = {}) {
+  const normalizedCustomCalendars = normalizeCustomCalendars(state.customCalendars);
+  return {
+    events: state.events ?? null,
+    paperTasks: state.paperTasks ?? null,
+    customCalendars: normalizedCustomCalendars,
+    calendarNameOverrides: normalizeCalendarNameOverrides(state.calendarNameOverrides, normalizedCustomCalendars),
+    calendarColorOverrides: normalizeCalendarColorOverrides(state.calendarColorOverrides, normalizedCustomCalendars),
+    calendarOrderIds: state.calendarOrderIds ?? null,
+    visibleCalendars: state.visibleCalendars ?? null,
+    archivedCalendarIds: state.archivedCalendarIds ?? null,
+    deletedCalendarIds: state.deletedCalendarIds ?? null,
+  };
+}
+
+function stableSerialize(value) {
+  if (Array.isArray(value)) return `[${value.map(stableSerialize).join(",")}]`;
+  if (value && typeof value === "object") {
+    return `{${Object.keys(value).sort().map((key) => `${JSON.stringify(key)}:${stableSerialize(value[key])}`).join(",")}}`;
+  }
+  return JSON.stringify(value);
 }
 
 function promptForSyncConflict(remoteState) {
@@ -5755,9 +5767,9 @@ function saveCalendarOrderIds({ sync = true, touch = true } = {}) {
   if (sync) queueCloudSync();
 }
 
-function normalizeCalendarNameOverrides(value) {
+function normalizeCalendarNameOverrides(value, customCalendarList = customCalendars) {
   if (!value || typeof value !== "object" || Array.isArray(value)) return {};
-  const validIds = new Set([...defaultCalendars, ...customCalendars].map((calendar) => calendar.id));
+  const validIds = new Set([...defaultCalendars, ...customCalendarList].map((calendar) => calendar.id));
   return Object.fromEntries(
     Object.entries(value)
       .filter(([id, name]) => validIds.has(id) && typeof name === "string" && name.trim())
@@ -5779,9 +5791,9 @@ function saveCalendarNameOverrides({ sync = true, touch = true } = {}) {
   if (sync) queueCloudSync();
 }
 
-function normalizeCalendarColorOverrides(value) {
+function normalizeCalendarColorOverrides(value, customCalendarList = customCalendars) {
   if (!value || typeof value !== "object" || Array.isArray(value)) return {};
-  const validIds = new Set([...defaultCalendars, ...customCalendars].map((calendar) => calendar.id));
+  const validIds = new Set([...defaultCalendars, ...customCalendarList].map((calendar) => calendar.id));
   const validColors = new Set(basicColorKeywords);
   return Object.fromEntries(
     Object.entries(value)
