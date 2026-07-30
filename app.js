@@ -2372,7 +2372,7 @@ function deleteEditingPaperTask() {
 
 function renderPaperTasks({ recalculateCalendar = activeSidebarPanel === "papers" } = {}) {
   if (recalculateCalendar) calendarReadAtByPaperId = getCalendarReadAtByPaperId();
-  const isRead = (task) => calendarReadAtByPaperId.has(task.id) || (task.done && !isPaperAssignedToCalendar(task.id));
+  const isRead = (task) => task.done || calendarReadAtByPaperId.has(task.id);
   const isReadCalendarVisible = (task) => {
     const calendarRead = calendarReadAtByPaperId.get(task.id);
     return calendarRead ? Boolean(visibleCalendars[calendarRead.calendar]) : isPaperTaskCalendarVisible(task);
@@ -2400,38 +2400,32 @@ function isPaperTaskCalendarVisible(task) {
   return !task.calendar || Boolean(visibleCalendars[task.calendar]);
 }
 
-function getCalendarReadAtByPaperId(now = getNow()) {
-  const readAtByPaperId = new Map();
-  const todayKey = toDateKey(now);
+function getCalendarReadAtByPaperId() {
+  const assignmentByPaperId = new Map();
 
   events.forEach((event) => {
-    if (event.date > todayKey) return;
-    const firstDate = fromDateKey(event.date);
-    const lastDate = fromDateKey(todayKey);
-    const dayCount = Math.round((lastDate - firstDate) / 86_400_000) + 1;
-
-    makeDateRange(firstDate, dayCount).forEach((date) => {
-      const dateKey = toDateKey(date);
-      if (!doesEventOccurOnDate(event, dateKey)) return;
-      const occurrence = createEventOccurrence(event, dateKey);
-      const { start } = getOccurrenceDateTimeRange(occurrence);
-      if (start > now) return;
-
-      const paperIds = new Set([
-        ...(occurrence.paperTaskIds ?? []),
-        ...(occurrence.papers ?? []).map((paper) => paper?.id),
-      ]);
-      paperIds.forEach((paperId) => {
-        if (!paperId) return;
-        const readAt = start.toISOString();
-        if (readAt > (readAtByPaperId.get(paperId)?.readAt || "")) {
-          readAtByPaperId.set(paperId, { readAt, calendar: occurrence.calendar });
-        }
-      });
+    recordCalendarPaperAssignment(assignmentByPaperId, event, event.date);
+    Object.entries(event.instanceOverrides ?? {}).forEach(([date, override]) => {
+      recordCalendarPaperAssignment(assignmentByPaperId, { ...event, ...override }, date);
     });
   });
 
-  return readAtByPaperId;
+  return assignmentByPaperId;
+}
+
+function recordCalendarPaperAssignment(assignments, event, date) {
+  const paperIds = new Set([
+    ...(event.paperTaskIds ?? []),
+    ...(event.papers ?? []).map((paper) => paper?.id),
+  ]);
+  const { start } = getOccurrenceDateTimeRange({ ...event, date, occurrenceDate: date });
+  const readAt = start.toISOString();
+  paperIds.forEach((paperId) => {
+    if (!paperId) return;
+    if (readAt > (assignments.get(paperId)?.readAt || "")) {
+      assignments.set(paperId, { readAt, calendar: event.calendar });
+    }
+  });
 }
 
 function isPaperAssignedToCalendar(paperId) {

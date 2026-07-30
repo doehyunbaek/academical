@@ -1505,7 +1505,7 @@ test('papers panel splits queued and read papers into separate columns', async (
   await expect(page.locator('.paper-assignment-option').filter({ hasText: /^Read paper$/ })).toHaveCount(0);
 });
 
-test('papers panel derives assigned paper status from the current calendar time', async ({ page }) => {
+test('papers panel treats assigned papers as read immediately and keeps counts additive', async ({ page }) => {
   await page.addInitScript(() => {
     const papers = [
       { id: 'current-paper', title: 'Current event paper', calendar: 'teaching', done: true, readAt: '2026-07-03T09:00:00Z', createdAt: '2026-07-01T00:00:00Z' },
@@ -1529,27 +1529,28 @@ test('papers panel derives assigned paper status from the current calendar time'
   await page.getByRole('button', { name: 'Papers', exact: true }).click();
 
   await expect(page.locator('#readPaperList')).toContainText('Current event paper');
+  await expect(page.locator('#readPaperList')).toContainText('Future event paper');
   await expect(page.locator('#readPaperList')).toContainText('Manually read paper');
-  await expect(page.locator('#readPaperList')).not.toContainText('Future event paper');
-  await expect(page.locator('#paperTaskList')).toContainText('Future event paper');
-  await expect(page.locator('#readPaperCount')).toHaveText('2');
-  await expect(page.locator('#paperTaskCount')).toHaveText('1');
+  await expect(page.locator('#paperTaskCount')).toHaveText('0');
+  await expect(page.locator('#readPaperCount')).toHaveText('3');
 
   await page.keyboard.press('q');
+  await expect(page.locator('#readPaperList')).toContainText('Manually read paper');
   await expect(page.locator('#readPaperList')).not.toContainText('Current event paper');
-  await expect(page.locator('#paperTaskList')).not.toContainText('Current event paper');
+  await expect(page.locator('#readPaperList')).not.toContainText('Future event paper');
   await expect(page.locator('#paperTaskCount')).toHaveText('0');
   await expect(page.locator('#readPaperCount')).toHaveText('1');
 
   await page.keyboard.press('w');
   await expect(page.locator('#readPaperList')).toContainText('Current event paper');
-  await expect(page.locator('#paperTaskList')).not.toContainText('Current event paper');
-  await expect(page.locator('#paperTaskCount')).toHaveText('1');
-  await expect(page.locator('#readPaperCount')).toHaveText('1');
+  await expect(page.locator('#readPaperList')).toContainText('Future event paper');
+  await expect(page.locator('#readPaperList')).not.toContainText('Manually read paper');
+  await expect(page.locator('#paperTaskCount')).toHaveText('0');
+  await expect(page.locator('#readPaperCount')).toHaveText('2');
 
   await page.keyboard.press('a');
-  await expect(page.locator('#paperTaskCount')).toHaveText('1');
-  await expect(page.locator('#readPaperCount')).toHaveText('2');
+  await expect(page.locator('#paperTaskCount')).toHaveText('0');
+  await expect(page.locator('#readPaperCount')).toHaveText('3');
 });
 
 test('p opens Add paper modal and Enter submits', async ({ page }) => {
@@ -1920,7 +1921,7 @@ test('an exact-title read event automatically moves its paper to Read papers', a
   await expect(page.locator('#readPaperList .paper-task-title')).toHaveText('How much do language models memorize?');
 });
 
-test('read paper follows its read event calendar when it differs from paper ownership', async ({ page }) => {
+test('future read event immediately moves paper to Read papers under the event calendar', async ({ page }) => {
   await page.goto('/');
   await page.keyboard.press('p');
   await page.locator('#paperModalInput').fill('Cross-calendar paper');
@@ -1928,6 +1929,7 @@ test('read paper follows its read event calendar when it differs from paper owne
 
   await openCreateEventDialog(page);
   await page.locator('#eventTitle').fill('read session');
+  await page.locator('#eventDate').fill('2026-07-10');
   await page.locator('#eventCalendar').selectOption('research');
   await page.locator('.paper-assignment-option').filter({ hasText: 'Cross-calendar paper' }).locator('input').check();
   await page.getByRole('button', { name: 'Save' }).click();
