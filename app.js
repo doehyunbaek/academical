@@ -236,6 +236,7 @@ const els = {
   paperEditIdentity: document.querySelector("#paperEditIdentity"),
   paperEditSource: document.querySelector("#paperEditSource"),
   paperEditTitle: document.querySelector("#paperEditTitle"),
+  paperCalendarInput: document.querySelector("#paperCalendarInput"),
   paperFilterInput: document.querySelector("#paperFilterInput"),
   paperModal: document.querySelector("#paperModal"),
   paperModalFieldLabel: document.querySelector("#paperModalFieldLabel"),
@@ -1099,9 +1100,10 @@ function cloudStatesDiffer(localState, remoteState) {
 
 function getComparableCloudState(state = {}) {
   const normalizedCustomCalendars = normalizeCustomCalendars(state.customCalendars);
+  const defaultPaperCalendarId = getDefaultPaperCalendarIdForState(state, normalizedCustomCalendars);
   return {
     events: state.events ?? null,
-    paperTasks: state.paperTasks ?? null,
+    paperTasks: normalizePaperTasks(state.paperTasks, defaultPaperCalendarId),
     customCalendars: normalizedCustomCalendars,
     calendarNameOverrides: normalizeCalendarNameOverrides(state.calendarNameOverrides, normalizedCustomCalendars),
     calendarColorOverrides: normalizeCalendarColorOverrides(state.calendarColorOverrides, normalizedCustomCalendars),
@@ -1110,6 +1112,19 @@ function getComparableCloudState(state = {}) {
     archivedCalendarIds: state.archivedCalendarIds ?? null,
     deletedCalendarIds: state.deletedCalendarIds ?? null,
   };
+}
+
+function getDefaultPaperCalendarIdForState(state, customCalendarList) {
+  const calendarIds = [...defaultCalendars, ...customCalendarList].map((calendar) => calendar.id);
+  const validIds = new Set(calendarIds);
+  const orderedIds = [
+    ...(state.calendarOrderIds ?? []).filter((id) => validIds.has(id)),
+    ...calendarIds.filter((id) => !(state.calendarOrderIds ?? []).includes(id)),
+  ];
+  const unavailableIds = new Set([...(state.archivedCalendarIds ?? []), ...(state.deletedCalendarIds ?? [])]);
+  const activeIds = orderedIds.filter((id) => !unavailableIds.has(id));
+  const visibility = normalizeVisibleCalendars(state.visibleCalendars, customCalendarList);
+  return activeIds.find((id) => visibility[id]) ?? activeIds[0] ?? "";
 }
 
 function stableSerialize(value) {
@@ -1238,7 +1253,6 @@ function stopCloudListener() {
 function applyRemoteState(remoteState) {
   firebaseSync.applyingRemote = true;
   events = Array.isArray(remoteState.events) ? remoteState.events : events;
-  paperTasks = Array.isArray(remoteState.paperTasks) ? remoteState.paperTasks : paperTasks;
   customCalendars = normalizeCustomCalendars(remoteState.customCalendars);
   calendarNameOverrides = normalizeCalendarNameOverrides(remoteState.calendarNameOverrides);
   calendarColorOverrides = normalizeCalendarColorOverrides(remoteState.calendarColorOverrides);
@@ -1247,6 +1261,7 @@ function applyRemoteState(remoteState) {
   visibleCalendars = normalizeVisibleCalendars(remoteState.visibleCalendars, customCalendars);
   archivedCalendarIds = normalizeCalendarIdList(remoteState.archivedCalendarIds);
   deletedCalendarIds = normalizeCalendarIdList(remoteState.deletedCalendarIds);
+  paperTasks = Array.isArray(remoteState.paperTasks) ? normalizePaperTasks(remoteState.paperTasks) : paperTasks;
   setLocalSyncUpdatedAt(remoteState.updatedAt || new Date().toISOString());
   saveEvents({ sync: false, touch: false });
   savePaperTasks({ sync: false, touch: false });
@@ -2291,6 +2306,7 @@ function openPaperModal(task = null) {
   els.paperEditSource.href = sourceUrl;
   els.paperEditSource.textContent = sourceUrl;
   els.paperEditFields.hidden = !task;
+  populatePaperCalendarSelect(task?.calendar);
   els.paperNoteInput.value = task?.note ?? "";
   els.paperTagsInput.value = Array.isArray(task?.tags) ? task.tags.join(", ") : "";
   renderPaperTagSuggestions();
@@ -2304,6 +2320,7 @@ function closePaperModal() {
   els.paperModal.classList.remove("is-open");
   els.paperModal.setAttribute("aria-hidden", "true");
   els.paperModalInput.value = "";
+  els.paperCalendarInput.replaceChildren();
   els.paperNoteInput.value = "";
   els.paperTagsInput.value = "";
   els.paperEditFields.hidden = true;
@@ -2359,10 +2376,10 @@ function renderPaperTasks({ recalculateCalendar = activeSidebarPanel === "papers
   if (recalculateCalendar) calendarReadAtByPaperId = getCalendarReadAtByPaperId();
   const isRead = (task) => calendarReadAtByPaperId.has(task.id) || (task.done && !isPaperAssignedToCalendar(task.id));
   const activeTasks = paperTasks
-    .filter((task) => !isRead(task) && paperMatchesFilter(task))
+    .filter((task) => isPaperTaskCalendarVisible(task) && !isRead(task) && paperMatchesFilter(task))
     .sort((a, b) => b.createdAt.localeCompare(a.createdAt));
   const readPapers = paperTasks
-    .filter((task) => isRead(task) && paperMatchesFilter(task))
+    .filter((task) => isRead(task) && (calendarReadAtByPaperId.has(task.id) || isPaperTaskCalendarVisible(task)) && paperMatchesFilter(task))
     .sort((a, b) => {
       const readAtA = calendarReadAtByPaperId.get(a.id) || a.readAt || a.createdAt;
       const readAtB = calendarReadAtByPaperId.get(b.id) || b.readAt || b.createdAt;
@@ -2375,6 +2392,10 @@ function renderPaperTasks({ recalculateCalendar = activeSidebarPanel === "papers
   const readEmptyText = paperFilterQuery ? "No matching read papers." : "No papers read yet.";
   renderPaperTaskGroup(els.paperTaskList, activeTasks, activeEmptyText);
   renderPaperTaskGroup(els.readPaperList, readPapers, readEmptyText);
+}
+
+function isPaperTaskCalendarVisible(task) {
+  return !task.calendar || Boolean(visibleCalendars[task.calendar]);
 }
 
 function getCalendarReadAtByPaperId(now = getNow()) {
@@ -2571,6 +2592,7 @@ async function addPaperTasksFromInput(event) {
 
   const existingKeys = new Set(paperTasks.map((task) => getPaperTaskKey(task)));
   const createdAt = new Date().toISOString();
+  const calendar = getDefaultEventCalendarId();
   const newTasks = [];
 
   let resolvedPapers;
@@ -2593,6 +2615,7 @@ async function addPaperTasksFromInput(event) {
       id: makeId(),
       title,
       done: false,
+      calendar,
       createdAt: `${createdAt}-${newTasks.length}`,
       ...(metadata ? { metadata } : {}),
     };
@@ -2631,6 +2654,7 @@ async function saveEditedPaperTask(form) {
 
   paperTasks.splice(taskIndex, 1, {
     ...paperTasks[taskIndex],
+    calendar: els.paperCalendarInput.value,
     note: els.paperNoteInput.value.trim(),
     tags: parsePaperTags(els.paperTagsInput.value),
   });
@@ -2837,6 +2861,7 @@ function getPaperSnapshot(task) {
   return {
     id: task.id,
     title: task.title,
+    calendar: task.calendar ?? getDefaultEventCalendarId(),
     metadata: task.metadata ?? null,
   };
 }
@@ -2945,6 +2970,7 @@ function markAssignedPapersAsRead(papers) {
     .map((paper, index) => ({
       id: paper.id,
       title: paper.title,
+      calendar: paper.calendar ?? getDefaultEventCalendarId(),
       metadata: paper.metadata ?? null,
       done: true,
       readAt,
@@ -2974,6 +3000,7 @@ function restorePapersToTasks(papers) {
     .map((paper, index) => ({
       id: paper.id,
       title: paper.title,
+      calendar: paper.calendar ?? getDefaultEventCalendarId(),
       metadata: paper.metadata ?? null,
       done: false,
       createdAt: `${new Date().toISOString()}-restored-${index}`,
@@ -3595,6 +3622,24 @@ function startOfDay(date) {
 
 function getDefaultEventCalendarId() {
   return getActiveCalendars().find((calendar) => visibleCalendars[calendar.id])?.id ?? getActiveCalendars()[0]?.id ?? "";
+}
+
+function populatePaperCalendarSelect(selectedCalendarId = "") {
+  const activeCalendars = getActiveCalendars();
+  const selectedCalendar = calendars.find((calendar) => calendar.id === selectedCalendarId);
+  const options = selectedCalendar && !activeCalendars.some((calendar) => calendar.id === selectedCalendar.id)
+    ? [...activeCalendars, selectedCalendar]
+    : activeCalendars;
+  els.paperCalendarInput.replaceChildren(...options.map((calendar) => {
+    const option = document.createElement("option");
+    option.value = calendar.id;
+    option.textContent = calendar.name;
+    return option;
+  }));
+  els.paperCalendarInput.disabled = options.length === 0;
+  els.paperCalendarInput.value = options.some((calendar) => calendar.id === selectedCalendarId)
+    ? selectedCalendarId
+    : getDefaultEventCalendarId();
 }
 
 function populateCalendarSelect() {
@@ -5963,10 +6008,14 @@ function saveDeletedCalendarIds({ sync = true, touch = true } = {}) {
   if (sync) queueCloudSync();
 }
 
+function normalizePaperTasks(value, fallbackCalendar = getDefaultEventCalendarId()) {
+  if (!Array.isArray(value)) return [];
+  return value.map((task) => task?.calendar || !fallbackCalendar ? task : { ...task, calendar: fallbackCalendar });
+}
+
 function loadPaperTasks() {
   try {
-    const saved = JSON.parse(localStorage.getItem(STORAGE_PAPER_TASKS) || "[]");
-    return Array.isArray(saved) ? saved : [];
+    return normalizePaperTasks(JSON.parse(localStorage.getItem(STORAGE_PAPER_TASKS) || "[]"));
   } catch {
     return [];
   }
