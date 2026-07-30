@@ -2800,10 +2800,17 @@ function getExistingEventPaperSnapshots(event) {
 }
 
 function getEventPaperAssignmentCandidates() {
-  return paperTasks
+  const candidatesById = new Map(
+    activeEventPaperSnapshots
+      .filter((paper) => paper?.id)
+      .map((paper) => [paper.id, paper]),
+  );
+  paperTasks
     .filter((task) => !task.done)
     .sort((a, b) => b.createdAt.localeCompare(a.createdAt))
-    .map(getPaperSnapshot);
+    .map(getPaperSnapshot)
+    .forEach((paper) => candidatesById.set(paper.id, paper));
+  return [...candidatesById.values()];
 }
 
 function renderEventPaperAssignment(selectedIds = []) {
@@ -5207,9 +5214,6 @@ function saveEventFromDialog(event) {
   if (!selectedPapers.length && isReadEventTitle(els.eventTitle.value)) {
     const matchingIds = new Set(inferPaperTaskIdsFromEvent({ title: els.eventTitle.value }));
     selectedPapers = getEventPaperAssignmentCandidates().filter((paper) => matchingIds.has(paper.id));
-  }
-  if (!selectedPapers.length && existingEvent && isReadEventTitle(els.eventTitle.value)) {
-    selectedPapers = activeEventPaperSnapshots;
   }
 
   updateEventDurationFromEndTime();

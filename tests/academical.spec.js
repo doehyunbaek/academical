@@ -1878,8 +1878,10 @@ test('assigning paper updates a read event and moves the paper to Read papers', 
   await expect(page.locator('#readPaperList .paper-task-title')).toHaveText('Paper A');
 
   await page.locator('.event-chip').filter({ hasText: 'read: Paper A' }).click();
-  await expect(page.locator('.paper-assignment-option').filter({ hasText: 'Paper A' })).toHaveCount(0);
-  await expect(page.locator('#eventPaperAssignment')).toContainText('No paper tasks yet');
+  const assignedPaper = page.locator('.paper-assignment-option').filter({ hasText: 'Paper A' });
+  await expect(assignedPaper).toHaveCount(1);
+  await expect(assignedPaper.locator('input')).toBeChecked();
+  await expect(page.locator('#eventPaperAssignmentCount')).toHaveText('1 selected');
   await page.getByRole('button', { name: 'Save' }).click();
   await expect(page.locator('.event-chip').filter({ hasText: 'read: Paper A' })).toBeVisible();
 });
