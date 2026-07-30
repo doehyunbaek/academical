@@ -77,7 +77,7 @@ test('Firestore differences require an explicit conflict choice before writing',
   expect(syncedIds).toEqual(['cloud-event', 'local-event']);
 });
 
-test('Firestore comparison ignores property order and stale calendar overrides', async ({ page }) => {
+test('Firestore comparison ignores property order and stale calendar metadata', async ({ page }) => {
   await page.route('https://www.gstatic.com/firebasejs/**', (route) => route.fulfill({ contentType: 'application/javascript', body: '' }));
   await page.addInitScript(() => {
     const calendarId = 'custom-current';
@@ -103,7 +103,7 @@ test('Firestore comparison ignores property order and stale calendar overrides',
       calendarNameOverrides: { staleCalendar: 'Deleted calendar', [calendarId]: 'Renamed' },
       calendarColorOverrides: { staleCalendar: 'red', [calendarId]: 'green' },
       calendarOrderIds: [],
-      visibleCalendars: { teaching: true, research: true, deadlines: true, personal: true, tasks: true, [calendarId]: true },
+      visibleCalendars: { teaching: true, research: true, deadlines: true, personal: true, tasks: true, staleCalendar: false, [calendarId]: true },
       archivedCalendarIds: [],
       deletedCalendarIds: [],
     };

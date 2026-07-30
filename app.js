@@ -1106,7 +1106,7 @@ function getComparableCloudState(state = {}) {
     calendarNameOverrides: normalizeCalendarNameOverrides(state.calendarNameOverrides, normalizedCustomCalendars),
     calendarColorOverrides: normalizeCalendarColorOverrides(state.calendarColorOverrides, normalizedCustomCalendars),
     calendarOrderIds: state.calendarOrderIds ?? null,
-    visibleCalendars: state.visibleCalendars ?? null,
+    visibleCalendars: normalizeVisibleCalendars(state.visibleCalendars, normalizedCustomCalendars),
     archivedCalendarIds: state.archivedCalendarIds ?? null,
     deletedCalendarIds: state.deletedCalendarIds ?? null,
   };
@@ -1244,7 +1244,7 @@ function applyRemoteState(remoteState) {
   calendarColorOverrides = normalizeCalendarColorOverrides(remoteState.calendarColorOverrides);
   calendarOrderIds = normalizeCalendarOrderIds(remoteState.calendarOrderIds);
   calendars = getCalendars();
-  visibleCalendars = { ...loadVisibleCalendars(), ...(remoteState.visibleCalendars || {}) };
+  visibleCalendars = normalizeVisibleCalendars(remoteState.visibleCalendars, customCalendars);
   archivedCalendarIds = normalizeCalendarIdList(remoteState.archivedCalendarIds);
   deletedCalendarIds = normalizeCalendarIdList(remoteState.deletedCalendarIds);
   setLocalSyncUpdatedAt(remoteState.updatedAt || new Date().toISOString());
@@ -5909,12 +5909,17 @@ function saveCalendarColorOverrides({ sync = true, touch = true } = {}) {
   if (sync) queueCloudSync();
 }
 
+function normalizeVisibleCalendars(value, customCalendarList = customCalendars) {
+  const validIds = [...defaultCalendars, ...customCalendarList].map((calendar) => calendar.id);
+  const saved = value && typeof value === "object" && !Array.isArray(value) ? value : {};
+  return Object.fromEntries(validIds.map((id) => [id, typeof saved[id] === "boolean" ? saved[id] : true]));
+}
+
 function loadVisibleCalendars() {
-  const defaults = Object.fromEntries(calendars.map((calendar) => [calendar.id, true]));
   try {
-    return { ...defaults, ...JSON.parse(localStorage.getItem(STORAGE_VISIBLE_CALENDARS) || "{}") };
+    return normalizeVisibleCalendars(JSON.parse(localStorage.getItem(STORAGE_VISIBLE_CALENDARS) || "{}"));
   } catch {
-    return defaults;
+    return normalizeVisibleCalendars({});
   }
 }
 
