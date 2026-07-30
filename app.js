@@ -1108,7 +1108,6 @@ function getComparableCloudState(state = {}) {
     calendarNameOverrides: normalizeCalendarNameOverrides(state.calendarNameOverrides, normalizedCustomCalendars),
     calendarColorOverrides: normalizeCalendarColorOverrides(state.calendarColorOverrides, normalizedCustomCalendars),
     calendarOrderIds: state.calendarOrderIds ?? null,
-    visibleCalendars: normalizeVisibleCalendars(state.visibleCalendars, normalizedCustomCalendars),
     archivedCalendarIds: state.archivedCalendarIds ?? null,
     deletedCalendarIds: state.deletedCalendarIds ?? null,
   };
@@ -1123,8 +1122,7 @@ function getDefaultPaperCalendarIdForState(state, customCalendarList) {
   ];
   const unavailableIds = new Set([...(state.archivedCalendarIds ?? []), ...(state.deletedCalendarIds ?? [])]);
   const activeIds = orderedIds.filter((id) => !unavailableIds.has(id));
-  const visibility = normalizeVisibleCalendars(state.visibleCalendars, customCalendarList);
-  return activeIds.find((id) => visibility[id]) ?? activeIds[0] ?? "";
+  return activeIds[0] ?? "";
 }
 
 function stableSerialize(value) {
@@ -1258,7 +1256,7 @@ function applyRemoteState(remoteState) {
   calendarColorOverrides = normalizeCalendarColorOverrides(remoteState.calendarColorOverrides);
   calendarOrderIds = normalizeCalendarOrderIds(remoteState.calendarOrderIds);
   calendars = getCalendars();
-  visibleCalendars = normalizeVisibleCalendars(remoteState.visibleCalendars, customCalendars);
+  visibleCalendars = normalizeVisibleCalendars(visibleCalendars, customCalendars);
   archivedCalendarIds = normalizeCalendarIdList(remoteState.archivedCalendarIds);
   deletedCalendarIds = normalizeCalendarIdList(remoteState.deletedCalendarIds);
   paperTasks = Array.isArray(remoteState.paperTasks) ? normalizePaperTasks(remoteState.paperTasks) : paperTasks;

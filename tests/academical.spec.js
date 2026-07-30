@@ -103,7 +103,7 @@ test('Firestore comparison ignores property order and stale calendar metadata', 
       calendarNameOverrides: { staleCalendar: 'Deleted calendar', [calendarId]: 'Renamed' },
       calendarColorOverrides: { staleCalendar: 'red', [calendarId]: 'green' },
       calendarOrderIds: [],
-      visibleCalendars: { teaching: true, research: true, deadlines: true, personal: true, tasks: true, staleCalendar: false, [calendarId]: true },
+      visibleCalendars: { teaching: false, research: false, deadlines: false, personal: false, tasks: false, staleCalendar: false, [calendarId]: false },
       archivedCalendarIds: [],
       deletedCalendarIds: [],
     };
@@ -138,6 +138,8 @@ test('Firestore comparison ignores property order and stale calendar metadata', 
   await page.goto('/');
   await expect.poll(() => page.evaluate(() => window.__firestoreListenerAttached)).toBe(true);
   await expect(page.locator('#syncConflictModal')).toBeHidden();
+  await expect(page.locator('.calendar-toggle input[data-calendar="research"]')).toBeChecked();
+  await expect(page.locator('.calendar-toggle input[data-calendar="custom-current"]')).toBeChecked();
   expect(await page.evaluate(() => window.__firestoreWrites.length)).toBe(0);
 });
 
@@ -1506,9 +1508,9 @@ test('papers panel splits queued and read papers into separate columns', async (
 test('papers panel derives assigned paper status from the current calendar time', async ({ page }) => {
   await page.addInitScript(() => {
     const papers = [
-      { id: 'current-paper', title: 'Current event paper', done: true, readAt: '2026-07-03T09:00:00Z', createdAt: '2026-07-01T00:00:00Z' },
-      { id: 'future-paper', title: 'Future event paper', done: true, readAt: '2026-07-03T09:00:00Z', createdAt: '2026-07-01T00:00:00Z' },
-      { id: 'manual-paper', title: 'Manually read paper', done: true, readAt: '2026-07-02T00:00:00Z', createdAt: '2026-07-01T00:00:00Z' },
+      { id: 'current-paper', title: 'Current event paper', calendar: 'teaching', done: true, readAt: '2026-07-03T09:00:00Z', createdAt: '2026-07-01T00:00:00Z' },
+      { id: 'future-paper', title: 'Future event paper', calendar: 'research', done: true, readAt: '2026-07-03T09:00:00Z', createdAt: '2026-07-01T00:00:00Z' },
+      { id: 'manual-paper', title: 'Manually read paper', calendar: 'teaching', done: true, readAt: '2026-07-02T00:00:00Z', createdAt: '2026-07-01T00:00:00Z' },
     ];
     localStorage.setItem('academical.paperTasks.v1', JSON.stringify(papers));
     localStorage.setItem('academical.events.v1', JSON.stringify([
@@ -1539,6 +1541,7 @@ test('papers panel derives assigned paper status from the current calendar time'
 
   await page.keyboard.press('w');
   await expect(page.locator('#readPaperList')).toContainText('Current event paper');
+  await expect(page.locator('#paperTaskList')).not.toContainText('Current event paper');
 });
 
 test('p opens Add paper modal and Enter submits', async ({ page }) => {
@@ -1550,6 +1553,8 @@ test('p opens Add paper modal and Enter submits', async ({ page }) => {
   await page.keyboard.press('Enter');
   await expect(page.locator('#paperModal')).not.toHaveClass(/is-open/);
   await expect(page.locator('.paper-task-title')).toHaveText('A paper title');
+  const savedPaper = await page.evaluate(() => JSON.parse(localStorage.getItem('academical.paperTasks.v1'))[0]);
+  expect(savedPaper.calendar).toBe('teaching');
 });
 
 test('Edit displays paper identity and updates notes and tags', async ({ page }) => {
@@ -1562,6 +1567,8 @@ test('Edit displays paper identity and updates notes and tags', async ({ page })
   await expect(page.locator('#paperDialogTitle')).toHaveText('Edit paper');
   await expect(page.locator('#paperModalInputField')).toBeHidden();
   await expect(page.locator('#paperEditTitle')).toHaveText('Original paper title');
+  await expect(page.locator('#paperCalendarInput')).toHaveValue('teaching');
+  await page.locator('#paperCalendarInput').selectOption('research');
   await page.locator('#paperNoteInput').fill('Compare this with the baseline results.');
   await page.locator('#paperTagsInput').fill('evaluation, LLM, evaluation');
   await page.locator('#paperModalSubmit').click();
@@ -1573,7 +1580,13 @@ test('Edit displays paper identity and updates notes and tags', async ({ page })
   await expect(page.locator('.paper-task-tag').nth(0)).toHaveAttribute('style', /rebeccapurple/);
   await expect(page.locator('.paper-task-tag').nth(1)).toHaveAttribute('style', /crimson/);
 
+  await page.keyboard.press('q');
+  await expect(page.locator('.paper-task-title')).toHaveCount(0);
+  await page.keyboard.press('w');
+  await expect(page.locator('.paper-task-title')).toHaveText('Original paper title');
+
   await page.getByRole('button', { name: 'Edit Original paper title' }).click();
+  await expect(page.locator('#paperCalendarInput')).toHaveValue('research');
   await expect(page.locator('#paperNoteInput')).toHaveValue('Compare this with the baseline results.');
   await expect(page.locator('#paperTagsInput')).toHaveValue('evaluation, LLM');
   await expect(page.locator('.paper-tag-suggestion')).toHaveText(['evaluation', 'LLM']);
@@ -1897,6 +1910,27 @@ test('an exact-title read event automatically moves its paper to Read papers', a
 
   await expect(page.locator('#paperTaskList .paper-task-title')).toHaveCount(0);
   await expect(page.locator('#readPaperList .paper-task-title')).toHaveText('How much do language models memorize?');
+});
+
+test('read paper follows its read event calendar when it differs from paper ownership', async ({ page }) => {
+  await page.goto('/');
+  await page.keyboard.press('p');
+  await page.locator('#paperModalInput').fill('Cross-calendar paper');
+  await page.keyboard.press('Enter');
+
+  await openCreateEventDialog(page);
+  await page.locator('#eventTitle').fill('read session');
+  await page.locator('#eventCalendar').selectOption('research');
+  await page.locator('.paper-assignment-option').filter({ hasText: 'Cross-calendar paper' }).locator('input').check();
+  await page.getByRole('button', { name: 'Save' }).click();
+
+  await page.keyboard.press('q');
+  await expect(page.locator('#readPaperList')).not.toContainText('Cross-calendar paper');
+  await expect(page.locator('#paperTaskList')).toContainText('Cross-calendar paper');
+
+  await page.keyboard.press('w');
+  await expect(page.locator('#readPaperList')).toContainText('Cross-calendar paper');
+  await expect(page.locator('#paperTaskList')).not.toContainText('Cross-calendar paper');
 });
 
 test('assigning paper updates a read event and moves the paper to Read papers', async ({ page }) => {
