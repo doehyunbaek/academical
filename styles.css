@@ -1801,6 +1801,30 @@ textarea:focus-visible {
   background: var(--surface);
 }
 
+.week-timeline--fit .week-timeline-scroll {
+  overflow-y: hidden;
+}
+
+.week-timeline--fit .week-time-label {
+  padding-right: 6px;
+  font-size: 9px;
+  transform: translateY(-4px);
+}
+
+.week-timeline--fit .week-timed-event,
+.week-timeline--fit .week-event-drag-preview,
+.week-timeline--fit .week-drag-selection {
+  padding: 1px 4px;
+  border-radius: 3px;
+  border-left-width: 2px;
+}
+
+.week-timeline--fit .week-timed-event-title,
+.week-timeline--fit .week-timed-event-time {
+  font-size: 8px;
+  line-height: 1;
+}
+
 .week-time-column {
   position: sticky;
   left: 0;

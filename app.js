@@ -30,7 +30,7 @@ const VIEW_LABELS = {
 };
 const WEEK_START_DAY = 1; // Monday
 const HOURS = Array.from({ length: 24 }, (_, hour) => hour);
-const WEEK_HOUR_HEIGHT = 72;
+const DEFAULT_WEEK_HOUR_HEIGHT = 72;
 const WEEK_SLOT_GRANULARITY_MINUTES = 15;
 const DEFAULT_EVENT_DURATION_MINUTES = 60;
 const REPEAT_LABELS = {
@@ -325,6 +325,7 @@ const rangeFullMonthDayFormatter = new Intl.DateTimeFormat("en-US", {
 });
 
 let currentView = "month";
+let weekFit24Hours = false;
 let visibleMonth = startOfMonth(TODAY);
 let selectedDate = new Date(TODAY);
 let viewAnchorDate = new Date(TODAY);
@@ -403,8 +404,12 @@ function bindEvents() {
 
   els.sidebarToggle.addEventListener("click", () => {
     document.body.classList.toggle("sidebar-collapsed");
+    refreshFittedWeekTimeline();
   });
   els.sidebarResizer.addEventListener("pointerdown", startSidebarResize);
+  window.addEventListener("resize", () => {
+    if (currentView === "week" && weekFit24Hours) renderMonthGrid();
+  });
   els.sidebarResizer.addEventListener("keydown", handleSidebarResizeKeydown);
   els.sidebarTabs.addEventListener("click", (event) => {
     const button = event.target.closest(".sidebar-tab");
@@ -643,7 +648,13 @@ function bindEvents() {
       }
     } else if (key === "2") {
       event.preventDefault();
-      setView("week");
+      if (currentView === "week") {
+        weekFit24Hours = !weekFit24Hours;
+        render();
+        showToast(weekFit24Hours ? "Week showing all 24 hours" : "Week showing expanded hours");
+      } else {
+        setView("week");
+      }
     } else if (key === "3") {
       event.preventDefault();
       setView("month");
@@ -659,6 +670,13 @@ function bindEvents() {
   els.eventRepeatUntil.addEventListener("input", updateEventRepeatUntilField);
   els.deleteEvent.addEventListener("click", deleteActiveEvent);
   els.deleteSeriesEvent.addEventListener("click", deleteRecurringSeries);
+}
+
+function refreshFittedWeekTimeline() {
+  if (currentView !== "week" || !weekFit24Hours) return;
+  requestAnimationFrame(() => {
+    if (currentView === "week" && weekFit24Hours) renderMonthGrid();
+  });
 }
 
 function render() {
@@ -816,6 +834,7 @@ function stopSidebarResize() {
   }
   activeSidebarResize = null;
   document.body.classList.remove("sidebar-resizing");
+  if (currentView === "week" && weekFit24Hours) renderMonthGrid();
   window.removeEventListener("pointermove", handleSidebarResizeMove);
   window.removeEventListener("pointerup", stopSidebarResize);
   window.removeEventListener("pointercancel", stopSidebarResize);
@@ -858,11 +877,13 @@ function selectSidebarPanelByPosition(position) {
   const isCollapsed = document.body.classList.contains("sidebar-collapsed");
   if (panel === activeSidebarPanel && !isCollapsed) {
     document.body.classList.add("sidebar-collapsed");
+    refreshFittedWeekTimeline();
     return;
   }
 
   document.body.classList.remove("sidebar-collapsed");
   setSidebarPanel(panel);
+  refreshFittedWeekTimeline();
 }
 
 function renderSidebarTimeAnalysisIfActive() {
@@ -4414,8 +4435,9 @@ function restoreWeekScrollPosition(position) {
 function renderWeekTimeline(scrollPosition = null) {
   const weekDates = getMainCalendarDates();
   const timeline = document.createElement("section");
-  timeline.className = "week-timeline";
-  timeline.setAttribute("aria-label", `${getHeaderTitle(weekDates[0], weekDates[6])} weekly schedule`);
+  timeline.className = `week-timeline${weekFit24Hours ? " week-timeline--fit" : ""}`;
+  timeline.dataset.hourMode = weekFit24Hours ? "fit" : "expanded";
+  timeline.setAttribute("aria-label", `${getHeaderTitle(weekDates[0], weekDates[6])} weekly schedule${weekFit24Hours ? ", all 24 hours visible" : ""}`);
 
   const header = document.createElement("header");
   header.className = "week-timeline-header";
@@ -4427,7 +4449,13 @@ function renderWeekTimeline(scrollPosition = null) {
 
   const scroller = document.createElement("div");
   scroller.className = "week-timeline-scroll";
-  scroller.style.setProperty("--hour-height", `${WEEK_HOUR_HEIGHT}px`);
+  timeline.append(header, scroller);
+  els.monthGrid.replaceChildren(timeline);
+
+  const hourHeight = weekFit24Hours
+    ? Math.max(1, scroller.clientHeight / 24)
+    : DEFAULT_WEEK_HOUR_HEIGHT;
+  scroller.style.setProperty("--hour-height", `${hourHeight}px`);
 
   const timeColumn = document.createElement("div");
   timeColumn.className = "week-time-column";
@@ -4443,9 +4471,13 @@ function renderWeekTimeline(scrollPosition = null) {
   weekDates.forEach((date) => daysGrid.append(createWeekDayColumn(date)));
 
   scroller.append(timeColumn, daysGrid);
-  timeline.append(header, scroller);
-  els.monthGrid.replaceChildren(timeline);
-  restoreWeekScrollPosition(scrollPosition);
+  if (!weekFit24Hours) restoreWeekScrollPosition(scrollPosition);
+}
+
+function getWeekHourHeight(element = null) {
+  const scroller = element?.closest?.(".week-timeline-scroll") || els.monthGrid.querySelector(".week-timeline-scroll");
+  const value = Number.parseFloat(scroller?.style.getPropertyValue("--hour-height"));
+  return Number.isFinite(value) && value > 0 ? value : DEFAULT_WEEK_HOUR_HEIGHT;
 }
 
 function createWeekHeaderDay(date) {
@@ -4550,8 +4582,9 @@ function handleWeekColumnPointerMove(event) {
   hoverSelection.hidden = false;
   hoverSelection.dataset.time = formatMinutesInput(minutes);
   hoverSelection.dataset.durationMinutes = String(durationMinutes);
-  hoverSelection.style.top = `${(minutes / 60) * WEEK_HOUR_HEIGHT + 1}px`;
-  hoverSelection.style.height = `${Math.max(18, ((durationMinutes / 60) * WEEK_HOUR_HEIGHT) - 2)}px`;
+  const hourHeight = getWeekHourHeight(column);
+  hoverSelection.style.top = `${(minutes / 60) * hourHeight + 1}px`;
+  hoverSelection.style.height = `${Math.max(weekFit24Hours ? 4 : 18, ((durationMinutes / 60) * hourHeight) - 2)}px`;
 }
 
 function handleWeekColumnPointerLeave(event) {
@@ -4590,7 +4623,7 @@ function createWeekSlot(date, hour) {
   slot.type = "button";
   slot.dataset.date = dateKey;
   slot.dataset.hour = String(hour);
-  slot.style.top = `${hour * WEEK_HOUR_HEIGHT}px`;
+  slot.style.top = `${hour * getWeekHourHeight()}px`;
   slot.setAttribute("aria-label", `Create event on ${longDateFormatter.format(date)} at ${formatHourLabel(hour) || "12 AM"}`);
   slot.addEventListener("pointerdown", (event) => startWeekRangeDrag(event, date));
   slot.addEventListener("click", (event) => {
@@ -4696,7 +4729,7 @@ function getWeekRangeDragMinutes(drag, event) {
 function getWeekMinutesAtClientY(column, clientY, { offsetMinutes = 0, maxMinutes = (24 * 60) - WEEK_SLOT_GRANULARITY_MINUTES } = {}) {
   const rect = column.getBoundingClientRect();
   const y = Math.min(Math.max(clientY - rect.top, 0), rect.height - 1);
-  const rawMinutes = ((y / WEEK_HOUR_HEIGHT) * 60) - offsetMinutes;
+  const rawMinutes = ((y / getWeekHourHeight(column)) * 60) - offsetMinutes;
   const snappedMinutes = Math.floor(rawMinutes / WEEK_SLOT_GRANULARITY_MINUTES) * WEEK_SLOT_GRANULARITY_MINUTES;
   return Math.min(maxMinutes, Math.max(0, snappedMinutes));
 }
@@ -4713,8 +4746,9 @@ function getWeekRangeDragRange(drag) {
 
 function updateWeekRangeDragSelection(drag) {
   const range = getWeekRangeDragRange(drag);
-  drag.selection.style.top = `${(range.startMinutes / 60) * WEEK_HOUR_HEIGHT + 2}px`;
-  drag.selection.style.height = `${Math.max(18, ((range.durationMinutes / 60) * WEEK_HOUR_HEIGHT) - 4)}px`;
+  const hourHeight = getWeekHourHeight(drag.column);
+  drag.selection.style.top = `${(range.startMinutes / 60) * hourHeight + 2}px`;
+  drag.selection.style.height = `${Math.max(weekFit24Hours ? 4 : 18, ((range.durationMinutes / 60) * hourHeight) - 4)}px`;
   drag.selection.textContent = `${formatMinuteBoundary(range.startMinutes)} – ${formatMinuteBoundary(range.endMinutes)} · ${formatHours(range.durationMinutes / 60)}`;
 }
 
@@ -4722,15 +4756,16 @@ function createWeekTimedEvent(calendarEvent) {
   const calendar = getCalendar(calendarEvent.calendar);
   const [hour, minute] = calendarEvent.time.split(":").map(Number);
   const startMinutes = hour * 60 + minute;
-  const top = (startMinutes / 60) * WEEK_HOUR_HEIGHT;
-  const height = (getOccurrenceDurationMinutes(calendarEvent) / 60) * WEEK_HOUR_HEIGHT;
+  const hourHeight = getWeekHourHeight();
+  const top = (startMinutes / 60) * hourHeight;
+  const height = (getOccurrenceDurationMinutes(calendarEvent) / 60) * hourHeight;
 
   const eventButton = document.createElement("button");
   eventButton.className = "week-timed-event";
   eventButton.type = "button";
   eventButton.style.setProperty("--event-color", calendar.color);
   eventButton.style.top = `${top + 2}px`;
-  eventButton.style.height = `${Math.max(34, height - 4)}px`;
+  eventButton.style.height = `${Math.max(weekFit24Hours ? 4 : 34, height - 4)}px`;
   eventButton.setAttribute("aria-label", `${formatTime(calendarEvent.time)} ${calendarEvent.title}, ${calendar.name}`);
 
   const time = document.createElement("span");
@@ -4769,7 +4804,7 @@ function startWeekEventDrag(event, calendarEvent) {
   const durationMinutes = getOccurrenceDurationMinutes(calendarEvent);
   const offsetMinutes = Math.min(
     Math.max(0, durationMinutes - WEEK_SLOT_GRANULARITY_MINUTES),
-    Math.max(0, ((event.clientY - sourceRect.top) / WEEK_HOUR_HEIGHT) * 60)
+    Math.max(0, ((event.clientY - sourceRect.top) / getWeekHourHeight(sourceColumn)) * 60)
   );
   const preview = document.createElement("div");
   preview.className = "week-event-drag-preview";
@@ -4851,8 +4886,9 @@ function updateWeekEventDragPreview(drag, event) {
   drag.targetDateKey = targetDateKey;
   drag.targetMinutes = targetMinutes;
   drag.preview.hidden = false;
-  drag.preview.style.top = `${(targetMinutes / 60) * WEEK_HOUR_HEIGHT + 2}px`;
-  drag.preview.style.height = `${Math.max(34, ((drag.durationMinutes / 60) * WEEK_HOUR_HEIGHT) - 4)}px`;
+  const hourHeight = getWeekHourHeight(targetColumn);
+  drag.preview.style.top = `${(targetMinutes / 60) * hourHeight + 2}px`;
+  drag.preview.style.height = `${Math.max(weekFit24Hours ? 4 : 34, ((drag.durationMinutes / 60) * hourHeight) - 4)}px`;
   drag.preview.textContent = `${formatMinuteBoundary(targetMinutes)} · ${drag.event.title}`;
   if (drag.preview.parentElement !== targetColumn) targetColumn.append(drag.preview);
 }
@@ -6040,7 +6076,7 @@ function updateNowIndicator() {
 }
 
 function getNowOffsetPixels(date) {
-  return ((date.getHours() * 60 + date.getMinutes()) / 60) * WEEK_HOUR_HEIGHT;
+  return ((date.getHours() * 60 + date.getMinutes()) / 60) * getWeekHourHeight();
 }
 
 function formatClockTime(date) {

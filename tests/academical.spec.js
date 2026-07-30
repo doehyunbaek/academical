@@ -348,6 +348,40 @@ test('keyboard shortcuts switch views and navigate periods', async ({ page }) =>
   await expect(page.locator('#viewSelect')).toHaveValue('month');
 });
 
+test('pressing 2 again toggles a fitted 24-hour week view', async ({ page }) => {
+  await page.setViewportSize({ width: 1200, height: 900 });
+  await page.goto('/');
+  await page.keyboard.press('2');
+
+  const timeline = page.locator('.week-timeline');
+  const scroller = page.locator('.week-timeline-scroll');
+  await expect(timeline).toHaveAttribute('data-hour-mode', 'expanded');
+  expect(await scroller.evaluate((element) => element.scrollHeight)).toBeGreaterThan(await scroller.evaluate((element) => element.clientHeight));
+
+  await page.keyboard.press('2');
+  await expect(timeline).toHaveAttribute('data-hour-mode', 'fit');
+  const fittedDimensions = await scroller.evaluate((element) => ({
+    clientHeight: element.clientHeight,
+    scrollHeight: element.scrollHeight,
+  }));
+  expect(Math.abs(fittedDimensions.scrollHeight - fittedDimensions.clientHeight)).toBeLessThanOrEqual(1);
+  await expect(timeline).toHaveAttribute('aria-label', /all 24 hours visible/);
+
+  await page.locator('#sidebarToggle').click();
+  await expect.poll(() => scroller.evaluate((element) => element.clientHeight)).toBeGreaterThan(fittedDimensions.clientHeight);
+  const collapsedDimensions = await scroller.evaluate((element) => ({
+    clientHeight: element.clientHeight,
+    scrollHeight: element.scrollHeight,
+  }));
+  expect(Math.abs(collapsedDimensions.scrollHeight - collapsedDimensions.clientHeight)).toBeLessThanOrEqual(1);
+
+  await page.locator('#sidebarToggle').click();
+  await expect.poll(() => scroller.evaluate((element) => element.clientHeight)).toBeLessThan(collapsedDimensions.clientHeight);
+
+  await page.keyboard.press('2');
+  await expect(timeline).toHaveAttribute('data-hour-mode', 'expanded');
+});
+
 test('four-week range title stays inline beside nav carets on compact header', async ({ page }) => {
   await page.setViewportSize({ width: 800, height: 900 });
   await page.goto('/');
