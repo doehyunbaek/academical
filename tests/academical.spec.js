@@ -1503,6 +1503,44 @@ test('papers panel splits queued and read papers into separate columns', async (
   await expect(page.locator('.paper-assignment-option').filter({ hasText: /^Read paper$/ })).toHaveCount(0);
 });
 
+test('papers panel derives assigned paper status from the current calendar time', async ({ page }) => {
+  await page.addInitScript(() => {
+    const papers = [
+      { id: 'current-paper', title: 'Current event paper', done: true, readAt: '2026-07-03T09:00:00Z', createdAt: '2026-07-01T00:00:00Z' },
+      { id: 'future-paper', title: 'Future event paper', done: true, readAt: '2026-07-03T09:00:00Z', createdAt: '2026-07-01T00:00:00Z' },
+      { id: 'manual-paper', title: 'Manually read paper', done: true, readAt: '2026-07-02T00:00:00Z', createdAt: '2026-07-01T00:00:00Z' },
+    ];
+    localStorage.setItem('academical.paperTasks.v1', JSON.stringify(papers));
+    localStorage.setItem('academical.events.v1', JSON.stringify([
+      {
+        id: 'current-read', title: 'Read: Current event paper', date: '2026-07-03', time: '09:00',
+        durationMinutes: 60, repeat: 'none', calendar: 'research', paperTaskIds: ['current-paper'], papers: [papers[0]],
+      },
+      {
+        id: 'future-read', title: 'Read: Future event paper', date: '2026-07-03', time: '10:00',
+        durationMinutes: 60, repeat: 'none', calendar: 'research', paperTaskIds: ['future-paper'], papers: [papers[1]],
+      },
+    ]));
+  });
+
+  await page.goto('/');
+  await page.getByRole('button', { name: 'Papers', exact: true }).click();
+
+  await expect(page.locator('#readPaperList')).toContainText('Current event paper');
+  await expect(page.locator('#readPaperList')).toContainText('Manually read paper');
+  await expect(page.locator('#readPaperList')).not.toContainText('Future event paper');
+  await expect(page.locator('#paperTaskList')).toContainText('Future event paper');
+  await expect(page.locator('#readPaperCount')).toHaveText('2');
+  await expect(page.locator('#paperTaskCount')).toHaveText('1');
+
+  await page.keyboard.press('q');
+  await expect(page.locator('#readPaperList')).not.toContainText('Current event paper');
+  await expect(page.locator('#paperTaskList')).toContainText('Current event paper');
+
+  await page.keyboard.press('w');
+  await expect(page.locator('#readPaperList')).toContainText('Current event paper');
+});
+
 test('p opens Add paper modal and Enter submits', async ({ page }) => {
   await page.goto('/');
   await page.keyboard.press('p');

@@ -339,6 +339,7 @@ let bottomSidebarHeight = loadBottomSidebarHeight();
 let activeSidebarPanel = "calendar";
 let paperTasks = loadPaperTasks();
 let paperFilterQuery = "";
+let calendarReadAtByPaperId = new Map();
 let searchQuery = "";
 let heatmapDetailsAnchor = null;
 let heatmapRangeMode = "events";
@@ -378,7 +379,10 @@ function init() {
   void loadDeadlineConferences();
   render();
   initFirebaseSync();
-  setInterval(updateNowIndicator, 60_000);
+  setInterval(() => {
+    updateNowIndicator();
+    if (activeSidebarPanel === "papers") renderPaperTasks();
+  }, 60_000);
   setInterval(updateDeadlineTimers, 1_000);
 }
 
@@ -865,6 +869,7 @@ function setSidebarPanel(panel) {
     button.classList.toggle("is-active", selected);
     button.setAttribute("aria-selected", String(selected));
   });
+  if (panel === "papers") renderPaperTasks();
   if (panel === "analysis") renderSidebarTimeAnalysis();
   if (panel === "deadlines") renderDeadlinePanel();
 }
@@ -1675,6 +1680,7 @@ function persistCalendarVisibility(message = "") {
   renderArchivedCalendars();
   renderMonthGrid();
   renderSidebarTimeAnalysisIfActive();
+  if (activeSidebarPanel === "papers") renderPaperTasks();
   if (message) showToast(message);
 }
 
@@ -2349,13 +2355,19 @@ function deleteEditingPaperTask() {
   showToast("Paper deleted");
 }
 
-function renderPaperTasks() {
+function renderPaperTasks({ recalculateCalendar = activeSidebarPanel === "papers" } = {}) {
+  if (recalculateCalendar) calendarReadAtByPaperId = getCalendarReadAtByPaperId();
+  const isRead = (task) => calendarReadAtByPaperId.has(task.id) || (task.done && !isPaperAssignedToCalendar(task.id));
   const activeTasks = paperTasks
-    .filter((task) => !task.done && paperMatchesFilter(task))
+    .filter((task) => !isRead(task) && paperMatchesFilter(task))
     .sort((a, b) => b.createdAt.localeCompare(a.createdAt));
   const readPapers = paperTasks
-    .filter((task) => task.done && paperMatchesFilter(task))
-    .sort((a, b) => (b.readAt || b.createdAt).localeCompare(a.readAt || a.createdAt));
+    .filter((task) => isRead(task) && paperMatchesFilter(task))
+    .sort((a, b) => {
+      const readAtA = calendarReadAtByPaperId.get(a.id) || a.readAt || a.createdAt;
+      const readAtB = calendarReadAtByPaperId.get(b.id) || b.readAt || b.createdAt;
+      return readAtB.localeCompare(readAtA);
+    });
 
   els.paperTaskCount.textContent = activeTasks.length;
   els.readPaperCount.textContent = readPapers.length;
@@ -2363,6 +2375,47 @@ function renderPaperTasks() {
   const readEmptyText = paperFilterQuery ? "No matching read papers." : "No papers read yet.";
   renderPaperTaskGroup(els.paperTaskList, activeTasks, activeEmptyText);
   renderPaperTaskGroup(els.readPaperList, readPapers, readEmptyText);
+}
+
+function getCalendarReadAtByPaperId(now = getNow()) {
+  const readAtByPaperId = new Map();
+  const todayKey = toDateKey(now);
+
+  events.forEach((event) => {
+    if (!visibleCalendars[event.calendar] || event.date > todayKey) return;
+    const firstDate = fromDateKey(event.date);
+    const lastDate = fromDateKey(todayKey);
+    const dayCount = Math.round((lastDate - firstDate) / 86_400_000) + 1;
+
+    makeDateRange(firstDate, dayCount).forEach((date) => {
+      const dateKey = toDateKey(date);
+      if (!doesEventOccurOnDate(event, dateKey)) return;
+      const occurrence = createEventOccurrence(event, dateKey);
+      const { start } = getOccurrenceDateTimeRange(occurrence);
+      if (start > now) return;
+
+      const paperIds = new Set([
+        ...(occurrence.paperTaskIds ?? []),
+        ...(occurrence.papers ?? []).map((paper) => paper?.id),
+      ]);
+      paperIds.forEach((paperId) => {
+        if (!paperId) return;
+        const readAt = start.toISOString();
+        if (readAt > (readAtByPaperId.get(paperId) || "")) readAtByPaperId.set(paperId, readAt);
+      });
+    });
+  });
+
+  return readAtByPaperId;
+}
+
+function isPaperAssignedToCalendar(paperId) {
+  return events.some((event) => {
+    if ((event.paperTaskIds ?? []).includes(paperId) || (event.papers ?? []).some((paper) => paper?.id === paperId)) return true;
+    return Object.values(event.instanceOverrides ?? {}).some((override) =>
+      (override.paperTaskIds ?? []).includes(paperId) || (override.papers ?? []).some((paper) => paper?.id === paperId)
+    );
+  });
 }
 
 function paperMatchesFilter(task) {
