@@ -3,6 +3,10 @@ const MINUTES_PER_DAY = 24 * 60;
 const DEFAULT_WEEK_HOUR_HEIGHT = 72;
 const WEEK_SLOT_GRANULARITY_MINUTES = 15;
 
+function isCopyDrag(event) {
+  return event.metaKey || event.ctrlKey;
+}
+
 export function createWeekCalendar({
   elements,
   getMainCalendarDates,
@@ -33,6 +37,7 @@ export function createWeekCalendar({
   ensureDateVisible,
   openEventDialog,
   moveEventOccurrence,
+  copyEventOccurrence,
   interactionState,
 }) {
   function render(scrollPosition = null) {
@@ -575,7 +580,8 @@ export function createWeekCalendar({
       interactionState.suppressNextWeekEventClick = false;
     }, 0);
 
-    moveEventOccurrence(drag.event, drag.targetDateKey, getMinutesInput(drag.targetMinutes));
+    const updateEvent = isCopyDrag(event) ? copyEventOccurrence : moveEventOccurrence;
+    updateEvent(drag.event, drag.targetDateKey, getMinutesInput(drag.targetMinutes));
   }
 
   function cancelWeekEventDrag() {
@@ -613,7 +619,7 @@ export function createWeekCalendar({
     }
     drag.preview.style.top = `${(displayedStart / 60) * hourHeight + 2}px`;
     drag.preview.style.height = `${Math.max(getWeekFit24Hours() ? 4 : 34, ((displayedDuration / 60) * hourHeight) - 4)}px`;
-    drag.preview.textContent = `${getMinuteBoundary(targetMinutes)} · ${drag.event.title}`;
+    drag.preview.textContent = `${isCopyDrag(event) ? "Copy · " : ""}${getMinuteBoundary(targetMinutes)} · ${drag.event.title}`;
     if (drag.preview.parentElement !== targetColumn) targetColumn.append(drag.preview);
   }
 

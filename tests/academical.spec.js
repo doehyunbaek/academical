@@ -1473,6 +1473,39 @@ test('dragging a timed week event moves its date and 15 minute position', async 
   await expect(page.locator('.week-day-column[data-date="2026-07-03"] .week-timed-event').filter({ hasText: 'CS seminar prep' })).toBeVisible();
 });
 
+test('Command-dragging a timed week event copies it instead of moving it', async ({ page }) => {
+  await showAllWeekHours(page);
+  await page.goto('/');
+  await page.keyboard.press('2');
+  await page.locator('.week-timeline-scroll').evaluate((element) => {
+    element.scrollTop = 360;
+  });
+
+  const eventButton = page.locator('.week-timed-event').filter({ hasText: 'CS seminar prep' });
+  const eventBox = await eventButton.boundingBox();
+  const targetColumn = page.locator('.week-day-column[data-date="2026-07-03"]');
+  const targetBox = await targetColumn.boundingBox();
+  expect(eventBox).not.toBeNull();
+  expect(targetBox).not.toBeNull();
+
+  await page.keyboard.down('Meta');
+  await page.mouse.move(eventBox.x + 12, eventBox.y + 8);
+  await page.mouse.down();
+  await page.mouse.move(targetBox.x + 24, targetBox.y + (10.25 * 72) + 8, { steps: 8 });
+  await expect(page.locator('.week-event-drag-preview')).toContainText('Copy');
+  await page.mouse.up();
+  await page.keyboard.up('Meta');
+
+  const copies = await page.evaluate(() => JSON.parse(localStorage.getItem('academical.events.v1')).filter((event) => event.title === 'CS seminar prep'));
+  expect(copies).toHaveLength(2);
+  expect(copies).toEqual(expect.arrayContaining([
+    expect.objectContaining({ date: '2026-07-01', time: '09:00' }),
+    expect.objectContaining({ date: '2026-07-03', time: '10:15' }),
+  ]));
+  expect(new Set(copies.map((event) => event.id)).size).toBe(2);
+  await expect(page.locator('#toast')).toContainText('Event copied');
+});
+
 test('dragging a timed month event moves it to the dropped date', async ({ page }) => {
   await page.goto('/');
 
@@ -1494,6 +1527,31 @@ test('dragging a timed month event moves it to the dropped date', async ({ page 
   expect(moved.date).toBe('2026-07-04');
   expect(moved.time).toBe('09:00');
   await expect(page.locator('.day-cell[data-date="2026-07-01"] .event-chip').filter({ hasText: 'CS seminar prep' })).toHaveCount(0);
+  await expect(page.locator('.day-cell[data-date="2026-07-04"] .event-chip').filter({ hasText: 'CS seminar prep' })).toBeVisible();
+});
+
+test('Control-dragging a month event copies it instead of moving it', async ({ page }) => {
+  await page.goto('/');
+
+  const eventChip = page.locator('.day-cell[data-date="2026-07-01"] .event-chip').filter({ hasText: 'CS seminar prep' });
+  const eventBox = await eventChip.boundingBox();
+  const targetDay = page.locator('.day-cell[data-date="2026-07-04"]');
+  const targetBox = await targetDay.boundingBox();
+  expect(eventBox).not.toBeNull();
+  expect(targetBox).not.toBeNull();
+
+  await page.keyboard.down('Control');
+  await page.mouse.move(eventBox.x + 10, eventBox.y + 10);
+  await page.mouse.down();
+  await page.mouse.move(targetBox.x + targetBox.width / 2, targetBox.y + 48, { steps: 8 });
+  await expect(page.locator('.month-event-drag-preview')).toContainText('Copy');
+  await page.mouse.up();
+  await page.keyboard.up('Control');
+
+  const copies = await page.evaluate(() => JSON.parse(localStorage.getItem('academical.events.v1')).filter((event) => event.title === 'CS seminar prep'));
+  expect(copies).toHaveLength(2);
+  expect(copies.map((event) => event.date).sort()).toEqual(['2026-07-01', '2026-07-04']);
+  await expect(page.locator('.day-cell[data-date="2026-07-01"] .event-chip').filter({ hasText: 'CS seminar prep' })).toBeVisible();
   await expect(page.locator('.day-cell[data-date="2026-07-04"] .event-chip').filter({ hasText: 'CS seminar prep' })).toBeVisible();
 });
 

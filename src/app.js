@@ -462,6 +462,7 @@ const monthCalendar = createMonthCalendar({
   compactDateFormatter,
   interactionState: calendarInteractionState,
   moveEventOccurrence,
+  copyEventOccurrence,
 });
 
 const fourWeekCalendar = createFourWeekCalendar({
@@ -502,6 +503,7 @@ const weekCalendar = createWeekCalendar({
   ensureDateVisible,
   openEventDialog,
   moveEventOccurrence,
+  copyEventOccurrence,
   interactionState: calendarInteractionState,
 });
 
@@ -1869,6 +1871,32 @@ function moveEventOccurrence(calendarEvent, targetDateKey, targetTime = calendar
   saveEvents();
   render();
   showToast("Event moved");
+  return true;
+}
+
+function copyEventOccurrence(calendarEvent, targetDateKey, targetTime = calendarEvent.time ?? "") {
+  const sourceEvent = events.find((event) => event.id === calendarEvent.id);
+  if (!sourceEvent) return false;
+
+  if ((sourceEvent.repeat ?? "none") === "none") {
+    const { instanceOverrides, excludedDates, ...eventCopy } = sourceEvent;
+    events.push({
+      ...eventCopy,
+      id: makeId(),
+      date: targetDateKey,
+      time: targetTime,
+      repeat: "none",
+    });
+  } else {
+    events.push(createMovedStandaloneOccurrence(calendarEvent, targetDateKey, targetTime));
+  }
+
+  selectedDate = fromDateKey(targetDateKey);
+  viewAnchorDate = new Date(selectedDate);
+  visibleMonth = startOfMonth(selectedDate);
+  saveEvents();
+  render();
+  showToast("Event copied");
   return true;
 }
 

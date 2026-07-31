@@ -1,3 +1,7 @@
+function isCopyDrag(event) {
+  return event.metaKey || event.ctrlKey;
+}
+
 export function createMonthCalendar({
   elements,
   getCurrentView,
@@ -22,6 +26,7 @@ export function createMonthCalendar({
   compactDateFormatter,
   interactionState,
   moveEventOccurrence,
+  copyEventOccurrence,
 }) {
   function render() {
     const dates = getMonthCalendarDates();
@@ -185,7 +190,8 @@ export function createMonthCalendar({
     const preview = document.createElement("div");
     preview.className = "month-event-drag-preview";
     preview.style.setProperty("--event-color", getCalendar(calendarEvent.calendar).color);
-    preview.textContent = `${calendarEvent.time ? `${formatTime(calendarEvent.time)} · ` : ""}${calendarEvent.title}`;
+    const previewText = `${calendarEvent.time ? `${formatTime(calendarEvent.time)} · ` : ""}${calendarEvent.title}`;
+    preview.textContent = previewText;
     preview.hidden = true;
     document.body.append(preview);
 
@@ -193,6 +199,7 @@ export function createMonthCalendar({
       event: calendarEvent,
       sourceButton,
       preview,
+      previewText,
       sourceTime: calendarEvent.time ?? "",
       targetDateKey: getEventDate(calendarEvent),
       targetCell: null,
@@ -234,7 +241,10 @@ export function createMonthCalendar({
       interactionState.suppressNextMonthEventClick = false;
     }, 0);
 
-    if (targetDateKey) moveEventOccurrence(drag.event, targetDateKey, drag.sourceTime);
+    if (targetDateKey) {
+      const updateEvent = isCopyDrag(event) ? copyEventOccurrence : moveEventOccurrence;
+      updateEvent(drag.event, targetDateKey, drag.sourceTime);
+    }
   }
 
   function cancelMonthEventDrag() {
@@ -262,6 +272,7 @@ export function createMonthCalendar({
     }
 
     drag.preview.hidden = false;
+    drag.preview.textContent = `${isCopyDrag(event) ? "Copy · " : ""}${drag.previewText}`;
     drag.preview.style.left = `${event.clientX + 12}px`;
     drag.preview.style.top = `${event.clientY + 12}px`;
   }
