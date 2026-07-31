@@ -77,6 +77,62 @@ test('Firestore differences require an explicit conflict choice before writing',
   expect(syncedIds).toEqual(['cloud-event', 'local-event']);
 });
 
+test('cloud-only events download without opening a conflict or writing back', async ({ page }) => {
+  await page.route('https://www.gstatic.com/firebasejs/**', (route) => route.fulfill({ contentType: 'application/javascript', body: '' }));
+  await page.addInitScript(() => {
+    const localEvent = { id: 'local-event', title: 'Browser event', date: '2026-07-28', time: '09:00', repeat: 'none', calendar: 'personal' };
+    localStorage.setItem('academical.events.v1', JSON.stringify([localEvent]));
+    localStorage.setItem('academical.paperTasks.v1', '[]');
+    localStorage.setItem('academical.sync.updatedAt.v1', '2026-07-29T09:00:00.000Z');
+
+    const remote = {
+      updatedAt: '2026-07-30T09:00:00.000Z',
+      events: [localEvent, { id: 'cloud-event', title: 'Cloud event', date: '2026-07-29', time: '10:00', repeat: 'none', calendar: 'research' }],
+      paperTasks: [],
+      customCalendars: [],
+      calendarNameOverrides: {},
+      calendarColorOverrides: {},
+      calendarOrderIds: [],
+      visibleCalendars: { teaching: true, research: true, deadlines: true, personal: true, tasks: true },
+      archivedCalendarIds: [],
+      deletedCalendarIds: [],
+    };
+    window.__firestoreWrites = [];
+    window.__firestoreListenerAttached = false;
+    const doc = {
+      get: async () => ({ exists: true, data: () => remote }),
+      set: async (value) => window.__firestoreWrites.push(value),
+      onSnapshot: () => {
+        window.__firestoreListenerAttached = true;
+        return () => {};
+      },
+    };
+    const auth = {
+      setPersistence: () => Promise.resolve(),
+      onAuthStateChanged: (callback) => queueMicrotask(() => callback({ uid: 'test-user', email: 'test@example.com' })),
+    };
+    function GoogleAuthProvider() {}
+    GoogleAuthProvider.prototype.addScope = () => {};
+    const firebase = {
+      apps: [],
+      initializeApp: () => ({}),
+      app: () => ({}),
+      auth: () => auth,
+      firestore: () => ({ collection: () => ({ doc: () => ({ collection: () => ({ doc: () => doc }) }) }) }),
+    };
+    firebase.auth.Auth = { Persistence: { LOCAL: 'local' } };
+    firebase.auth.GoogleAuthProvider = GoogleAuthProvider;
+    window.firebase = firebase;
+  });
+
+  await page.goto('/');
+  await expect.poll(() => page.evaluate(() => window.__firestoreListenerAttached)).toBe(true);
+  await expect(page.locator('#syncConflictModal')).toBeHidden();
+  await expect.poll(() => page.evaluate(() => JSON.parse(localStorage.getItem('academical.events.v1')).map((event) => event.id).sort()))
+    .toEqual(['cloud-event', 'local-event']);
+  expect(await page.evaluate(() => window.__firestoreWrites.length)).toBe(0);
+});
+
 test('Firestore comparison ignores property order and stale calendar metadata', async ({ page }) => {
   await page.route('https://www.gstatic.com/firebasejs/**', (route) => route.fulfill({ contentType: 'application/javascript', body: '' }));
   await page.addInitScript(() => {
