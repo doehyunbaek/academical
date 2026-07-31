@@ -448,6 +448,23 @@
           <p class="sync-status">Drag the splitter above the panel to resize it.</p>
         </fieldset>
 
+        <fieldset class="settings-fieldset">
+          <legend>Hidden week hours</legend>
+          <label><input id="hiddenWeekEnabled" name="hiddenWeekEnabled" type="checkbox" /> Hide hours in expanded Week view</label>
+          <div class="settings-time-range">
+            <label class="field" for="hiddenWeekStart">
+              <span>From</span>
+              <input id="hiddenWeekStart" name="hiddenWeekStart" type="time" value="00:00" step="3600" required />
+            </label>
+            <span class="settings-time-range-separator" aria-hidden="true">to</span>
+            <label class="field" for="hiddenWeekEnd">
+              <span>To</span>
+              <input id="hiddenWeekEnd" name="hiddenWeekEnd" type="time" value="08:00" step="3600" required />
+            </label>
+          </div>
+          <p class="sync-status">Choose a range to hide from the expanded Week view. This feature is off by default; equal times show all hours. For an overnight range, set From later than To, such as 22:00 to 06:00.</p>
+        </fieldset>
+
         <footer class="event-dialog-footer">
           <span class="footer-spacer"></span>
           <button class="button" id="cancelSettingsModal" type="button">Cancel</button>

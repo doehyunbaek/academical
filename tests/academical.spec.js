@@ -4,6 +4,12 @@ const openCreateEventDialog = async (page, date = '2026-07-02') => {
   await page.locator(`.day-cell[data-date="${date}"] .day-add`).click();
 };
 
+const showAllWeekHours = async (page) => {
+  await page.addInitScript(() => {
+    localStorage.setItem('academical.hiddenWeekHours.v1', JSON.stringify({ enabled: false, start: '00:00', end: '00:00' }));
+  });
+};
+
 test.beforeEach(async ({ page }) => {
   await page.clock.setFixedTime(new Date('2026-07-03T09:30:00'));
 });
@@ -1170,8 +1176,56 @@ test('settings show bottom-only sidebar panel guidance', async ({ page }) => {
   await expect(page.locator('input[name="sidebarLocation"][value="left"]')).toHaveCount(0);
   await expect(page.locator('input[name="sidebarLocation"][value="right"]')).toHaveCount(0);
   await expect(page.locator('#settingsForm')).toContainText('Drag the splitter above the panel to resize it.');
+  await expect(page.locator('#hiddenWeekEnabled')).not.toBeChecked();
+  await expect(page.locator('#hiddenWeekStart')).toHaveValue('00:00');
+  await expect(page.locator('#hiddenWeekEnd')).toHaveValue('08:00');
+  await expect(page.locator('#hiddenWeekStart')).toBeDisabled();
+  await expect(page.locator('#hiddenWeekEnd')).toBeDisabled();
   await page.locator('#settingsForm').getByRole('button', { name: 'Save' }).click();
   await expect(page.locator('body')).toHaveClass(/sidebar-location-bottom/);
+});
+
+test('settings configure hidden hours in expanded week view', async ({ page }) => {
+  await page.goto('/');
+  await page.locator('#settingsButton').click();
+  await page.locator('#hiddenWeekEnabled').check();
+  await page.locator('#hiddenWeekStart').fill('10:00');
+  await page.locator('#hiddenWeekEnd').fill('12:00');
+  await page.locator('#settingsForm').getByRole('button', { name: 'Save' }).click();
+
+  await page.keyboard.press('2');
+  await expect(page.locator('.week-slot[data-hour="10"]')).toHaveCount(0);
+  await expect(page.locator('.week-slot[data-hour="12"]')).toHaveCount(7);
+  await expect.poll(() => page.evaluate(() => JSON.parse(localStorage.getItem('academical.hiddenWeekHours.v1'))))
+    .toEqual({ enabled: true, start: '10:00', end: '12:00' });
+
+  await page.locator('#settingsButton').click();
+  await page.locator('#hiddenWeekEnabled').uncheck();
+  await page.locator('#settingsForm').getByRole('button', { name: 'Save' }).click();
+  await expect(page.locator('.week-slot[data-hour="0"]')).toHaveCount(7);
+  await expect(page.locator('.week-slot[data-hour="10"]')).toHaveCount(7);
+  await expect.poll(() => page.evaluate(() => JSON.parse(localStorage.getItem('academical.hiddenWeekHours.v1'))))
+    .toEqual({ enabled: false, start: '10:00', end: '12:00' });
+});
+
+test('settings support overnight hidden week hours', async ({ page }) => {
+  await page.goto('/');
+  await page.locator('#settingsButton').click();
+  await page.locator('#hiddenWeekEnabled').check();
+  await page.locator('#hiddenWeekStart').fill('22:00');
+  await page.locator('#hiddenWeekEnd').fill('06:00');
+  await page.locator('#settingsForm').getByRole('button', { name: 'Save' }).click();
+
+  await page.keyboard.press('2');
+  await expect(page.locator('.week-slot[data-hour="22"]')).toHaveCount(0);
+  await expect(page.locator('.week-slot[data-hour="23"]')).toHaveCount(0);
+  await expect(page.locator('.week-slot[data-hour="0"]')).toHaveCount(0);
+  await expect(page.locator('.week-slot[data-hour="5"]')).toHaveCount(0);
+  await expect(page.locator('.week-slot[data-hour="6"]')).toHaveCount(7);
+  await expect(page.locator('.week-slot[data-hour="21"]')).toHaveCount(7);
+  await expect(page.locator('.week-time-label--first')).toHaveText('6 AM');
+  await expect.poll(() => page.evaluate(() => JSON.parse(localStorage.getItem('academical.hiddenWeekHours.v1'))))
+    .toEqual({ enabled: true, start: '22:00', end: '06:00' });
 });
 
 test('bottom sidebar stays below calendar on narrow viewport', async ({ page }) => {
@@ -1246,8 +1300,39 @@ test('week view renders hourly grid and t centers current-time indicator', async
   await page.keyboard.press('t');
   await expect(page.locator('#viewSelect')).toHaveValue('week');
   await expect(page.locator('.week-timeline')).toBeVisible();
+  await expect(page.locator('.week-slot[data-hour="0"]')).toHaveCount(7);
+  await expect(page.locator('.week-slot[data-hour="8"]')).toHaveCount(7);
   await expect(page.locator('.week-now-indicator')).toBeVisible();
   await expect(page.locator('.week-now-time')).toBeVisible();
+});
+
+test('week view reserves all-day space when calendar visibility changes', async ({ page }) => {
+  await page.addInitScript(() => {
+    localStorage.setItem('academical.events.v1', JSON.stringify([
+      { id: 'all-day-research', title: 'All-day research', date: '2026-07-02', calendar: 'research', repeat: 'none' },
+      { id: 'all-day-research-2', title: 'Another all-day event', date: '2026-07-02', calendar: 'research', repeat: 'none' },
+      { id: 'timed-research', title: 'Timed research', date: '2026-07-02', calendar: 'research', repeat: 'none', time: '10:00' },
+    ]));
+  });
+
+  await page.goto('/');
+  await page.keyboard.press('2');
+
+  const getWeekLayout = () => page.evaluate(() => {
+    const header = document.querySelector('.week-timeline-header');
+    const scroller = document.querySelector('.week-timeline-scroll');
+    return {
+      headerHeight: header.getBoundingClientRect().height,
+      scrollerTop: scroller.getBoundingClientRect().top,
+    };
+  });
+  const initialLayout = await getWeekLayout();
+  await expect(page.locator('.week-all-day-chip')).toHaveCount(1);
+  await expect(page.locator('.week-all-day-chip')).toHaveText('All-day research');
+  await expect(page.locator('.week-all-day-more')).toHaveText('... 1 more');
+
+  await page.locator('input[data-calendar="research"]').uncheck();
+  await expect.poll(getWeekLayout).toEqual(initialLayout);
 });
 
 test('opening Edit event preserves the selected sidebar panel', async ({ page }) => {
@@ -1282,6 +1367,7 @@ test('clicking all-day events in week view opens the edit dialog', async ({ page
 });
 
 test('clicking week view slots creates events at 15 minute granularity', async ({ page }) => {
+  await showAllWeekHours(page);
   await page.goto('/');
   await page.keyboard.press('2');
   await page.locator('.week-timeline-scroll').evaluate((element) => {
@@ -1311,6 +1397,7 @@ test('clicking week view slots creates events at 15 minute granularity', async (
 
 test('creating an event in week view preserves the vertical scroll position', async ({ page }) => {
   await page.setViewportSize({ width: 1440, height: 950 });
+  await showAllWeekHours(page);
   await page.goto('/');
   await page.keyboard.press('2');
 
@@ -1330,6 +1417,7 @@ test('creating an event in week view preserves the vertical scroll position', as
 });
 
 test('dragging hour boxes in week view creates an event with that range', async ({ page }) => {
+  await showAllWeekHours(page);
   await page.goto('/');
   await page.keyboard.press('2');
 
@@ -1358,6 +1446,7 @@ test('dragging hour boxes in week view creates an event with that range', async 
 });
 
 test('dragging a timed week event moves its date and 15 minute position', async ({ page }) => {
+  await showAllWeekHours(page);
   await page.goto('/');
   await page.keyboard.press('2');
   await page.locator('.week-timeline-scroll').evaluate((element) => {

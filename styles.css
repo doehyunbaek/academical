@@ -1704,8 +1704,10 @@ textarea:focus-visible {
 }
 
 .week-timeline-header {
-  flex: 0 0 auto;
-  min-height: 92px;
+  /* Reserve space for one all-day chip and its overflow label so calendar visibility changes do not move the hourly grid. */
+  flex: 0 0 100px;
+  height: 100px;
+  min-height: 100px;
   display: grid;
   grid-template-columns: 72px repeat(7, minmax(110px, 1fr));
   border-bottom: 1px solid var(--border-soft);
@@ -1771,13 +1773,16 @@ textarea:focus-visible {
 
 .week-all-day-list {
   width: 100%;
-  display: grid;
-  gap: 3px;
+  min-width: 0;
+  display: flex;
+  align-items: center;
+  gap: 4px;
   margin-top: 3px;
 }
 
 .week-all-day-chip {
   min-width: 0;
+  flex: 1 1 auto;
   padding: 2px 6px;
   border-radius: 5px;
   overflow: hidden;
@@ -1789,6 +1794,14 @@ textarea:focus-visible {
   font-weight: 600;
   text-align: left;
   cursor: pointer;
+}
+
+.week-all-day-more {
+  flex: 0 0 auto;
+  color: var(--text-muted);
+  font-size: 11px;
+  font-weight: 600;
+  white-space: nowrap;
 }
 
 .week-timeline-scroll {
@@ -1829,7 +1842,7 @@ textarea:focus-visible {
   position: sticky;
   left: 0;
   z-index: 4;
-  height: calc(var(--hour-height) * 24);
+  height: calc(var(--hour-height) * var(--week-visible-hours, 24));
   border-right: 1px solid var(--border-soft);
   background: var(--surface);
 }
@@ -1846,9 +1859,13 @@ textarea:focus-visible {
   transform: translateY(-6px);
 }
 
+.week-time-label--first {
+  transform: none;
+}
+
 .week-days-grid {
   min-width: 770px;
-  height: calc(var(--hour-height) * 24);
+  height: calc(var(--hour-height) * var(--week-visible-hours, 24));
   display: grid;
   grid-template-columns: repeat(7, minmax(110px, 1fr));
 }
@@ -1856,7 +1873,7 @@ textarea:focus-visible {
 .week-day-column {
   position: relative;
   min-width: 0;
-  height: calc(var(--hour-height) * 24);
+  height: calc(var(--hour-height) * var(--week-visible-hours, 24));
   border-right: 1px solid var(--border-soft);
   background-color: var(--surface);
   background-image: linear-gradient(to bottom, var(--border-soft) 1px, transparent 1px);
@@ -2494,6 +2511,20 @@ textarea:focus-visible {
 
 .settings-fieldset input {
   accent-color: var(--primary);
+}
+
+.settings-time-range {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto minmax(0, 1fr);
+  align-items: end;
+  gap: 8px;
+}
+
+.settings-time-range-separator {
+  padding-bottom: 13px;
+  color: var(--text-muted);
+  font-size: 13px;
+  text-transform: lowercase;
 }
 
 .calendar-import-option {

@@ -1,4 +1,5 @@
 const HOURS = Array.from({ length: 24 }, (_, hour) => hour);
+const MINUTES_PER_DAY = 24 * 60;
 const DEFAULT_WEEK_HOUR_HEIGHT = 72;
 const WEEK_SLOT_GRANULARITY_MINUTES = 15;
 
@@ -6,6 +7,7 @@ export function createWeekCalendar({
   elements,
   getMainCalendarDates,
   getWeekFit24Hours,
+  getHiddenWeekHours,
   getSelectedDate,
   setSelectedDate,
   getToday,
@@ -36,10 +38,13 @@ export function createWeekCalendar({
   function render(scrollPosition = null) {
     const previousScrollPosition = scrollPosition ?? getWeekScrollPosition();
     const weekDates = getMainCalendarDates();
+    const fit24Hours = getWeekFit24Hours();
+    const visibleHours = getVisibleHours(fit24Hours);
+    const visibleMinutes = getVisibleTimelineMinutes(fit24Hours);
     const timeline = document.createElement("section");
-    timeline.className = `week-timeline${getWeekFit24Hours() ? " week-timeline--fit" : ""}`;
-    timeline.dataset.hourMode = getWeekFit24Hours() ? "fit" : "expanded";
-    timeline.setAttribute("aria-label", `${getHeaderTitle(weekDates[0], weekDates[6])} weekly schedule${getWeekFit24Hours() ? ", all 24 hours visible" : ""}`);
+    timeline.className = `week-timeline${fit24Hours ? " week-timeline--fit" : ""}`;
+    timeline.dataset.hourMode = fit24Hours ? "fit" : "expanded";
+    timeline.setAttribute("aria-label", `${getHeaderTitle(weekDates[0], weekDates[6])} weekly schedule${fit24Hours ? ", all 24 hours visible" : ""}`);
 
     const header = document.createElement("header");
     header.className = "week-timeline-header";
@@ -54,26 +59,88 @@ export function createWeekCalendar({
     timeline.append(header, scroller);
     elements.monthGrid.replaceChildren(timeline);
 
-    const hourHeight = getWeekFit24Hours()
+    const hourHeight = fit24Hours
       ? Math.max(1, scroller.clientHeight / 24)
       : DEFAULT_WEEK_HOUR_HEIGHT;
     scroller.style.setProperty("--hour-height", `${hourHeight}px`);
+    scroller.style.setProperty("--week-visible-hours", String(visibleMinutes / 60));
 
     const timeColumn = document.createElement("div");
     timeColumn.className = "week-time-column";
-    HOURS.forEach((hour) => {
+    visibleHours.forEach((hour, index) => {
       const label = document.createElement("div");
-      label.className = "week-time-label";
+      label.className = `week-time-label${index === 0 ? " week-time-label--first" : ""}`;
       label.textContent = hour === 0 ? "" : getHourLabel(hour);
       timeColumn.append(label);
     });
 
     const daysGrid = document.createElement("div");
     daysGrid.className = "week-days-grid";
-    weekDates.forEach((date) => daysGrid.append(createWeekDayColumn(date)));
+    weekDates.forEach((date) => daysGrid.append(createWeekDayColumn(date, fit24Hours)));
 
     scroller.append(timeColumn, daysGrid);
-    if (!getWeekFit24Hours()) restoreWeekScrollPosition(previousScrollPosition);
+    if (!fit24Hours) restoreWeekScrollPosition(previousScrollPosition);
+  }
+
+  function getHiddenRange() {
+    const configured = getHiddenWeekHours?.();
+    if (configured?.enabled !== true) return null;
+    const start = getTimeToMinutes(configured?.start ?? "00:00");
+    const end = getTimeToMinutes(configured?.end ?? "00:00");
+    if (!Number.isFinite(start) || !Number.isFinite(end) || start === end) return null;
+    const wrapsMidnight = end < start;
+    const hiddenMinutes = wrapsMidnight
+      ? MINUTES_PER_DAY - start + end
+      : end - start;
+    return { start, end, wrapsMidnight, hiddenMinutes };
+  }
+
+  function getVisibleHours(fit24Hours = getWeekFit24Hours()) {
+    if (fit24Hours) return HOURS;
+    return HOURS.filter((hour) => getDisplayedMinutesAtActual(hour * 60, fit24Hours) !== null);
+  }
+
+  function getVisibleTimelineMinutes(fit24Hours = getWeekFit24Hours()) {
+    if (fit24Hours) return MINUTES_PER_DAY;
+    const hidden = getHiddenRange();
+    return hidden ? MINUTES_PER_DAY - hidden.hiddenMinutes : MINUTES_PER_DAY;
+  }
+
+  function getDisplayedMinutesAtActual(actualMinutes, fit24Hours = getWeekFit24Hours()) {
+    const clamped = Math.min(MINUTES_PER_DAY, Math.max(0, actualMinutes));
+    if (fit24Hours) return clamped;
+    const hidden = getHiddenRange();
+    if (!hidden) return clamped;
+    if (hidden.wrapsMidnight) {
+      if (clamped < hidden.end || clamped >= hidden.start) return null;
+      return clamped - hidden.end;
+    }
+    if (clamped < hidden.start) return clamped;
+    if (clamped < hidden.end) return null;
+    return clamped - hidden.hiddenMinutes;
+  }
+
+  function getActualMinutesAtDisplayed(displayedMinutes, fit24Hours = getWeekFit24Hours()) {
+    const clamped = Math.min(getVisibleTimelineMinutes(fit24Hours), Math.max(0, displayedMinutes));
+    if (fit24Hours) return clamped;
+    const hidden = getHiddenRange();
+    if (!hidden) return clamped;
+    if (hidden.wrapsMidnight) return clamped + hidden.end;
+    return clamped < hidden.start ? clamped : clamped + hidden.hiddenMinutes;
+  }
+
+  function getDisplayedDurationMinutes(startMinutes, durationMinutes, fit24Hours = getWeekFit24Hours()) {
+    const start = getDisplayedMinutesAtActual(startMinutes, fit24Hours);
+    if (start === null) return null;
+    const endActual = Math.min(MINUTES_PER_DAY, startMinutes + Math.max(0, durationMinutes));
+    let end = getDisplayedMinutesAtActual(endActual, fit24Hours);
+    if (end === null) {
+      const hidden = getHiddenRange();
+      end = hidden
+        ? (hidden.wrapsMidnight ? getVisibleTimelineMinutes(fit24Hours) : hidden.start)
+        : start;
+    }
+    return Math.max(0, end - start);
   }
 
   function getWeekScrollPosition() {
@@ -123,33 +190,40 @@ export function createWeekCalendar({
     if (dayEvents.length) {
       const allDayList = document.createElement("span");
       allDayList.className = "week-all-day-list";
-      dayEvents.slice(0, 2).forEach((calendarEvent) => {
-        const chip = document.createElement("span");
-        chip.className = "week-all-day-chip";
-        chip.style.setProperty("--event-color", getCalendar(calendarEvent.calendar).color);
-        chip.textContent = calendarEvent.title;
-        chip.addEventListener("click", (event) => {
-          event.preventDefault();
-          event.stopPropagation();
-          setSelectedDate(getFromDateKey(getEventDate(calendarEvent)));
-          ensureDateVisible(getSelectedDate());
-          openEventDialog(getEventDate(calendarEvent), calendarEvent);
-        });
-        allDayList.append(chip);
+      const [calendarEvent] = dayEvents;
+      const chip = document.createElement("span");
+      chip.className = "week-all-day-chip";
+      chip.style.setProperty("--event-color", getCalendar(calendarEvent.calendar).color);
+      chip.textContent = calendarEvent.title;
+      chip.addEventListener("click", (event) => {
+        event.preventDefault();
+        event.stopPropagation();
+        setSelectedDate(getFromDateKey(getEventDate(calendarEvent)));
+        ensureDateVisible(getSelectedDate());
+        openEventDialog(getEventDate(calendarEvent), calendarEvent);
       });
+      allDayList.append(chip);
+
+      if (dayEvents.length > 1) {
+        const more = document.createElement("span");
+        more.className = "week-all-day-more";
+        more.textContent = `... ${dayEvents.length - 1} more`;
+        more.title = `${dayEvents.length - 1} more all-day event${dayEvents.length === 2 ? "" : "s"}`;
+        allDayList.append(more);
+      }
       headerButton.append(allDayList);
     }
 
     headerButton.addEventListener("click", () => {
       setSelectedDate(new Date(date));
       ensureDateVisible(date);
-      getRenderApp()();
+      renderApp();
     });
 
     return headerButton;
   }
 
-  function createWeekDayColumn(date) {
+  function createWeekDayColumn(date, fit24Hours = getWeekFit24Hours()) {
     const dateKey = getToDateKey(date);
     const column = document.createElement("div");
     column.className = [
@@ -169,14 +243,20 @@ export function createWeekCalendar({
     hoverSelection.setAttribute("aria-hidden", "true");
     column.append(hoverSelection);
 
-    HOURS.forEach((hour) => column.append(createWeekSlot(date, hour)));
+    getVisibleHours(fit24Hours)
+      .map((hour) => createWeekSlot(date, hour, fit24Hours))
+      .filter(Boolean)
+      .forEach((slot) => column.append(slot));
 
     getFilteredEventsForDate(dateKey)
       .filter((calendarEvent) => calendarEvent.time)
-      .forEach((calendarEvent) => column.append(createWeekTimedEvent(calendarEvent)));
+      .map((calendarEvent) => createWeekTimedEvent(calendarEvent, fit24Hours))
+      .filter(Boolean)
+      .forEach((calendarEvent) => column.append(calendarEvent));
 
     if (isSameDay(date, getNow())) {
-      column.append(createNowIndicator());
+      const nowIndicator = createNowIndicator(fit24Hours);
+      if (nowIndicator) column.append(nowIndicator);
     }
 
     return column;
@@ -194,13 +274,19 @@ export function createWeekCalendar({
     const hoverSelection = column.querySelector(".week-hover-selection");
     if (!hoverSelection) return;
 
-    const durationMinutes = Math.min(60, 24 * 60 - minutes);
+    const durationMinutes = Math.min(60, MINUTES_PER_DAY - minutes);
     hoverSelection.hidden = false;
     hoverSelection.dataset.time = getMinutesInput(minutes);
     hoverSelection.dataset.durationMinutes = String(durationMinutes);
     const hourHeight = getHourHeight(column);
-    hoverSelection.style.top = `${(minutes / 60) * hourHeight + 1}px`;
-    hoverSelection.style.height = `${Math.max(getWeekFit24Hours() ? 4 : 18, ((durationMinutes / 60) * hourHeight) - 2)}px`;
+    const displayedMinutes = getDisplayedMinutesAtActual(minutes);
+    const displayedDuration = getDisplayedDurationMinutes(minutes, durationMinutes);
+    if (displayedMinutes === null || displayedDuration === null) {
+      hoverSelection.hidden = true;
+      return;
+    }
+    hoverSelection.style.top = `${(displayedMinutes / 60) * hourHeight + 1}px`;
+    hoverSelection.style.height = `${Math.max(getWeekFit24Hours() ? 4 : 18, ((displayedDuration / 60) * hourHeight) - 2)}px`;
   }
 
   function handleWeekColumnPointerLeave(event) {
@@ -213,12 +299,14 @@ export function createWeekCalendar({
     if (hoverSelection) hoverSelection.hidden = true;
   }
 
-  function createNowIndicator() {
+  function createNowIndicator(fit24Hours = getWeekFit24Hours()) {
     const now = getNow();
+    const displayedMinutes = getDisplayedMinutesAtActual(now.getHours() * 60 + now.getMinutes(), fit24Hours);
+    if (displayedMinutes === null) return null;
     const indicator = document.createElement("div");
     indicator.className = "week-now-indicator";
     indicator.dataset.date = getToDateKey(now);
-    indicator.style.top = `${getNowOffsetPixels(now)}px`;
+    indicator.style.top = `${(displayedMinutes / 60) * getHourHeight()}px`;
     indicator.setAttribute("aria-label", `Current time ${getClockTime(now)}`);
 
     const dot = document.createElement("span");
@@ -232,14 +320,16 @@ export function createWeekCalendar({
     return indicator;
   }
 
-  function createWeekSlot(date, hour) {
+  function createWeekSlot(date, hour, fit24Hours = getWeekFit24Hours()) {
     const dateKey = getToDateKey(date);
     const slot = document.createElement("button");
     slot.className = "week-slot";
     slot.type = "button";
     slot.dataset.date = dateKey;
     slot.dataset.hour = String(hour);
-    slot.style.top = `${hour * getHourHeight()}px`;
+    const displayedMinutes = getDisplayedMinutesAtActual(hour * 60, fit24Hours);
+    if (displayedMinutes === null) return null;
+    slot.style.top = `${(displayedMinutes / 60) * getHourHeight()}px`;
     slot.setAttribute("aria-label", `Create event on ${longDateFormatter.format(date)} at ${getHourLabel(hour) || "12 AM"}`);
     slot.addEventListener("pointerdown", (event) => startWeekRangeDrag(event, date));
     slot.addEventListener("click", (event) => {
@@ -342,17 +432,18 @@ export function createWeekCalendar({
     return getWeekMinutesAtClientY(drag.column, event.clientY);
   }
 
-  function getWeekMinutesAtClientY(column, clientY, { offsetMinutes = 0, maxMinutes = (24 * 60) - WEEK_SLOT_GRANULARITY_MINUTES } = {}) {
+  function getWeekMinutesAtClientY(column, clientY, { offsetMinutes = 0, maxMinutes = MINUTES_PER_DAY - WEEK_SLOT_GRANULARITY_MINUTES } = {}) {
     const rect = column.getBoundingClientRect();
     const y = Math.min(Math.max(clientY - rect.top, 0), rect.height - 1);
-    const rawMinutes = ((y / getHourHeight(column)) * 60) - offsetMinutes;
-    const snappedMinutes = Math.floor(rawMinutes / WEEK_SLOT_GRANULARITY_MINUTES) * WEEK_SLOT_GRANULARITY_MINUTES;
-    return Math.min(maxMinutes, Math.max(0, snappedMinutes));
+    const rawDisplayedMinutes = ((y / getHourHeight(column)) * 60) - offsetMinutes;
+    const snappedDisplayedMinutes = Math.floor(rawDisplayedMinutes / WEEK_SLOT_GRANULARITY_MINUTES) * WEEK_SLOT_GRANULARITY_MINUTES;
+    const actualMinutes = getActualMinutesAtDisplayed(snappedDisplayedMinutes);
+    return Math.min(maxMinutes, Math.max(0, actualMinutes));
   }
 
   function getWeekRangeDragRange(drag) {
     const startMinutes = Math.min(drag.startMinutes, drag.endMinutes);
-    const endMinutes = Math.min(24 * 60, Math.max(drag.startMinutes, drag.endMinutes) + WEEK_SLOT_GRANULARITY_MINUTES);
+    const endMinutes = Math.min(MINUTES_PER_DAY, Math.max(drag.startMinutes, drag.endMinutes) + WEEK_SLOT_GRANULARITY_MINUTES);
     return {
       startMinutes,
       endMinutes,
@@ -363,18 +454,24 @@ export function createWeekCalendar({
   function updateWeekRangeDragSelection(drag) {
     const range = getWeekRangeDragRange(drag);
     const hourHeight = getHourHeight(drag.column);
-    drag.selection.style.top = `${(range.startMinutes / 60) * hourHeight + 2}px`;
-    drag.selection.style.height = `${Math.max(getWeekFit24Hours() ? 4 : 18, ((range.durationMinutes / 60) * hourHeight) - 4)}px`;
+    const displayedStart = getDisplayedMinutesAtActual(range.startMinutes);
+    const displayedDuration = getDisplayedDurationMinutes(range.startMinutes, range.durationMinutes);
+    if (displayedStart === null || displayedDuration === null) return;
+    drag.selection.style.top = `${(displayedStart / 60) * hourHeight + 2}px`;
+    drag.selection.style.height = `${Math.max(getWeekFit24Hours() ? 4 : 18, ((displayedDuration / 60) * hourHeight) - 4)}px`;
     drag.selection.textContent = `${getMinuteBoundary(range.startMinutes)} – ${getMinuteBoundary(range.endMinutes)} · ${getFormatHours(range.durationMinutes / 60)}`;
   }
 
-  function createWeekTimedEvent(calendarEvent) {
+  function createWeekTimedEvent(calendarEvent, fit24Hours = getWeekFit24Hours()) {
     const calendar = getCalendar(calendarEvent.calendar);
     const [hour, minute] = calendarEvent.time.split(":").map(Number);
     const startMinutes = hour * 60 + minute;
+    const displayedStart = getDisplayedMinutesAtActual(startMinutes, fit24Hours);
+    const displayedDuration = getDisplayedDurationMinutes(startMinutes, getOccurrenceDurationMinutes(calendarEvent), fit24Hours);
+    if (displayedStart === null || displayedDuration === null || displayedDuration <= 0) return null;
     const hourHeight = getHourHeight();
-    const top = (startMinutes / 60) * hourHeight;
-    const height = (getOccurrenceDurationMinutes(calendarEvent) / 60) * hourHeight;
+    const top = (displayedStart / 60) * hourHeight;
+    const height = (displayedDuration / 60) * hourHeight;
 
     const eventButton = document.createElement("button");
     eventButton.className = "week-timed-event";
@@ -508,8 +605,14 @@ export function createWeekCalendar({
     drag.targetMinutes = targetMinutes;
     drag.preview.hidden = false;
     const hourHeight = getHourHeight(targetColumn);
-    drag.preview.style.top = `${(targetMinutes / 60) * hourHeight + 2}px`;
-    drag.preview.style.height = `${Math.max(getWeekFit24Hours() ? 4 : 34, ((drag.durationMinutes / 60) * hourHeight) - 4)}px`;
+    const displayedStart = getDisplayedMinutesAtActual(targetMinutes);
+    const displayedDuration = getDisplayedDurationMinutes(targetMinutes, drag.durationMinutes);
+    if (displayedStart === null || displayedDuration === null) {
+      drag.preview.hidden = true;
+      return;
+    }
+    drag.preview.style.top = `${(displayedStart / 60) * hourHeight + 2}px`;
+    drag.preview.style.height = `${Math.max(getWeekFit24Hours() ? 4 : 34, ((displayedDuration / 60) * hourHeight) - 4)}px`;
     drag.preview.textContent = `${getMinuteBoundary(targetMinutes)} · ${drag.event.title}`;
     if (drag.preview.parentElement !== targetColumn) targetColumn.append(drag.preview);
   }
@@ -522,7 +625,8 @@ export function createWeekCalendar({
   }
 
   function getNowOffsetPixels(date) {
-    return ((date.getHours() * 60 + date.getMinutes()) / 60) * getHourHeight();
+    const displayedMinutes = getDisplayedMinutesAtActual(date.getHours() * 60 + date.getMinutes());
+    return displayedMinutes === null ? null : (displayedMinutes / 60) * getHourHeight();
   }
 
   function isSameDay(a, b) {

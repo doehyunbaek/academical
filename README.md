@@ -14,7 +14,7 @@ Open <http://localhost:8000>.
 
 - Defaults to the actual current date/time, with sample events seeded in July 2026 to match the provided reference capture
 - Week, Month, 4-week, and GitHub-style Heatmap views; the Deadlines sidebar panel internalizes the `/deadlines` venue list with persisted tag filters
-- Week view uses a Google Calendar-style per-hour timeline grid; drag across hour boxes to create an event for that selected range
+- Week view uses a Google Calendar-style per-hour timeline grid; optional hidden hours can be enabled and configured in Settings (off by default, with a default range of 00:00–08:00; overnight ranges such as 22:00–06:00 are supported); press `2` again to show all 24 hours; drag across hour boxes to create an event for that selected range
 - Weeks start on Monday
 - Keyboard shortcuts: `/` focus event search, `j` future, `k` past, `t` current time, `p` open Add paper modal, `o` open DBLP publication search (Enter sends the request), `a` all calendars, `q`/`w`/`e`/`r` solo calendars 1–4, `Ctrl+1`–`Ctrl+4` sidebar panels, `1` GitHub heatmap, `2` week (press again to toggle all 24 hours), `3` month, `4` four weeks, `Backspace` delete focused edit event
 - Google Calendar-style top bar, configurable left/bottom/right multipanel sidebar, month grid, GitHub-style worked-hours heatmap spanning the first-to-last visible selected-calendar event or a rolling current-date-minus-one-year range with compact near-cursor clicked-day details, and an expanded bottom sidebar in heatmap mode
@@ -28,6 +28,43 @@ Open <http://localhost:8000>.
 - Optional Firebase Google sign-in sync for events, imported calendars, calendar names/colors/order, paper tasks, and calendar visibility
 
 No build step is required; this is a static HTML/CSS/JS app.
+
+## Directory structure
+
+```text
+academical/
+├── .gitignore                    Ignored dependencies and generated test output
+├── README.md                     Project documentation
+├── index.html                    Static application shell and modal markup
+├── styles.css                    Application layout and component styles
+├── google-api-config.js           Optional Firebase and Worker configuration
+├── deadlines.json                 Conference deadline data
+├── src/
+│   ├── app.js                    Application state, startup, orchestration, and persistence
+│   ├── sync.js                   Firebase auth, Firestore sync, comparison, and conflicts
+│   ├── calendar/                 View-specific calendar rendering and interactions
+│   │   ├── heatmap.js
+│   │   ├── week.js
+│   │   ├── month.js
+│   │   └── four-week.js
+│   └── panels/                   Sidebar panel modules
+│       ├── calendar.js           Calendar visibility, ordering, and archive controls
+│       ├── papers.js             Paper tasks, metadata, DBLP search, and assignments
+│       ├── analysis.js            Time-analysis and activity charts
+│       └── deadlines.js           Conference deadline loading, filtering, and timers
+├── worker/
+│   ├── index.js                  Cloudflare Worker entry point and API routing
+│   ├── papers.js                 arXiv, ACM/Crossref, and paper metadata proxy logic
+│   └── researchr.js              Conference deadline update logic
+├── tests/
+│   └── academical.spec.js         Playwright regression and interaction tests
+├── package.json                   Test scripts and development dependencies
+├── package-lock.json              npm dependency lockfile
+├── playwright.config.js           Playwright and local server configuration
+└── wrangler.toml                  Cloudflare Worker deployment configuration
+```
+
+Generated or installed directories such as `node_modules/` and `test-results/` are not part of the source tree.
 
 ## Tests
 

@@ -20,6 +20,8 @@ const STORAGE_DELETED_CALENDARS = "academical.deletedCalendars.v1";
 const STORAGE_PAPER_TASKS = "academical.paperTasks.v1";
 const STORAGE_SIDEBAR_LOCATION = "academical.sidebarLocation.v1";
 const STORAGE_BOTTOM_SIDEBAR_HEIGHT = "academical.bottomSidebarHeight.v1";
+const STORAGE_HIDDEN_WEEK_HOURS = "academical.hiddenWeekHours.v1";
+const DEFAULT_HIDDEN_WEEK_HOURS = { enabled: false, start: "00:00", end: "08:00" };
 const VIEW_LABELS = {
   week: "Week",
   month: "Month",
@@ -244,6 +246,9 @@ const els = {
   settingsButton: document.querySelector("#settingsButton"),
   settingsForm: document.querySelector("#settingsForm"),
   settingsModal: document.querySelector("#settingsModal"),
+  hiddenWeekEnabled: document.querySelector("#hiddenWeekEnabled"),
+  hiddenWeekStart: document.querySelector("#hiddenWeekStart"),
+  hiddenWeekEnd: document.querySelector("#hiddenWeekEnd"),
   closeSettingsModal: document.querySelector("#closeSettingsModal"),
   cancelSettingsModal: document.querySelector("#cancelSettingsModal"),
   closePaperModal: document.querySelector("#closePaperModal"),
@@ -313,6 +318,7 @@ const rangeFullMonthDayFormatter = new Intl.DateTimeFormat("en-US", {
 
 let currentView = "month";
 let weekFit24Hours = false;
+let hiddenWeekHours = loadHiddenWeekHours();
 let visibleMonth = startOfMonth(TODAY);
 let selectedDate = new Date(TODAY);
 let viewAnchorDate = new Date(TODAY);
@@ -468,6 +474,7 @@ const weekCalendar = createWeekCalendar({
   elements: els,
   getMainCalendarDates,
   getWeekFit24Hours: () => weekFit24Hours,
+  getHiddenWeekHours: () => hiddenWeekHours,
   getSelectedDate: () => selectedDate,
   setSelectedDate: (date) => {
     selectedDate = date;
@@ -595,6 +602,7 @@ function bindEvents() {
     setSidebarPanel(button.dataset.panel);
   });
   els.settingsButton.addEventListener("click", openSettingsModal);
+  els.hiddenWeekEnabled.addEventListener("change", updateHiddenWeekHoursControls);
   els.settingsForm.addEventListener("submit", saveSettingsFromDialog);
   els.closeSettingsModal.addEventListener("click", closeSettingsModal);
   els.cancelSettingsModal.addEventListener("click", closeSettingsModal);
@@ -924,6 +932,10 @@ function openSettingsModal() {
   inputs.forEach((input) => {
     input.checked = input.value === "bottom";
   });
+  els.hiddenWeekEnabled.checked = hiddenWeekHours.enabled;
+  els.hiddenWeekStart.value = hiddenWeekHours.start;
+  els.hiddenWeekEnd.value = hiddenWeekHours.end;
+  updateHiddenWeekHoursControls();
   els.settingsModal.classList.add("is-open");
   els.settingsModal.setAttribute("aria-hidden", "false");
 }
@@ -935,11 +947,37 @@ function closeSettingsModal() {
 
 function saveSettingsFromDialog(event) {
   event.preventDefault();
+  updateHiddenWeekHoursControls();
+  if (!els.settingsForm.reportValidity()) return;
+
   sidebarLocation = "bottom";
+  hiddenWeekHours = normalizeHiddenWeekHours({
+    enabled: els.hiddenWeekEnabled.checked,
+    start: els.hiddenWeekStart.value,
+    end: els.hiddenWeekEnd.value,
+  });
   saveSidebarLocation();
+  saveHiddenWeekHours();
   applySidebarLocation();
   closeSettingsModal();
+  render();
   showToast("Settings saved");
+}
+
+function updateHiddenWeekHoursControls() {
+  if (!els.hiddenWeekEnabled || !els.hiddenWeekStart || !els.hiddenWeekEnd) return;
+  const enabled = els.hiddenWeekEnabled.checked;
+  els.hiddenWeekStart.disabled = !enabled;
+  els.hiddenWeekEnd.disabled = !enabled;
+  updateHiddenWeekHoursValidity();
+}
+
+function updateHiddenWeekHoursValidity() {
+  if (!els.hiddenWeekStart || !els.hiddenWeekEnd) return;
+  const start = timeToMinutes(els.hiddenWeekStart.value);
+  const end = timeToMinutes(els.hiddenWeekEnd.value);
+  const message = Number.isFinite(start) && Number.isFinite(end) ? "" : "Enter valid whole-hour times.";
+  els.hiddenWeekEnd.setCustomValidity(message);
 }
 
 function applySidebarLocation() {
@@ -2647,6 +2685,32 @@ function saveDeletedCalendarIds({ sync = true, touch = true } = {}) {
   if (sync) syncManager.queueCloudSync();
 }
 
+function normalizeHiddenWeekHours(value) {
+  const start = isValidSettingsTime(value?.start) ? value.start : DEFAULT_HIDDEN_WEEK_HOURS.start;
+  const end = isValidSettingsTime(value?.end) ? value.end : DEFAULT_HIDDEN_WEEK_HOURS.end;
+  return {
+    enabled: value?.enabled === true,
+    start,
+    end,
+  };
+}
+
+function isValidSettingsTime(value) {
+  return typeof value === "string" && /^([01]\d|2[0-3]):00$/.test(value);
+}
+
+function loadHiddenWeekHours() {
+  try {
+    return normalizeHiddenWeekHours(JSON.parse(localStorage.getItem(STORAGE_HIDDEN_WEEK_HOURS) || "null"));
+  } catch {
+    return { ...DEFAULT_HIDDEN_WEEK_HOURS };
+  }
+}
+
+function saveHiddenWeekHours() {
+  localStorage.setItem(STORAGE_HIDDEN_WEEK_HOURS, JSON.stringify(hiddenWeekHours));
+}
+
 function normalizePaperTasks(value, fallbackCalendar = getDefaultEventCalendarId()) {
   if (!Array.isArray(value)) return [];
   return value.map((task) => task?.calendar || !fallbackCalendar ? task : { ...task, calendar: fallbackCalendar });
@@ -2781,7 +2845,7 @@ function updateNowIndicator() {
 
   if (!indicator) {
     const { start, end } = getVisibleDateRange();
-    if (now >= start && now <= end) renderMonthGrid();
+    if (now >= start && now <= end && getNowOffsetPixels(now) !== null) renderMonthGrid();
     return;
   }
 
@@ -2790,7 +2854,12 @@ function updateNowIndicator() {
     return;
   }
 
-  indicator.style.top = `${getNowOffsetPixels(now)}px`;
+  const nowOffset = getNowOffsetPixels(now);
+  if (nowOffset === null) {
+    renderMonthGrid();
+    return;
+  }
+  indicator.style.top = `${nowOffset}px`;
   indicator.setAttribute("aria-label", `Current time ${formatClockTime(now)}`);
   indicator.querySelector(".week-now-time").textContent = formatClockTime(now);
 }
