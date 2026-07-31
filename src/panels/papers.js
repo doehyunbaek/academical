@@ -207,7 +207,13 @@ export function createPapersPanel({
       ? `S2:${metadata.semanticScholarId?.slice(0, 8)}`
       : metadata.source === "acm"
         ? `ACM:${metadata.doi}`
-        : `arXiv:${metadata.arxivId}`;
+        : metadata.source === "nature"
+          ? `Nature:${metadata.doi}`
+          : metadata.source === "science"
+            ? `Science:${metadata.doi}`
+            : metadata.source === "cell"
+              ? `Cell:${metadata.publisherId}`
+              : `arXiv:${metadata.arxivId}`;
     return `${source}${authors}${published}`;
   }
 
@@ -219,7 +225,7 @@ export function createPapersPanel({
   function openPaperModal(task = null) {
     editingPaperTaskId = task?.id ?? "";
     document.querySelector("#paperDialogTitle").textContent = task ? "Edit paper" : "Add paper";
-    elements.paperModalFieldLabel.textContent = "Paper titles, arXiv URLs, or ACM DL URLs";
+    elements.paperModalFieldLabel.textContent = "Paper titles, arXiv, ACM DL, Nature, Science, or Cell URLs";
     elements.paperModalSubmit.textContent = task ? "Save" : "Add papers";
     elements.deletePaper.hidden = !task;
     elements.paperModalInput.value = "";
@@ -420,6 +426,7 @@ export function createPapersPanel({
     if (task.metadata?.arxivId) return `arxiv:${task.metadata.arxivId.toLowerCase()}`;
     if (task.metadata?.doi) return `doi:${task.metadata.doi.toLowerCase()}`;
     if (task.metadata?.semanticScholarId) return `s2:${task.metadata.semanticScholarId.toLowerCase()}`;
+    if (task.metadata?.publisherId) return `${task.metadata.source}:${task.metadata.publisherId.toLowerCase()}`;
     return `title:${task.title.toLowerCase()}`;
   }
 
@@ -443,6 +450,29 @@ export function createPapersPanel({
 
     const doiMatch = value.match(/\b(10\.1145\/\d+(?:\.\d+)*)\b/i);
     return doiMatch ? doiMatch[1].toLowerCase() : null;
+  }
+
+  function extractNatureDoi(input) {
+    const value = input.trim();
+    const articleMatch = value.match(/(?:www\.)?nature\.com\/articles\/([^/?#\s]+?)(?:\.pdf)?(?:[/?#]|$)/i);
+    if (articleMatch) return `10.1038/${articleMatch[1]}`.toLowerCase();
+
+    const doiMatch = value.match(/\b(10\.1038\/[^\s?#]+)\b/i);
+    return doiMatch ? doiMatch[1].replace(/[.,;:)]+$/, "").toLowerCase() : null;
+  }
+
+  function extractScienceDoi(input) {
+    const value = input.trim();
+    const urlMatch = value.match(/(?:www\.)?science\.org\/doi\/(?:full|abs|pdf)\/(10\.1126\/[^\s?#]+)/i);
+    if (urlMatch) return urlMatch[1].replace(/[.,;:)]+$/, "").toLowerCase();
+
+    const doiMatch = value.match(/\b(10\.1126\/[^\s?#]+)\b/i);
+    return doiMatch ? doiMatch[1].replace(/[.,;:)]+$/, "").toLowerCase() : null;
+  }
+
+  function extractCellPii(input) {
+    const match = input.trim().match(/(?:www\.)?cell\.com\/cell\/(?:fulltext|abstract|pdf)\/(S\d{4}-\d{4}\(\d{2}\)\d{5}-\d)(?:\.pdf)?(?:[/?#]|$)/i);
+    return match ? match[1].toUpperCase() : null;
   }
 
   function extractSemanticScholarPaperId(input) {
@@ -483,6 +513,49 @@ export function createPapersPanel({
       };
     }
 
+    const natureDoi = extractNatureDoi(input);
+    if (natureDoi) {
+      const articleId = natureDoi.slice("10.1038/".length);
+      return {
+        source: "nature",
+        doi: natureDoi,
+        title: `Nature:${articleId}`,
+        authors: [],
+        summary: "",
+        published: "",
+        absUrl: `https://www.nature.com/articles/${articleId}`,
+        pdfUrl: `https://www.nature.com/articles/${articleId}.pdf`,
+      };
+    }
+
+    const scienceDoi = extractScienceDoi(input);
+    if (scienceDoi) {
+      return {
+        source: "science",
+        doi: scienceDoi,
+        title: `Science:${scienceDoi}`,
+        authors: [],
+        summary: "",
+        published: "",
+        absUrl: `https://www.science.org/doi/full/${scienceDoi}`,
+        pdfUrl: `https://www.science.org/doi/pdf/${scienceDoi}`,
+      };
+    }
+
+    const cellPii = extractCellPii(input);
+    if (cellPii) {
+      return {
+        source: "cell",
+        publisherId: cellPii,
+        title: `Cell:${cellPii}`,
+        authors: [],
+        summary: "",
+        published: "",
+        absUrl: `https://www.cell.com/cell/fulltext/${cellPii}`,
+        pdfUrl: `https://www.cell.com/cell/pdf/${cellPii}.pdf`,
+      };
+    }
+
     const semanticScholarId = extractSemanticScholarPaperId(input);
     if (semanticScholarId) {
       return {
@@ -508,13 +581,33 @@ export function createPapersPanel({
 
   async function resolvePaperMetadata(input) {
     const fallback = createStaticPaperMetadata(input);
-    if (!fallback?.arxivId && !fallback?.doi) return fallback;
-
-    const endpoint = window.ACADEMICAL_GOOGLE_CONFIG?.paperMetadataUrl
-      || window.ACADEMICAL_GOOGLE_CONFIG?.arxivMetadataUrl;
-    if (!endpoint) return fallback;
+    if (!fallback?.arxivId && !fallback?.doi && !fallback?.publisherId) return fallback;
 
     try {
+      if (["nature", "science"].includes(fallback.source)) {
+        const url = new URL(`https://api.crossref.org/works/${encodeURIComponent(fallback.doi)}`);
+        const response = await fetch(url, { headers: { Accept: "application/json" } });
+        if (!response.ok) throw new Error(`Crossref metadata request failed (${response.status})`);
+        return parseCrossrefMetadata(await response.json(), fallback);
+      }
+
+      if (fallback.source === "cell") {
+        const normalizedPii = fallback.publisherId.replace(/[^a-z0-9]/gi, "");
+        const url = new URL("https://api.crossref.org/works");
+        url.searchParams.set("query", normalizedPii);
+        url.searchParams.set("rows", "5");
+        const response = await fetch(url, { headers: { Accept: "application/json" } });
+        if (!response.ok) throw new Error(`Crossref metadata request failed (${response.status})`);
+        const payload = await response.json();
+        const work = payload?.message?.items?.find((item) => (item?.["alternative-id"] ?? [])
+          .some((id) => String(id).replace(/[^a-z0-9]/gi, "").toLowerCase() === normalizedPii.toLowerCase()));
+        if (!work) throw new Error("Crossref could not match the Cell article identifier");
+        return parseCrossrefMetadata({ message: work }, fallback);
+      }
+
+      const endpoint = window.ACADEMICAL_GOOGLE_CONFIG?.paperMetadataUrl
+        || window.ACADEMICAL_GOOGLE_CONFIG?.arxivMetadataUrl;
+      if (!endpoint) return fallback;
       const url = new URL(endpoint, window.location.origin);
       if (fallback.arxivId) {
         url.searchParams.set("id", fallback.arxivId);
@@ -532,11 +625,35 @@ export function createPapersPanel({
       if (!response.ok) throw new Error(`Metadata request failed (${response.status})`);
       return parseAcmMetadata(await response.json(), fallback);
     } catch (error) {
-      const identifier = fallback.arxivId || fallback.doi;
+      const identifier = fallback.arxivId || fallback.doi || fallback.publisherId;
       console.warn(`Could not load paper metadata for ${identifier}:`, error);
       if (fallback.arxivId && error?.status === 429) throw error;
       return fallback;
     }
+  }
+
+  function parseCrossrefMetadata(payload, fallback) {
+    const work = payload?.message;
+    const title = cleanPaperText(Array.isArray(work?.title) ? work.title[0] ?? "" : work?.title ?? "");
+    if (!work || !title) throw new Error("Crossref returned invalid paper metadata");
+
+    const links = Array.isArray(work.link) ? work.link : [];
+    const linkForType = (type) => links.find((link) => link?.URL && link["content-type"] === type)?.URL;
+    const dateParts = (work.published || work["published-online"] || work["published-print"])?.["date-parts"]?.[0] ?? [];
+    const [year, month = 1, day = 1] = dateParts;
+
+    return {
+      ...fallback,
+      doi: cleanPaperText(work.DOI || fallback.doi || "").toLowerCase(),
+      title,
+      authors: (Array.isArray(work.author) ? work.author : [])
+        .map((author) => cleanPaperText([author?.given, author?.family].filter(Boolean).join(" ")))
+        .filter(Boolean),
+      summary: cleanCrossrefMarkup(work.abstract || ""),
+      published: year ? `${year}-${String(month).padStart(2, "0")}-${String(day).padStart(2, "0")}` : "",
+      absUrl: linkForType("text/html") || fallback.absUrl,
+      pdfUrl: linkForType("application/pdf") || fallback.pdfUrl,
+    };
   }
 
   function parseAcmMetadata(metadata, fallback) {
@@ -581,8 +698,14 @@ export function createPapersPanel({
     };
   }
 
+  function cleanCrossrefMarkup(value) {
+    const container = document.createElement("div");
+    container.innerHTML = String(value);
+    return cleanPaperText(container.textContent || "");
+  }
+
   function cleanPaperText(value) {
-    return value.replace(/\s+/g, " ").trim();
+    return String(value).replace(/\s+/g, " ").trim();
   }
 
   function isReadEventTitle(title) {

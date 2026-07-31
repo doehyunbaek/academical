@@ -1882,6 +1882,66 @@ test('ACM DL URLs load Crossref metadata through the Cloudflare Worker proxy', a
   await expect(page.locator('#paperEditSource')).toHaveAttribute('href', 'https://dl.acm.org/doi/abs/10.1145/3728973');
 });
 
+test('Nature, Science, and Cell URLs load metadata directly from the CORS-enabled Crossref API', async ({ page }) => {
+  const requestedSources = [];
+  await page.route('https://api.crossref.org/**', async (route) => {
+    const url = new URL(route.request().url());
+    expect(route.request().headers().accept).toBe('application/json');
+
+    if (url.searchParams.get('query') === 'S0092867425007998') {
+      requestedSources.push('cell');
+      await route.fulfill({
+        contentType: 'application/json',
+        body: JSON.stringify({ message: { items: [{
+          DOI: '10.1016/j.cell.2025.07.010',
+          title: ['AI-generated MLH1 small binder improves prime editing efficiency'],
+          author: [{ given: 'Alice', family: 'Cell' }],
+          published: { 'date-parts': [[2025, 7, 24]] },
+          'alternative-id': ['S0092867425007998'],
+        }] } }),
+      });
+      return;
+    }
+
+    const doi = decodeURIComponent(url.pathname.split('/').at(-1));
+    requestedSources.push(doi.startsWith('10.1038/') ? 'nature' : 'science');
+    const nature = doi.startsWith('10.1038/');
+    await route.fulfill({
+      contentType: 'application/json',
+      body: JSON.stringify({ message: {
+        DOI: doi,
+        title: [nature
+          ? 'CRISPR–Cas regulates expression of embedded anti-phage defence systems'
+          : 'Programmable design of synthetic plant immune receptors'],
+        author: [{ given: nature ? 'Xian' : 'Haocheng', family: nature ? 'Shu' : 'Zhu' }],
+        abstract: '<jats:p>A Crossref abstract.</jats:p>',
+        published: { 'date-parts': [[2026, 7, nature ? 22 : 23]] },
+        link: nature ? [
+          { URL: 'https://www.nature.com/articles/s41586-026-10833-9', 'content-type': 'text/html' },
+          { URL: 'https://www.nature.com/articles/s41586-026-10833-9.pdf', 'content-type': 'application/pdf' },
+        ] : [],
+      } }),
+    });
+  });
+
+  await page.goto('/');
+  await page.keyboard.press('p');
+  await page.locator('#paperModalInput').fill(
+    'https://www.nature.com/articles/s41586-026-10833-9\n' +
+      'https://www.science.org/doi/full/10.1126/science.aee1792\n' +
+      'https://www.cell.com/cell/fulltext/S0092-8674(25)00799-8'
+  );
+  await page.locator('#paperModalForm').getByRole('button', { name: 'Add papers' }).click();
+
+  expect(requestedSources.sort()).toEqual(['cell', 'nature', 'science']);
+  await expect(page.locator('.paper-task-title')).toHaveCount(3);
+  await expect(page.locator('.paper-task-meta').filter({ hasText: 'Nature:10.1038/s41586-026-10833-9' })).toBeVisible();
+  await expect(page.locator('.paper-task-meta').filter({ hasText: 'Science:10.1126/science.aee1792' })).toBeVisible();
+  await expect(page.locator('.paper-task-meta').filter({ hasText: 'Cell:S0092-8674(25)00799-8' })).toBeVisible();
+  await expect(page.locator('a[href="https://www.science.org/doi/pdf/10.1126/science.aee1792"]')).toBeVisible();
+  await expect(page.locator('a[href="https://www.cell.com/cell/pdf/S0092-8674(25)00799-8.pdf"]')).toBeVisible();
+});
+
 test('creating every weekday recurring event skips weekends', async ({ page }) => {
   await page.goto('/');
   await openCreateEventDialog(page);

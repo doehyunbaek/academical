@@ -22,7 +22,7 @@ Open <http://localhost:8000>.
 - Repeating events: daily, weekly, and every weekday, with an optional end date
 - Deleting a recurring event occurrence removes only that instance; `Delete recurring` removes the full series
 - Search events and query DBLP publications from the `o` shortcut; DBLP requests are only sent after pressing Enter
-- Paper task queue: paste paper titles, arXiv URLs, ACM Digital Library URLs, or Semantic Scholar URLs; arXiv and ACM entries load title, authors, abstract, and dates through a Cloudflare Worker metadata proxy (with static-link fallback); track queued and read papers separately; assign papers to events whose first four characters are `read`; assigned or exact-title-matched papers move to Read papers and return to the queue if the assigned event is deleted
+- Paper task queue: paste paper titles or arXiv, ACM Digital Library, Nature, Science, Cell, and Semantic Scholar URLs; Nature, Science, and Cell metadata loads directly from Crossref using its browser CORS support, while arXiv and ACM use the Cloudflare Worker metadata proxy (all with static-link fallback); track queued and read papers separately; assign papers to events whose first four characters are `read`; assigned or exact-title-matched papers move to Read papers and return to the queue if the assigned event is deleted
 - Toggle calendar categories, drag-and-drop reorder calendars, edit calendar name/color with an Edit calendar modal, use the 16 CSS basic colors plus `transparent` and `rebeccapurple`, open a Create calendar modal from the always-visible `+` button, create blank calendars or import `.ics` files, archive each calendar with its hover-only row-level `×` action, expand/collapse Archived calendars, select archived calendars for viewing/analysis, restore archived calendars, or permanently delete them
 - Events persist in `localStorage`
 - Optional Firebase Google sign-in sync for events, imported calendars, calendar names/colors/order, paper tasks, and calendar visibility
@@ -54,7 +54,7 @@ academical/
 │       └── deadlines.js           Conference deadline loading, filtering, and timers
 ├── worker/
 │   ├── index.js                  Cloudflare Worker entry point and API routing
-│   ├── papers.js                 arXiv, ACM/Crossref, and paper metadata proxy logic
+│   ├── papers.js                 arXiv and ACM/Crossref metadata proxy logic
 │   └── researchr.js              Conference deadline update logic
 ├── tests/
 │   └── academical.spec.js         Playwright regression and interaction tests
@@ -92,7 +92,7 @@ users/{uid}/academical/state
 
 ## Metadata and deadline proxy
 
-`worker/index.js` provides a Cloudflare Worker that validates and proxies arXiv metadata, resolves ACM Digital Library DOIs through Crossref, and checks Researchr for newly published conference deadlines. It caches successful responses and enables CORS for the static GitHub Pages client.
+`worker/index.js` provides a Cloudflare Worker that validates and proxies arXiv metadata, resolves ACM Digital Library DOIs through Crossref, and checks Researchr for newly published conference deadlines. It caches successful responses and enables CORS for the static GitHub Pages client. Nature, Science, and Cell use Crossref directly because its API returns `Access-Control-Allow-Origin: *`; Cell PII identifiers are first matched against Crossref's `alternative-id` field, so these sources do not require a Worker route.
 
 Authenticate and deploy it on the Cloudflare Workers free plan:
 
