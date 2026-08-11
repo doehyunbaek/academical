@@ -1940,6 +1940,61 @@ test('ACM DL URLs load Crossref metadata through the Cloudflare Worker proxy', a
   await expect(page.locator('#paperEditSource')).toHaveAttribute('href', 'https://dl.acm.org/doi/abs/10.1145/3728973');
 });
 
+test('ACM DL links containing Elsevier and Springer DOIs load as papers', async ({ page }) => {
+  const works = {
+    '10.1016/j.future.2010.07.005': {
+      title: 'The Open Provenance Model core specification (v1.1)',
+      authors: ['Luc Moreau', 'Ben Clifford', 'Juliana Freire'],
+      published: '2011-06-01',
+    },
+    '10.1007/978-3-319-16462-5_6': {
+      title: 'noWorkflow: Capturing and Analyzing Provenance of Scripts',
+      authors: ['Leonardo Murta', 'Vanessa Braganholo', 'Fernando Chirigati'],
+      published: '2015-01-01',
+    },
+  };
+  const requestedDois = [];
+
+  await page.route('**/google-api-config.js', (route) => route.fulfill({
+    contentType: 'application/javascript',
+    body: 'window.ACADEMICAL_GOOGLE_CONFIG = { paperMetadataUrl: "https://academical-papers.example.workers.dev" };',
+  }));
+  await page.route(/workers\.dev/, async (route) => {
+    const doi = new URL(route.request().url()).searchParams.get('doi');
+    requestedDois.push(doi);
+    const work = works[doi];
+    expect(work).toBeTruthy();
+    await route.fulfill({
+      contentType: 'application/json; charset=utf-8',
+      body: JSON.stringify({
+        source: 'doi',
+        doi,
+        ...work,
+        summary: '',
+        absUrl: `https://doi.org/${doi}`,
+        pdfUrl: '',
+      }),
+    });
+  });
+
+  await page.goto('/');
+  await page.keyboard.press('p');
+  await page.locator('#paperModalInput').fill(
+    'https://dl.acm.org/doi/10.1016/j.future.2010.07.005\n' +
+      'https://dl.acm.org/doi/10.1007/978-3-319-16462-5_6'
+  );
+  await page.locator('#paperModalForm').getByRole('button', { name: 'Add papers' }).click();
+
+  expect(requestedDois.sort()).toEqual(Object.keys(works).sort());
+  await expect(page.locator('.paper-task-title')).toHaveCount(2);
+  await expect(page.locator('.paper-task-title').filter({ hasText: works['10.1016/j.future.2010.07.005'].title })).toBeVisible();
+  await expect(page.locator('.paper-task-title').filter({ hasText: works['10.1007/978-3-319-16462-5_6'].title })).toBeVisible();
+  await expect(page.locator('.paper-task-meta').filter({ hasText: 'DOI:10.1016/j.future.2010.07.005' })).toBeVisible();
+  await expect(page.locator('.paper-task-meta').filter({ hasText: 'DOI:10.1007/978-3-319-16462-5_6' })).toBeVisible();
+  await expect(page.locator(`a[href="https://doi.org/10.1016/j.future.2010.07.005"]`)).toBeVisible();
+  await expect(page.locator(`a[href="https://doi.org/10.1007/978-3-319-16462-5_6"]`)).toBeVisible();
+});
+
 test('Nature, Science, and Cell URLs load metadata directly from the CORS-enabled Crossref API', async ({ page }) => {
   const requestedSources = [];
   await page.route('https://api.crossref.org/**', async (route) => {

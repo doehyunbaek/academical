@@ -1,16 +1,16 @@
 const ARXIV_ID_PATTERN = /^(?:\d{4}\.\d{4,5}|[a-z-]+(?:\.[A-Z]{2})?\/\d{7})(?:v\d+)?$/i;
-const ACM_DOI_PATTERN = /^10\.1145\/\d+(?:\.\d+)*$/i;
+const DOI_PATTERN = /^10\.\d{4,9}\/[-._;()/:a-z0-9]+$/i;
 
 export function handlePaperRequest(requestUrl, context, helpers) {
   const id = requestUrl.searchParams.get("id")?.trim() ?? "";
   const doi = requestUrl.searchParams.get("doi")?.trim().toLowerCase() ?? "";
 
   if (id && doi) {
-    return helpers.jsonResponse({ error: "Provide either an arXiv ID or an ACM DOI" }, 400);
+    return helpers.jsonResponse({ error: "Provide either an arXiv ID or a DOI" }, 400);
   }
   if (id) return proxyArxiv(requestUrl, id, context, helpers);
-  if (doi) return proxyAcmMetadata(requestUrl, doi, context, helpers);
-  return helpers.jsonResponse({ error: "Missing arXiv ID, ACM DOI, or conference" }, 400);
+  if (doi) return proxyDoiMetadata(requestUrl, doi, context, helpers);
+  return helpers.jsonResponse({ error: "Missing arXiv ID, DOI, or conference" }, 400);
 }
 
 async function proxyArxiv(requestUrl, id, context, helpers) {
@@ -46,9 +46,9 @@ async function proxyArxiv(requestUrl, id, context, helpers) {
   }
 }
 
-async function proxyAcmMetadata(requestUrl, doi, context, helpers) {
-  if (!ACM_DOI_PATTERN.test(doi)) {
-    return helpers.jsonResponse({ error: "Invalid ACM DOI" }, 400);
+async function proxyDoiMetadata(requestUrl, doi, context, helpers) {
+  if (!DOI_PATTERN.test(doi)) {
+    return helpers.jsonResponse({ error: "Invalid DOI" }, 400);
   }
 
   const cacheKey = helpers.makeCacheKey(requestUrl, "doi", doi);
@@ -68,9 +68,9 @@ async function proxyAcmMetadata(requestUrl, doi, context, helpers) {
     }
 
     const payload = await upstream.json();
-    const metadata = makeAcmMetadata(payload?.message, doi);
+    const metadata = makeDoiMetadata(payload?.message, doi);
     if (!metadata.title) {
-      return helpers.jsonResponse({ error: "Crossref returned invalid ACM metadata" }, 502);
+      return helpers.jsonResponse({ error: "Crossref returned invalid DOI metadata" }, 502);
     }
 
     const response = new Response(JSON.stringify(metadata), {
@@ -85,14 +85,15 @@ async function proxyAcmMetadata(requestUrl, doi, context, helpers) {
   }
 }
 
-function makeAcmMetadata(work = {}, requestedDoi) {
+function makeDoiMetadata(work = {}, requestedDoi) {
   const doi = String(work.DOI || requestedDoi).toLowerCase();
+  const isAcm = doi.startsWith("10.1145/");
   const links = Array.isArray(work.link) ? work.link : [];
-  const pdfUrl = links.find((link) => link?.URL && /\/doi\/pdf\//i.test(link.URL))?.URL
-    || `https://dl.acm.org/doi/pdf/${doi}`;
+  const pdfUrl = links.find((link) => link?.URL && link["content-type"] === "application/pdf")?.URL
+    || (isAcm ? `https://dl.acm.org/doi/pdf/${doi}` : "");
 
   return {
-    source: "acm",
+    source: isAcm ? "acm" : "doi",
     doi,
     title: cleanText(Array.isArray(work.title) ? work.title[0] : work.title),
     authors: (Array.isArray(work.author) ? work.author : [])
@@ -100,7 +101,7 @@ function makeAcmMetadata(work = {}, requestedDoi) {
       .filter(Boolean),
     summary: cleanMarkup(work.abstract),
     published: formatCrossrefDate(work.published || work["published-online"] || work["published-print"]),
-    absUrl: `https://dl.acm.org/doi/abs/${doi}`,
+    absUrl: isAcm ? `https://dl.acm.org/doi/abs/${doi}` : work.URL || `https://doi.org/${doi}`,
     pdfUrl,
   };
 }

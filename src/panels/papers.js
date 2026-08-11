@@ -207,7 +207,9 @@ export function createPapersPanel({
       ? `S2:${metadata.semanticScholarId?.slice(0, 8)}`
       : metadata.source === "acm"
         ? `ACM:${metadata.doi}`
-        : metadata.source === "nature"
+        : metadata.source === "doi"
+          ? `DOI:${metadata.doi}`
+          : metadata.source === "nature"
           ? `Nature:${metadata.doi}`
           : metadata.source === "science"
             ? `Science:${metadata.doi}`
@@ -225,7 +227,7 @@ export function createPapersPanel({
   function openPaperModal(task = null) {
     editingPaperTaskId = task?.id ?? "";
     document.querySelector("#paperDialogTitle").textContent = task ? "Edit paper" : "Add paper";
-    elements.paperModalFieldLabel.textContent = "Paper titles, arXiv, ACM DL, Nature, Science, or Cell URLs";
+    elements.paperModalFieldLabel.textContent = "Paper titles, DOI, arXiv, ACM DL, Nature, Science, or Cell URLs";
     elements.paperModalSubmit.textContent = task ? "Save" : "Add papers";
     elements.deletePaper.hidden = !task;
     elements.paperModalInput.value = "";
@@ -443,13 +445,17 @@ export function createPapersPanel({
     return value.replace(/\.pdf$/i, "").replace(/^arxiv:/i, "");
   }
 
-  function extractAcmDoi(input) {
+  function extractDoi(input) {
     const value = input.trim();
-    const urlMatch = value.match(/(?:dl\.acm\.org\/doi\/(?:abs\/|pdf\/|epdf\/|full\/)?|doi\.org\/)(10\.1145\/\d+(?:\.\d+)*)(?:[/?#]|$)/i);
-    if (urlMatch) return urlMatch[1].toLowerCase();
+    const urlMatch = value.match(/(?:dl\.acm\.org\/doi\/(?:abs\/|pdf\/|epdf\/|full\/)?|doi\.org\/)(10\.\d{4,9}\/[-._;()/:a-z0-9]+)(?:[?#]|$)/i);
+    if (urlMatch) return normalizeDoi(urlMatch[1]);
 
-    const doiMatch = value.match(/\b(10\.1145\/\d+(?:\.\d+)*)\b/i);
-    return doiMatch ? doiMatch[1].toLowerCase() : null;
+    const doiMatch = value.match(/\b(10\.\d{4,9}\/[-._;()/:a-z0-9]+)\b/i);
+    return doiMatch ? normalizeDoi(doiMatch[1]) : null;
+  }
+
+  function normalizeDoi(value) {
+    return value.replace(/[.,;:]+$/, "").toLowerCase();
   }
 
   function extractNatureDoi(input) {
@@ -499,20 +505,6 @@ export function createPapersPanel({
       };
     }
 
-    const doi = extractAcmDoi(input);
-    if (doi) {
-      return {
-        source: "acm",
-        doi,
-        title: `ACM:${doi}`,
-        authors: [],
-        summary: "",
-        published: "",
-        absUrl: `https://dl.acm.org/doi/abs/${doi}`,
-        pdfUrl: `https://dl.acm.org/doi/pdf/${doi}`,
-      };
-    }
-
     const natureDoi = extractNatureDoi(input);
     if (natureDoi) {
       const articleId = natureDoi.slice("10.1038/".length);
@@ -553,6 +545,21 @@ export function createPapersPanel({
         published: "",
         absUrl: `https://www.cell.com/cell/fulltext/${cellPii}`,
         pdfUrl: `https://www.cell.com/cell/pdf/${cellPii}.pdf`,
+      };
+    }
+
+    const doi = extractDoi(input);
+    if (doi) {
+      const isAcm = doi.startsWith("10.1145/");
+      return {
+        source: isAcm ? "acm" : "doi",
+        doi,
+        title: `${isAcm ? "ACM" : "DOI"}:${doi}`,
+        authors: [],
+        summary: "",
+        published: "",
+        absUrl: isAcm ? `https://dl.acm.org/doi/abs/${doi}` : `https://doi.org/${doi}`,
+        pdfUrl: isAcm ? `https://dl.acm.org/doi/pdf/${doi}` : "",
       };
     }
 
@@ -623,7 +630,7 @@ export function createPapersPanel({
       url.searchParams.set("doi", fallback.doi);
       const response = await fetch(url, { headers: { Accept: "application/json" } });
       if (!response.ok) throw new Error(`Metadata request failed (${response.status})`);
-      return parseAcmMetadata(await response.json(), fallback);
+      return parseDoiMetadata(await response.json(), fallback);
     } catch (error) {
       const identifier = fallback.arxivId || fallback.doi || fallback.publisherId;
       console.warn(`Could not load paper metadata for ${identifier}:`, error);
@@ -656,9 +663,9 @@ export function createPapersPanel({
     };
   }
 
-  function parseAcmMetadata(metadata, fallback) {
-    if (!metadata || metadata.source !== "acm" || !metadata.title) {
-      throw new Error("Worker returned invalid ACM metadata");
+  function parseDoiMetadata(metadata, fallback) {
+    if (!metadata || !["acm", "doi"].includes(metadata.source) || !metadata.title) {
+      throw new Error("Worker returned invalid DOI metadata");
     }
 
     return {
