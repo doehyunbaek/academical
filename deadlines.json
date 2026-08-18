@@ -331,11 +331,11 @@
     "year": 2027,
     "link": "https://www.acm.org/conferences/upcoming-submission-deadlines?startDate0=20270101&eventType0=CallsForPapers&view0=month",
     "deadlines": [
-      "2027-01-29 23:59"
+      "2027-01-11 23:59"
     ],
     "date": "TBA",
     "place": "Singapore, Singapore",
-    "note": "Deadline listed by ACM."
+    "note": "Full paper submission deadline. All dates are AoE (UTC-12)."
   },
   {
     "name": "ISSTA",
@@ -444,6 +444,19 @@
     "date": "See conference page",
     "place": "",
     "note": "Technical Papers submission deadline. All dates are AoE (UTC-12)."
+  },
+  {
+    "name": "OOPSLA",
+    "description": "Object-Oriented Programming, Systems, Languages, and Applications",
+    "year": 2027,
+    "link": "https://conf.researchr.org/track/splash-2027/oopsla-2027",
+    "deadlines": [
+      "2026-10-14 23:59",
+      "2027-04-07 23:59"
+    ],
+    "date": "See conference page",
+    "place": "",
+    "note": "Full paper submission. All dates are AoE (UTC-12)."
   },
   {
     "name": "OOPSLA",

@@ -472,8 +472,8 @@ test('Deadlines panel internalizes deadlines app entries', async ({ page }) => {
 
   await expect(page.locator('.sidebar-panel[data-panel="deadlines"]')).toBeVisible();
   await expect(page.locator('.deadline-view-header')).toContainText('Research venue deadlines');
-  await expect(page.locator('.deadline-view-header')).toContainText('2 upcoming · 3 forecasts');
-  await expect(page.locator('.deadline-card')).toHaveCount(63);
+  await expect(page.locator('.deadline-view-header')).toContainText('4 upcoming · 2 forecasts');
+  await expect(page.locator('.deadline-card')).toHaveCount(64);
   await expect(page.locator('.deadline-card').first()).toContainText('FSE 2027');
   await expect(page.locator('.deadline-card').first()).toContainText('Deadline:');
   await expect(page.locator('.deadline-timezone').first()).toHaveText('AoE / UTC-12');
@@ -489,10 +489,10 @@ test('Deadlines panel filters by selected tags and persists the selection', asyn
   await page.locator('.sidebar-tab[data-panel="deadlines"]').click();
 
   await page.locator('input[data-deadline-filter-tag="OOPSLA"]').check();
-  await expect(page.locator('.deadline-card')).toHaveCount(19);
-  await expect(page.locator('.deadline-card').first()).toContainText('OOPSLA');
-  await expect(page.locator('.deadline-card--predicted')).toHaveCount(1);
-  await expect(page.locator('.deadline-card--predicted').first()).toContainText('High confidence');
+  await expect(page.locator('.deadline-card')).toHaveCount(20);
+  await expect(page.locator('.deadline-card').first()).toContainText('OOPSLA 2027');
+  await expect(page.locator('.deadline-card').first()).toContainText('Full paper submission. All dates are AoE (UTC-12).');
+  await expect(page.locator('.deadline-card--predicted')).toHaveCount(0);
 
   await page.locator('input[data-deadline-filter-tag="OOPSLA"]').uncheck();
   await page.locator('input[data-deadline-filter-tag="ICSE"]').check();
@@ -563,6 +563,7 @@ test('Deadline predictions expose confidence based on historical variation', asy
 });
 
 test('Predicted deadlines check Researchr and become announced deadlines', async ({ page }) => {
+  await page.clock.setFixedTime(new Date('2027-09-03T09:30:00'));
   const checked = [];
   await page.route('https://academical-arxiv.doehyunbaek.workers.dev/**', async (route) => {
     const url = new URL(route.request().url());
@@ -573,11 +574,11 @@ test('Predicted deadlines check Researchr and become announced deadlines', async
       contentType: 'application/json',
       body: JSON.stringify(isOOPSLA ? {
         available: true,
-        sourceUrl: 'https://conf.researchr.org/dates/splash-2027',
+        sourceUrl: 'https://conf.researchr.org/dates/splash-2028',
         deadlines: [{
-          date: '2026-10-16 23:59',
+          date: '2027-10-15 23:59',
           label: 'Submission (Round 1)',
-          link: 'https://conf.researchr.org/track/splash-2027/oopsla-2027',
+          link: 'https://conf.researchr.org/track/splash-2028/oopsla-2028',
         }],
       } : { available: false, deadlines: [] }),
     });
@@ -587,17 +588,17 @@ test('Predicted deadlines check Researchr and become announced deadlines', async
   await page.locator('.sidebar-tab[data-panel="deadlines"]').click();
   await page.locator('input[data-deadline-filter-tag="OOPSLA"]').check();
 
-  const announced = page.locator('.deadline-card').filter({ hasText: 'OOPSLA 2027' });
+  const announced = page.locator('.deadline-card').filter({ hasText: 'OOPSLA 2028' });
   await expect(announced).toContainText('Announced · update available');
   await expect(announced).toContainText('Add it to deadlines.json');
   await expect(announced).toHaveClass(/deadline-card--announced/);
   await expect(announced).not.toHaveClass(/deadline-card--predicted/);
-  expect(checked).toContain('OOPSLA-2027');
+  expect(checked).toContain('OOPSLA-2028');
 
   const requestCount = checked.length;
   await page.reload();
   await page.locator('.sidebar-tab[data-panel="deadlines"]').click();
-  await expect(page.locator('.deadline-card').filter({ hasText: 'OOPSLA 2027' })).toContainText('Announced · update available');
+  await expect(page.locator('.deadline-card').filter({ hasText: 'OOPSLA 2028' })).toContainText('Announced · update available');
   expect(checked).toHaveLength(requestCount);
 });
 
