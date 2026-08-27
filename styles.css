@@ -2082,9 +2082,24 @@ textarea:focus-visible {
   box-shadow: inset 0 0 0 2px rgba(26, 115, 232, 0.28);
 }
 
-.day-cell--range-selected {
-  background: color-mix(in srgb, var(--primary) 10%, var(--surface));
-  box-shadow: inset 0 0 0 2px color-mix(in srgb, var(--primary) 38%, transparent);
+.month-range-drag-preview {
+  position: fixed;
+  z-index: 95;
+  height: 22px;
+  display: flex;
+  align-items: center;
+  padding: 0 8px;
+  border-radius: 5px;
+  background: var(--event-color, var(--primary));
+  color: #fff;
+  font-size: 12px;
+  font-weight: 600;
+  line-height: 22px;
+  box-shadow: 0 2px 6px rgba(60, 64, 67, 0.28);
+  pointer-events: none;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .date-row {
@@ -2135,7 +2150,7 @@ textarea:focus-visible {
   display: grid;
   gap: 1px;
   margin-top: 2px;
-  overflow: hidden;
+  overflow: visible;
 }
 
 .month-grid--week .event-list {
@@ -2201,6 +2216,37 @@ textarea:focus-visible {
 
 .event-chip--all-day:hover {
   background: color-mix(in srgb, var(--event-color) 88%, #000);
+}
+
+.event-chip--multi-day {
+  z-index: 2;
+  width: calc(100% + 8px);
+  margin-right: -8px;
+  border-radius: 4px 0 0 4px;
+  box-shadow: 0 1px 2px rgba(60, 64, 67, 0.18);
+}
+
+.event-chip--multi-day-continuation {
+  width: calc(100% + 16px);
+  margin-left: -8px;
+  border-radius: 0;
+}
+
+.event-chip--multi-day-end {
+  width: 100%;
+  margin-right: 0;
+  border-radius: 0 4px 4px 0;
+}
+
+.event-chip--multi-day-continuation.event-chip--multi-day-end {
+  width: calc(100% + 8px);
+}
+
+.event-chip--multi-day-start.event-chip--multi-day-end {
+  width: 100%;
+  margin-left: 0;
+  margin-right: 0;
+  border-radius: 4px;
 }
 
 .event-chip--timed {

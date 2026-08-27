@@ -459,6 +459,7 @@ const monthCalendar = createMonthCalendar({
   renderApp: render,
   showToast,
   getCalendar,
+  getDefaultEventCalendarId,
   getEventDate,
   formatTime,
   longDateFormatter,

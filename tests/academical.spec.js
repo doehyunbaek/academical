@@ -1519,8 +1519,17 @@ test('dragging across month view creates an inclusive multi-day event', async ({
   await page.mouse.move(start.x + start.width / 2, start.y + 90);
   await page.mouse.down();
   await page.mouse.move(end.x + end.width / 2, end.y + 90, { steps: 8 });
-  await expect(page.locator('.day-cell--range-selected')).toHaveCount(3);
+  const preview = page.locator('.month-range-drag-preview');
+  await expect(preview).toHaveCount(1);
+  await expect(preview).toHaveText('(No title)');
+  const previewCalendarColor = await preview.evaluate((element) => getComputedStyle(element).getPropertyValue('--event-color').trim());
+  const defaultCalendarColor = await page.locator('.calendar-toggle-row[data-calendar="teaching"] .calendar-dot')
+    .evaluate((element) => getComputedStyle(element).getPropertyValue('--calendar-color').trim());
+  expect(previewCalendarColor).toBe(defaultCalendarColor);
+  const previewBox = await preview.boundingBox();
+  expect(previewBox.width).toBeGreaterThan(start.width * 2.5);
   await page.mouse.up();
+  await expect(preview).toHaveCount(0);
 
   await expect(page.locator('#eventModal')).toHaveClass(/is-open/);
   await expect(page.locator('#eventDate')).toHaveValue('2026-09-28');
@@ -1530,10 +1539,15 @@ test('dragging across month view creates an inclusive multi-day event', async ({
 
   const created = await page.evaluate(() => JSON.parse(localStorage.getItem('academical.events.v1')).find((event) => event.title === 'Group retreat'));
   expect(created).toMatchObject({ date: '2026-09-28', durationDays: 3, time: '' });
-  for (const date of ['2026-09-28', '2026-09-29', '2026-09-30']) {
-    await expect(page.locator(`.day-cell[data-date="${date}"] .event-chip`).filter({ hasText: 'Group retreat' })).toBeVisible();
-  }
-  await expect(page.locator('.day-cell[data-date="2026-10-01"] .event-chip').filter({ hasText: 'Group retreat' })).toHaveCount(0);
+  const startChip = page.locator('.day-cell[data-date="2026-09-28"] .event-chip--multi-day');
+  const middleChip = page.locator('.day-cell[data-date="2026-09-29"] .event-chip--multi-day');
+  const endChip = page.locator('.day-cell[data-date="2026-09-30"] .event-chip--multi-day');
+  await expect(startChip).toContainText('Group retreat');
+  await expect(startChip).toHaveClass(/event-chip--multi-day-start/);
+  await expect(middleChip).toHaveClass(/event-chip--multi-day-continuation/);
+  await expect(middleChip).toHaveText('');
+  await expect(endChip).toHaveClass(/event-chip--multi-day-end/);
+  await expect(page.locator('.day-cell[data-date="2026-10-01"] .event-chip--multi-day')).toHaveCount(0);
 });
 
 test('dragging backwards across four-week view creates a multi-day event', async ({ page }) => {

@@ -20,6 +20,7 @@ export function createMonthCalendar({
   renderApp,
   showToast,
   getCalendar,
+  getDefaultEventCalendarId,
   getEventDate,
   formatTime,
   longDateFormatter,
@@ -154,6 +155,7 @@ export function createMonthCalendar({
       startX: event.clientX,
       startY: event.clientY,
       moved: false,
+      previewElements: [],
     };
     window.addEventListener("pointermove", handleMonthRangeDragMove);
     window.addEventListener("pointerup", handleMonthRangeDragEnd);
@@ -168,7 +170,7 @@ export function createMonthCalendar({
     event.preventDefault();
     const targetCell = getMonthDayCellAtPoint(event.clientX, event.clientY);
     if (targetCell?.dataset.date) drag.endDateKey = targetCell.dataset.date;
-    renderMonthRangeSelection(drag);
+    renderMonthRangePreview(drag);
   }
 
   function handleMonthRangeDragEnd(event) {
@@ -195,17 +197,43 @@ export function createMonthCalendar({
   }
 
   function cleanupMonthRangeDrag() {
-    elements.monthGrid.querySelectorAll(".day-cell--range-selected").forEach((cell) => cell.classList.remove("day-cell--range-selected"));
+    interactionState.activeMonthRangeDrag?.previewElements?.forEach((preview) => preview.remove());
     interactionState.activeMonthRangeDrag = null;
     window.removeEventListener("pointermove", handleMonthRangeDragMove);
     window.removeEventListener("pointerup", handleMonthRangeDragEnd);
     window.removeEventListener("pointercancel", cancelMonthRangeDrag);
   }
 
-  function renderMonthRangeSelection(drag) {
+  function renderMonthRangePreview(drag) {
+    drag.previewElements.forEach((preview) => preview.remove());
+    drag.previewElements = [];
+
     const [startDateKey, endDateKey] = [drag.startDateKey, drag.endDateKey].sort();
-    elements.monthGrid.querySelectorAll(".day-cell[data-date]").forEach((cell) => {
-      cell.classList.toggle("day-cell--range-selected", cell.dataset.date >= startDateKey && cell.dataset.date <= endDateKey);
+    const selectedCells = [...elements.monthGrid.querySelectorAll(".day-cell[data-date]")]
+      .filter((cell) => cell.dataset.date >= startDateKey && cell.dataset.date <= endDateKey)
+      .sort((a, b) => a.dataset.date.localeCompare(b.dataset.date));
+    const rows = new Map();
+    selectedCells.forEach((cell) => {
+      const rect = cell.getBoundingClientRect();
+      const rowKey = Math.round(rect.top);
+      if (!rows.has(rowKey)) rows.set(rowKey, []);
+      rows.get(rowKey).push({ cell, rect });
+    });
+
+    [...rows.values()].forEach((row, rowIndex) => {
+      const first = row[0];
+      const last = row.at(-1);
+      const eventListTop = first.cell.querySelector(".event-list")?.getBoundingClientRect().top ?? first.rect.top + 36;
+      const preview = document.createElement("div");
+      preview.className = "month-range-drag-preview";
+      preview.style.setProperty("--event-color", getCalendar(getDefaultEventCalendarId()).color);
+      preview.textContent = rowIndex === 0 ? "(No title)" : "";
+      preview.setAttribute("aria-hidden", "true");
+      preview.style.left = `${first.rect.left + 8}px`;
+      preview.style.top = `${eventListTop + 2}px`;
+      preview.style.width = `${Math.max(20, last.rect.right - first.rect.left - 16)}px`;
+      document.body.append(preview);
+      drag.previewElements.push(preview);
     });
   }
 
@@ -213,6 +241,13 @@ export function createMonthCalendar({
     const calendar = getCalendar(calendarEvent.calendar);
     const chip = document.createElement("button");
     chip.className = `event-chip ${calendarEvent.time ? "event-chip--timed" : "event-chip--all-day"}`;
+    const multiDaySegment = getMultiDaySegment(calendarEvent);
+    if (multiDaySegment) {
+      chip.classList.add("event-chip--multi-day");
+      if (multiDaySegment.startsSegment) chip.classList.add("event-chip--multi-day-start");
+      if (multiDaySegment.endsSegment) chip.classList.add("event-chip--multi-day-end");
+      if (!multiDaySegment.startsSegment) chip.classList.add("event-chip--multi-day-continuation");
+    }
     chip.type = "button";
     chip.style.setProperty("--event-color", calendar.color);
     chip.dataset.eventId = calendarEvent.id;
@@ -232,7 +267,7 @@ export function createMonthCalendar({
 
     const title = document.createElement("span");
     title.className = "event-title";
-    title.textContent = calendarEvent.title;
+    title.textContent = multiDaySegment && !multiDaySegment.startsSegment ? "" : calendarEvent.title;
 
     chip.append(title);
     if (calendarEvent.readOnlyDeadline) {
@@ -254,6 +289,26 @@ export function createMonthCalendar({
     });
 
     return chip;
+  }
+
+  function getMultiDaySegment(calendarEvent) {
+    const durationDays = Number(calendarEvent.durationDays);
+    if (calendarEvent.time || !Number.isInteger(durationDays) || durationDays <= 1) return null;
+
+    const occurrenceDate = getEventDate(calendarEvent);
+    const renderedDate = calendarEvent.renderedDate || occurrenceDate;
+    const occurrenceEnd = shiftDateKey(occurrenceDate, durationDays - 1);
+    const dayOfWeek = fromDateKey(renderedDate).getDay();
+    return {
+      startsSegment: renderedDate === occurrenceDate || dayOfWeek === 1,
+      endsSegment: renderedDate === occurrenceEnd || dayOfWeek === 0,
+    };
+  }
+
+  function shiftDateKey(dateKey, amount) {
+    const date = fromDateKey(dateKey);
+    date.setDate(date.getDate() + amount);
+    return toDateKey(date);
   }
 
   function startMonthEventDrag(event, calendarEvent) {
