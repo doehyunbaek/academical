@@ -112,6 +112,6 @@ Copy that URL into `paperMetadataUrl` and `deadlineUpdatesUrl` (or the backwards
 ```bash
 curl 'https://academical-arxiv.YOUR-SUBDOMAIN.workers.dev/?id=2505.17716'
 curl 'https://academical-arxiv.YOUR-SUBDOMAIN.workers.dev/?doi=10.1145%2F3728973'
-curl 'https://academical-arxiv.YOUR-SUBDOMAIN.workers.dev/?doi=10.5555%2F3767901.3767902'
+curl 'https://academical-arxiv.YOUR-SUBDOMAIN.workers.dev/?usenix=osdi25-zhang-tony'
 curl 'https://academical-arxiv.YOUR-SUBDOMAIN.workers.dev/?conference=OOPSLA&year=2027'
 ```

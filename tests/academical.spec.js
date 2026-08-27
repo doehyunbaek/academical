@@ -1976,6 +1976,44 @@ test('USENIX papers mirrored by ACM DL load with USENIX links and metadata', asy
   );
 });
 
+test('USENIX PDF URLs load metadata directly from USENIX and normalize HTTP to HTTPS', async ({ page }) => {
+  await page.route('**/google-api-config.js', (route) => route.fulfill({
+    contentType: 'application/javascript',
+    body: 'window.ACADEMICAL_GOOGLE_CONFIG = { paperMetadataUrl: "https://academical-papers.example.workers.dev" };',
+  }));
+  await page.route(/workers\.dev/, async (route) => {
+    const url = new URL(route.request().url());
+    expect(url.searchParams.get('usenix')).toBe('osdi25-zhang-tony');
+    expect(url.searchParams.has('doi')).toBe(false);
+    await route.fulfill({
+      contentType: 'application/json; charset=utf-8',
+      body: JSON.stringify({
+        source: 'usenix',
+        publisherId: 'osdi25-zhang-tony',
+        title: 'Basilisk: Using Provenance Invariants to Automate Proofs of Undecidable Protocols',
+        authors: ['Tony Nuda Zhang', 'Keshav Singh', 'Tej Chajed', 'Manos Kapritsos', 'Bryan Parno'],
+        summary: '',
+        published: '2025-01-01',
+        absUrl: 'https://www.usenix.org/conference/osdi25/presentation/zhang-tony',
+        pdfUrl: 'https://www.usenix.org/system/files/osdi25-zhang-tony.pdf',
+      }),
+    });
+  });
+
+  await page.goto('/');
+  await page.keyboard.press('p');
+  await page.locator('#paperModalInput').fill('http://www.usenix.org/system/files/osdi25-zhang-tony.pdf');
+  await page.locator('#paperModalForm').getByRole('button', { name: 'Add papers' }).click();
+
+  await expect(page.locator('.paper-task-title')).toContainText('Basilisk: Using Provenance Invariants');
+  await expect(page.locator('.paper-task-meta')).toContainText('USENIX:osdi25-zhang-tony');
+  await expect(page.locator('.paper-task-meta')).toContainText('Tony Nuda Zhang, Keshav Singh, …, Bryan Parno');
+  await expect(page.getByRole('link', { name: 'PDF' })).toHaveAttribute(
+    'href',
+    'https://www.usenix.org/system/files/osdi25-zhang-tony.pdf'
+  );
+});
+
 test('USENIX ACM DL links retain useful static links when metadata is unavailable', async ({ page }) => {
   await page.route('**/google-api-config.js', (route) => route.fulfill({
     contentType: 'application/javascript',

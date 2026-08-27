@@ -205,7 +205,7 @@ export function createPapersPanel({
     const published = metadata.published ? ` · ${metadata.published.slice(0, 10)}` : "";
     const sourceLabels = {
       acm: `ACM:${metadata.doi}`,
-      usenix: `USENIX:${metadata.doi}`,
+      usenix: `USENIX:${metadata.doi || metadata.publisherId}`,
       doi: `DOI:${metadata.doi}`,
       nature: `Nature:${metadata.doi}`,
       science: `Science:${metadata.doi}`,
@@ -456,6 +456,17 @@ export function createPapersPanel({
     return value.replace(/[.,;:]+$/, "").toLowerCase();
   }
 
+  function extractUsenixPaper(input) {
+    const value = input.trim();
+    const pdfMatch = value.match(/https?:\/\/(?:www\.)?usenix\.org\/system\/files\/([a-z0-9][a-z0-9-]*)\.pdf(?:[?#]|$)/i);
+    if (pdfMatch) return { id: pdfMatch[1].toLowerCase(), pdfUrl: `https://www.usenix.org/system/files/${pdfMatch[1].toLowerCase()}.pdf` };
+
+    const pageMatch = value.match(/https?:\/\/(?:www\.)?usenix\.org\/conference\/([a-z0-9-]+)\/presentation\/([a-z0-9-]+)(?:[/?#]|$)/i);
+    if (!pageMatch) return null;
+    const id = `${pageMatch[1]}-${pageMatch[2]}`.toLowerCase();
+    return { id, pdfUrl: `https://www.usenix.org/system/files/${id}.pdf` };
+  }
+
   function extractNatureDoi(input) {
     const value = input.trim();
     const articleMatch = value.match(/(?:www\.)?nature\.com\/articles\/([^/?#\s]+?)(?:\.pdf)?(?:[/?#]|$)/i);
@@ -500,6 +511,21 @@ export function createPapersPanel({
         published: "",
         absUrl: `https://arxiv.org/abs/${arxivId}`,
         pdfUrl: `https://arxiv.org/pdf/${arxivId}`,
+      };
+    }
+
+    const usenixPaper = extractUsenixPaper(input);
+    if (usenixPaper) {
+      const [conference, ...slugParts] = usenixPaper.id.split("-");
+      return {
+        source: "usenix",
+        publisherId: usenixPaper.id,
+        title: `USENIX:${usenixPaper.id}`,
+        authors: [],
+        summary: "",
+        published: "",
+        absUrl: `https://www.usenix.org/conference/${conference}/presentation/${slugParts.join("-")}`,
+        pdfUrl: usenixPaper.pdfUrl,
       };
     }
 
@@ -629,7 +655,11 @@ export function createPapersPanel({
         return parseArxivMetadata(await response.text(), fallback);
       }
 
-      url.searchParams.set("doi", fallback.doi);
+      if (fallback.source === "usenix" && fallback.publisherId) {
+        url.searchParams.set("usenix", fallback.publisherId);
+      } else {
+        url.searchParams.set("doi", fallback.doi);
+      }
       const response = await fetch(url, { headers: { Accept: "application/json" } });
       if (!response.ok) throw new Error(`Metadata request failed (${response.status})`);
       return parseDoiMetadata(await response.json(), fallback);

@@ -1,15 +1,18 @@
 const ARXIV_ID_PATTERN = /^(?:\d{4}\.\d{4,5}|[a-z-]+(?:\.[A-Z]{2})?\/\d{7})(?:v\d+)?$/i;
 const DOI_PATTERN = /^10\.\d{4,9}\/[-._;()/:a-z0-9]+$/i;
+const USENIX_ID_PATTERN = /^[a-z0-9][a-z0-9-]*$/i;
 
 export function handlePaperRequest(requestUrl, context, helpers) {
   const id = requestUrl.searchParams.get("id")?.trim() ?? "";
   const doi = requestUrl.searchParams.get("doi")?.trim().toLowerCase() ?? "";
+  const usenix = requestUrl.searchParams.get("usenix")?.trim().toLowerCase() ?? "";
 
-  if (id && doi) {
-    return helpers.jsonResponse({ error: "Provide either an arXiv ID or a DOI" }, 400);
+  if ([id, doi, usenix].filter(Boolean).length > 1) {
+    return helpers.jsonResponse({ error: "Provide one paper identifier" }, 400);
   }
   if (id) return proxyArxiv(requestUrl, id, context, helpers);
   if (doi) return proxyDoiMetadata(requestUrl, doi, context, helpers);
+  if (usenix) return proxyUsenixMetadata(requestUrl, usenix, context, helpers);
   return helpers.jsonResponse({ error: "Missing arXiv ID, DOI, or conference" }, 400);
 }
 
@@ -46,12 +49,68 @@ async function proxyArxiv(requestUrl, id, context, helpers) {
   }
 }
 
+async function proxyUsenixMetadata(requestUrl, usenixId, context, helpers) {
+  if (!USENIX_ID_PATTERN.test(usenixId) || !usenixId.includes("-")) {
+    return helpers.jsonResponse({ error: "Invalid USENIX paper identifier" }, 400);
+  }
+
+  const cacheKey = helpers.makeCacheKey(requestUrl, "usenix", usenixId);
+  const cached = await caches.default.match(cacheKey);
+  if (cached) return cached;
+
+  const [conference, ...slugParts] = usenixId.split("-");
+  const absUrl = `https://www.usenix.org/conference/${conference}/presentation/${slugParts.join("-")}`;
+  try {
+    const upstream = await fetch(absUrl, {
+      headers: {
+        Accept: "text/html",
+        "User-Agent": "Academical/1.0 (https://doehyunbaek.github.io/academical/; mailto:doehyunbaek@gmail.com)",
+      },
+    });
+    if (!upstream.ok) return helpers.jsonResponse({ error: `USENIX returned HTTP ${upstream.status}` }, upstream.status);
+
+    const metadata = parseUsenixHtml(await upstream.text(), usenixId, absUrl);
+    if (!metadata?.title) return helpers.jsonResponse({ error: "USENIX returned invalid metadata" }, 502);
+
+    const response = new Response(JSON.stringify(metadata), {
+      status: 200,
+      headers: helpers.cacheableHeaders("application/json; charset=utf-8"),
+    });
+    context.waitUntil(caches.default.put(cacheKey, response.clone()));
+    return response;
+  } catch (error) {
+    console.error("Unable to reach USENIX", { usenixId, error: error?.message });
+    return helpers.jsonResponse({ error: "Unable to reach USENIX" }, 502);
+  }
+}
+
+function parseUsenixHtml(html, usenixId, absUrl) {
+  const metaValues = (name) => [...html.matchAll(/<meta\s+[^>]*>/gi)]
+    .filter(([tag]) => new RegExp(`name=["']${name}["']`, "i").test(tag))
+    .map(([tag]) => decodeHtmlAttribute(tag.match(/content=["']([^"']*)["']/i)?.[1] || ""))
+    .filter(Boolean);
+  const title = metaValues("citation_title")[0] || "";
+  if (!title) return null;
+
+  return {
+    source: "usenix",
+    publisherId: usenixId,
+    title,
+    authors: metaValues("citation_author"),
+    summary: "",
+    published: normalizeCitationDate(metaValues("citation_publication_date")[0] || ""),
+    absUrl,
+    pdfUrl: metaValues("citation_pdf_url")[0] || `https://www.usenix.org/system/files/${usenixId}.pdf`,
+  };
+}
+
 async function proxyDoiMetadata(requestUrl, doi, context, helpers) {
   if (!DOI_PATTERN.test(doi)) {
     return helpers.jsonResponse({ error: "Invalid DOI" }, 400);
   }
 
-  const cacheKey = helpers.makeCacheKey(requestUrl, "doi", doi);
+  const cacheValue = doi.startsWith("10.5555/") ? `usenix-v3:${doi}` : doi;
+  const cacheKey = helpers.makeCacheKey(requestUrl, "doi", cacheValue);
   const cached = await caches.default.match(cacheKey);
   if (cached) return cached;
 
@@ -134,8 +193,18 @@ async function fetchAcmDlMetadata(doi) {
     if (metadata) return metadata;
   }
 
-  // ACM's bot protection can block server-side requests. Jina Reader provides a
-  // text-only representation of the same public page that is straightforward to parse.
+  // ACM's bot protection can block server-side requests. Wikimedia's citation
+  // service translates the public ACM page into structured Zotero metadata.
+  const citation = await fetch(
+    `https://en.wikipedia.org/api/rest_v1/data/citation/mediawiki/${encodeURIComponent(articleUrl)}`,
+    { headers: { Accept: "application/json" } },
+  );
+  if (citation.ok) {
+    const metadata = parseWikimediaCitation(await citation.json(), doi);
+    if (metadata) return metadata;
+  }
+
+  // Keep a text-only reader as a secondary fallback in case citation translation fails.
   const reader = await fetch(`https://r.jina.ai/${articleUrl}`, {
     headers: { Accept: "text/plain" },
   });
@@ -145,6 +214,26 @@ async function fetchAcmDlMetadata(doi) {
   }
   return parseAcmDlMarkdown(await reader.text(), doi)
     || makeUsenixMetadata({ doi, title: `USENIX:${doi}` });
+}
+
+function parseWikimediaCitation(payload, doi) {
+  const item = Array.isArray(payload) ? payload[0] : null;
+  const title = cleanText(item?.title || "");
+  if (!title) return null;
+
+  const authors = (Array.isArray(item.author) ? item.author : [])
+    .map((author) => Array.isArray(author)
+      ? cleanText([author[0], author[1]].filter(Boolean).join(" "))
+      : cleanText([author?.firstName, author?.lastName, author?.name].filter(Boolean).join(" ")))
+    .filter(Boolean);
+
+  return makeUsenixMetadata({
+    doi,
+    title,
+    authors,
+    summary: cleanText(item.abstractNote || ""),
+    published: normalizeCitationDate(item.date || ""),
+  });
 }
 
 function parseAcmDlHtml(html, doi) {
