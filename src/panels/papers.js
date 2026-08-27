@@ -203,19 +203,17 @@ export function createPapersPanel({
     const authorList = formatPaperAuthors(metadata.authors ?? []);
     const authors = authorList ? ` · ${authorList}` : "";
     const published = metadata.published ? ` · ${metadata.published.slice(0, 10)}` : "";
-    const source = metadata.source === "semantic-scholar"
-      ? `S2:${metadata.semanticScholarId?.slice(0, 8)}`
-      : metadata.source === "acm"
-        ? `ACM:${metadata.doi}`
-        : metadata.source === "doi"
-          ? `DOI:${metadata.doi}`
-          : metadata.source === "nature"
-          ? `Nature:${metadata.doi}`
-          : metadata.source === "science"
-            ? `Science:${metadata.doi}`
-            : metadata.source === "cell"
-              ? `Cell:${metadata.publisherId}`
-              : `arXiv:${metadata.arxivId}`;
+    const sourceLabels = {
+      acm: `ACM:${metadata.doi}`,
+      usenix: `USENIX:${metadata.doi}`,
+      doi: `DOI:${metadata.doi}`,
+      nature: `Nature:${metadata.doi}`,
+      science: `Science:${metadata.doi}`,
+      cell: `Cell:${metadata.publisherId}`,
+      "semantic-scholar": `S2:${metadata.semanticScholarId?.slice(0, 8)}`,
+      arxiv: `arXiv:${metadata.arxivId}`,
+    };
+    const source = sourceLabels[metadata.source] || `DOI:${metadata.doi || ""}`;
     return `${source}${authors}${published}`;
   }
 
@@ -227,7 +225,7 @@ export function createPapersPanel({
   function openPaperModal(task = null) {
     editingPaperTaskId = task?.id ?? "";
     document.querySelector("#paperDialogTitle").textContent = task ? "Edit paper" : "Add paper";
-    elements.paperModalFieldLabel.textContent = "Paper titles, DOI, arXiv, ACM DL, Nature, Science, or Cell URLs";
+    elements.paperModalFieldLabel.textContent = "Paper titles, DOI, arXiv, ACM DL, USENIX, Nature, Science, or Cell URLs";
     elements.paperModalSubmit.textContent = task ? "Save" : "Add papers";
     elements.deletePaper.hidden = !task;
     elements.paperModalInput.value = "";
@@ -551,15 +549,19 @@ export function createPapersPanel({
     const doi = extractDoi(input);
     if (doi) {
       const isAcm = doi.startsWith("10.1145/");
+      const isUsenix = doi.startsWith("10.5555/");
+      const source = isAcm ? "acm" : isUsenix ? "usenix" : "doi";
+      const sourceLabel = isAcm ? "ACM" : isUsenix ? "USENIX" : "DOI";
+      const isAcmDl = isAcm || isUsenix;
       return {
-        source: isAcm ? "acm" : "doi",
+        source,
         doi,
-        title: `${isAcm ? "ACM" : "DOI"}:${doi}`,
+        title: `${sourceLabel}:${doi}`,
         authors: [],
         summary: "",
         published: "",
-        absUrl: isAcm ? `https://dl.acm.org/doi/abs/${doi}` : `https://doi.org/${doi}`,
-        pdfUrl: isAcm ? `https://dl.acm.org/doi/pdf/${doi}` : "",
+        absUrl: isAcmDl ? `https://dl.acm.org/doi/abs/${doi}` : `https://doi.org/${doi}`,
+        pdfUrl: isAcmDl ? `https://dl.acm.org/doi/pdf/${doi}` : "",
       };
     }
 
@@ -664,7 +666,7 @@ export function createPapersPanel({
   }
 
   function parseDoiMetadata(metadata, fallback) {
-    if (!metadata || !["acm", "doi"].includes(metadata.source) || !metadata.title) {
+    if (!metadata || !["acm", "usenix", "doi"].includes(metadata.source) || !metadata.title) {
       throw new Error("Worker returned invalid DOI metadata");
     }
 

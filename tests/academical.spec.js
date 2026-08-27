@@ -1941,6 +1941,65 @@ test('ACM DL URLs load Crossref metadata through the Cloudflare Worker proxy', a
   await expect(page.locator('#paperEditSource')).toHaveAttribute('href', 'https://dl.acm.org/doi/abs/10.1145/3728973');
 });
 
+test('USENIX papers mirrored by ACM DL load with USENIX links and metadata', async ({ page }) => {
+  await page.route('**/google-api-config.js', (route) => route.fulfill({
+    contentType: 'application/javascript',
+    body: 'window.ACADEMICAL_GOOGLE_CONFIG = { paperMetadataUrl: "https://academical-papers.example.workers.dev" };',
+  }));
+  await page.route(/workers\.dev/, async (route) => {
+    expect(new URL(route.request().url()).searchParams.get('doi')).toBe('10.5555/3767901.3767902');
+    await route.fulfill({
+      contentType: 'application/json; charset=utf-8',
+      body: JSON.stringify({
+        source: 'usenix',
+        doi: '10.5555/3767901.3767902',
+        title: 'A USENIX Security Paper',
+        authors: ['Ada Lovelace', 'Alan Turing'],
+        summary: '',
+        published: '2025-08-13',
+        absUrl: 'https://dl.acm.org/doi/abs/10.5555/3767901.3767902',
+        pdfUrl: 'https://dl.acm.org/doi/pdf/10.5555/3767901.3767902',
+      }),
+    });
+  });
+
+  await page.goto('/');
+  await page.keyboard.press('p');
+  await page.locator('#paperModalInput').fill('https://dl.acm.org/doi/10.5555/3767901.3767902');
+  await page.locator('#paperModalForm').getByRole('button', { name: 'Add papers' }).click();
+
+  await expect(page.locator('.paper-task-title')).toHaveText('A USENIX Security Paper');
+  await expect(page.locator('.paper-task-meta')).toContainText('USENIX:10.5555/3767901.3767902');
+  await expect(page.getByRole('link', { name: 'PDF' })).toHaveAttribute(
+    'href',
+    'https://dl.acm.org/doi/pdf/10.5555/3767901.3767902'
+  );
+});
+
+test('USENIX ACM DL links retain useful static links when metadata is unavailable', async ({ page }) => {
+  await page.route('**/google-api-config.js', (route) => route.fulfill({
+    contentType: 'application/javascript',
+    body: 'window.ACADEMICAL_GOOGLE_CONFIG = { paperMetadataUrl: "https://academical-papers.example.workers.dev" };',
+  }));
+  await page.route(/workers\.dev/, (route) => route.fulfill({
+    status: 404,
+    contentType: 'application/json',
+    body: JSON.stringify({ error: 'Metadata unavailable' }),
+  }));
+
+  await page.goto('/');
+  await page.keyboard.press('p');
+  await page.locator('#paperModalInput').fill('https://dl.acm.org/doi/10.5555/3767901.3767902');
+  await page.locator('#paperModalForm').getByRole('button', { name: 'Add papers' }).click();
+
+  await expect(page.locator('.paper-task-title')).toHaveText('USENIX:10.5555/3767901.3767902');
+  await expect(page.locator('.paper-task-meta')).toContainText('USENIX:10.5555/3767901.3767902');
+  await expect(page.getByRole('link', { name: 'PDF' })).toHaveAttribute(
+    'href',
+    'https://dl.acm.org/doi/pdf/10.5555/3767901.3767902'
+  );
+});
+
 test('ACM DL links containing Elsevier and Springer DOIs load as papers', async ({ page }) => {
   const works = {
     '10.1016/j.future.2010.07.005': {

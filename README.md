@@ -92,7 +92,7 @@ users/{uid}/academical/state
 
 ## Metadata and deadline proxy
 
-`worker/index.js` provides a Cloudflare Worker that validates and proxies arXiv metadata, resolves DOI metadata through Crossref, and checks Researchr for newly published conference deadlines. It caches successful responses and enables CORS for the static GitHub Pages client. Nature, Science, and Cell use Crossref directly because its API returns `Access-Control-Allow-Origin: *`; Cell PII identifiers are first matched against Crossref's `alternative-id` field, so these sources do not require a Worker route.
+`worker/index.js` provides a Cloudflare Worker that validates and proxies arXiv metadata, resolves DOI metadata through Crossref (with an ACM DL metadata fallback for USENIX `10.5555` papers), and checks Researchr for newly published conference deadlines. It caches successful responses and enables CORS for the static GitHub Pages client. Nature, Science, and Cell use Crossref directly because its API returns `Access-Control-Allow-Origin: *`; Cell PII identifiers are first matched against Crossref's `alternative-id` field, so these sources do not require a Worker route.
 
 Authenticate and deploy it on the Cloudflare Workers free plan:
 
@@ -112,5 +112,6 @@ Copy that URL into `paperMetadataUrl` and `deadlineUpdatesUrl` (or the backwards
 ```bash
 curl 'https://academical-arxiv.YOUR-SUBDOMAIN.workers.dev/?id=2505.17716'
 curl 'https://academical-arxiv.YOUR-SUBDOMAIN.workers.dev/?doi=10.1145%2F3728973'
+curl 'https://academical-arxiv.YOUR-SUBDOMAIN.workers.dev/?doi=10.5555%2F3767901.3767902'
 curl 'https://academical-arxiv.YOUR-SUBDOMAIN.workers.dev/?conference=OOPSLA&year=2027'
 ```
