@@ -199,6 +199,7 @@ const els = {
   eventCalendar: document.querySelector("#eventCalendar"),
   eventDate: document.querySelector("#eventDate"),
   eventDurationMinutes: document.querySelector("#eventDurationMinutes"),
+  eventEndDate: document.querySelector("#eventEndDate"),
   eventEndTime: document.querySelector("#eventEndTime"),
   eventForm: document.querySelector("#eventForm"),
   eventId: document.querySelector("#eventId"),
@@ -336,6 +337,8 @@ const calendarInteractionState = {
   activeWeekRangeDrag: null,
   activeWeekEventDrag: null,
   activeMonthEventDrag: null,
+  activeMonthRangeDrag: null,
+  suppressNextMonthCellClick: false,
   suppressNextWeekSlotClick: false,
   suppressNextWeekEventClick: false,
   suppressNextMonthEventClick: false,
@@ -662,6 +665,8 @@ function bindEvents() {
   });
   els.eventTime.addEventListener("input", updateEventEndTimeFromDuration);
   els.eventEndTime.addEventListener("input", updateEventDurationFromEndTime);
+  els.eventDate.addEventListener("change", updateEventEndDateMinimum);
+  els.eventEndDate.addEventListener("change", updateEventEndDateValidity);
 
   els.viewSelect.addEventListener("change", (event) => {
     setView(event.target.value);
@@ -1548,6 +1553,7 @@ function normalizeIcsEvents(parsedEvents) {
           time: event.time,
           notes: event.notes,
           durationMinutes: event.durationMinutes,
+          durationDays: event.durationDays,
         };
       } else {
         const excludedDates = new Set(baseEvent.excludedDates ?? []);
@@ -1609,6 +1615,7 @@ function parseIcsEvent(lines, calendarId) {
   const { repeat, repeatUntil } = parseIcsRepeat(getProperty("RRULE")?.value || "");
   const excludedDates = getProperties("EXDATE").flatMap((property) => parseIcsDateList(property.value, property.params));
   const durationMinutes = getIcsDurationMinutes(start, end);
+  const durationDays = getIcsDurationDays(start, end);
 
   return {
     id: `ics-${calendarId}-${uid}`.replace(/[^a-zA-Z0-9_-]/g, "-"),
@@ -1623,6 +1630,7 @@ function parseIcsEvent(lines, calendarId) {
     repeatUntil,
     excludedDates,
     durationMinutes,
+    durationDays,
     notes: description,
   };
 }
@@ -1655,6 +1663,7 @@ function parseIcsDate(value, params = {}) {
     date: isDateOnly ? `${year}-${month}-${day}` : toDateKey(date),
     time: isDateOnly ? "" : `${String(date.getHours()).padStart(2, "0")}:${String(date.getMinutes()).padStart(2, "0")}`,
     dateObject: date,
+    isDateOnly,
   };
 }
 
@@ -1669,6 +1678,12 @@ function getIcsDurationMinutes(start, end) {
   if (!start?.dateObject || !end?.dateObject) return DEFAULT_EVENT_DURATION_MINUTES;
   const duration = Math.round((end.dateObject - start.dateObject) / 60_000);
   return duration > 0 ? duration : DEFAULT_EVENT_DURATION_MINUTES;
+}
+
+function getIcsDurationDays(start, end) {
+  if (!start?.isDateOnly || !end?.isDateOnly) return 1;
+  // DTEND for all-day ICS events is exclusive.
+  return Math.max(1, Math.round((end.dateObject - start.dateObject) / 86_400_000));
 }
 
 function parseIcsRepeat(value) {
@@ -1705,8 +1720,19 @@ function getOccurrenceDateTimeRange(event) {
   const start = fromDateKey(getEventDate(event));
   start.setHours(hour, minute, 0, 0);
   const end = new Date(start);
-  end.setMinutes(end.getMinutes() + getOccurrenceDurationMinutes(event));
+  const durationDays = getOccurrenceDurationDays(event);
+  if (!event.time) {
+    end.setDate(end.getDate() + durationDays);
+  } else {
+    end.setDate(end.getDate() + durationDays - 1);
+    end.setMinutes(end.getMinutes() + getOccurrenceDurationMinutes(event));
+  }
   return { start, end };
+}
+
+function getOccurrenceDurationDays(event = {}) {
+  const durationDays = Number(event?.durationDays);
+  return Number.isInteger(durationDays) && durationDays > 0 ? durationDays : 1;
 }
 
 function getOccurrenceDurationMinutes(event = {}) {
@@ -1911,6 +1937,7 @@ function createMovedStandaloneOccurrence(calendarEvent, targetDateKey, targetTim
     paperTaskIds: calendarEvent.paperTaskIds ?? [],
     papers: calendarEvent.papers ?? [],
     durationMinutes: getOccurrenceDurationMinutes(calendarEvent),
+    durationDays: getOccurrenceDurationDays(calendarEvent),
     notes: calendarEvent.notes ?? "",
   };
 }
@@ -1956,6 +1983,27 @@ function setEventDurationHoursShortcut(hours) {
   showToast(`${hours}h duration`);
 }
 
+function updateEventEndDateMinimum() {
+  els.eventEndDate.min = els.eventDate.value;
+  if (!els.eventEndDate.value || els.eventEndDate.value < els.eventDate.value) {
+    els.eventEndDate.value = els.eventDate.value;
+  }
+  updateEventEndDateValidity();
+}
+
+function updateEventEndDateValidity() {
+  els.eventEndDate.setCustomValidity(
+    els.eventEndDate.value && els.eventEndDate.value < els.eventDate.value
+      ? "End date must be on or after the start date."
+      : "",
+  );
+}
+
+function getEventDialogDurationDays() {
+  if (!els.eventDate.value || !els.eventEndDate.value) return 1;
+  return Math.max(1, Math.round((fromDateKey(els.eventEndDate.value) - fromDateKey(els.eventDate.value)) / 86_400_000) + 1);
+}
+
 function updateEventRepeatUntilField() {
   const isRecurring = els.eventRepeat.value !== "none";
   els.eventRepeatUntilField.hidden = !isRecurring;
@@ -1975,6 +2023,9 @@ function openEventDialog(dateKey, existingEvent = null, options = {}) {
   els.eventDurationMinutes.value = String(options.durationMinutes ?? getOccurrenceDurationMinutes(existingEvent));
   els.eventTitle.value = existingEvent?.title ?? "";
   els.eventDate.value = existingEvent ? getEventDate(existingEvent) : dateKey;
+  const durationDays = options.durationDays ?? getOccurrenceDurationDays(existingEvent);
+  els.eventEndDate.value = options.endDate ?? toDateKey(addDays(fromDateKey(els.eventDate.value), durationDays - 1));
+  updateEventEndDateMinimum();
   els.eventTime.value = options.time ?? existingEvent?.time ?? "";
   updateEventEndTimeFromDuration();
   els.eventCalendar.value = existingEvent?.calendar ?? getDefaultEventCalendarId();
@@ -2033,6 +2084,7 @@ function saveEventFromDialog(event) {
     paperTaskIds: selectedPapers.map((paper) => paper.id),
     papers: selectedPapers,
     durationMinutes: getEventDialogDurationMinutes(),
+    durationDays: getEventDialogDurationDays(),
     notes: els.eventNotes.value.trim(),
   };
   if (!formEvent.repeatUntil) delete formEvent.repeatUntil;
@@ -2101,6 +2153,7 @@ function applyOnlyThisEventEdit(existingIndex, existingEvent, occurrenceDate, fo
     paperTaskIds: formEvent.paperTaskIds,
     papers: formEvent.papers,
     durationMinutes: formEvent.durationMinutes,
+    durationDays: formEvent.durationDays,
     notes: formEvent.notes,
   };
 
@@ -2375,13 +2428,24 @@ function getMaxVisibleEvents() {
 
 function getFilteredEventsForDate(dateKey) {
   return getCalendarEvents()
-    .filter((event) => doesEventOccurOnDate(event, dateKey))
-    .map((event) => createEventOccurrence(event, dateKey))
-    .filter((event) => isEventVisible(event))
+    .map((event) => {
+      const occurrenceDate = getEventOccurrenceStartForDate(event, dateKey);
+      return occurrenceDate ? createEventOccurrence(event, occurrenceDate, dateKey) : null;
+    })
+    .filter((event) => event && isEventVisible(event))
     .sort(compareEvents);
 }
 
-function doesEventOccurOnDate(event, dateKey) {
+function getEventOccurrenceStartForDate(event, dateKey) {
+  const durationDays = getOccurrenceDurationDays(event);
+  for (let offset = 0; offset < durationDays; offset += 1) {
+    const candidate = toDateKey(addDays(fromDateKey(dateKey), -offset));
+    if (doesEventStartOnDate(event, candidate)) return candidate;
+  }
+  return null;
+}
+
+function doesEventStartOnDate(event, dateKey) {
   const repeat = event.repeat ?? "none";
   if ((event.excludedDates ?? []).includes(dateKey)) return false;
   if (dateKey < event.date) return false;
@@ -2393,7 +2457,7 @@ function doesEventOccurOnDate(event, dateKey) {
   return event.date === dateKey;
 }
 
-function createEventOccurrence(event, dateKey) {
+function createEventOccurrence(event, dateKey, renderedDate = dateKey) {
   const override = event.instanceOverrides?.[dateKey] ?? {};
   return {
     ...event,
@@ -2402,6 +2466,7 @@ function createEventOccurrence(event, dateKey) {
     repeat: event.repeat ?? "none",
     sourceDate: event.date,
     occurrenceDate: dateKey,
+    renderedDate,
     instanceOverride: override,
   };
 }

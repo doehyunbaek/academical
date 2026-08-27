@@ -1507,6 +1507,55 @@ test('Command-dragging a timed week event copies it instead of moving it', async
   await expect(page.locator('#toast')).toContainText('Event copied');
 });
 
+test('dragging across month view creates an inclusive multi-day event', async ({ page }) => {
+  await page.goto('/');
+  await page.locator('#nextMonth').click();
+  await page.locator('#nextMonth').click();
+  const start = await page.locator('.day-cell[data-date="2026-09-28"]').boundingBox();
+  const end = await page.locator('.day-cell[data-date="2026-09-30"]').boundingBox();
+  expect(start).not.toBeNull();
+  expect(end).not.toBeNull();
+
+  await page.mouse.move(start.x + start.width / 2, start.y + 90);
+  await page.mouse.down();
+  await page.mouse.move(end.x + end.width / 2, end.y + 90, { steps: 8 });
+  await expect(page.locator('.day-cell--range-selected')).toHaveCount(3);
+  await page.mouse.up();
+
+  await expect(page.locator('#eventModal')).toHaveClass(/is-open/);
+  await expect(page.locator('#eventDate')).toHaveValue('2026-09-28');
+  await expect(page.locator('#eventEndDate')).toHaveValue('2026-09-30');
+  await page.locator('#eventTitle').fill('Group retreat');
+  await page.getByRole('button', { name: 'Save' }).click();
+
+  const created = await page.evaluate(() => JSON.parse(localStorage.getItem('academical.events.v1')).find((event) => event.title === 'Group retreat'));
+  expect(created).toMatchObject({ date: '2026-09-28', durationDays: 3, time: '' });
+  for (const date of ['2026-09-28', '2026-09-29', '2026-09-30']) {
+    await expect(page.locator(`.day-cell[data-date="${date}"] .event-chip`).filter({ hasText: 'Group retreat' })).toBeVisible();
+  }
+  await expect(page.locator('.day-cell[data-date="2026-10-01"] .event-chip').filter({ hasText: 'Group retreat' })).toHaveCount(0);
+});
+
+test('dragging backwards across four-week view creates a multi-day event', async ({ page }) => {
+  await page.goto('/');
+  await page.locator('#viewSelect').selectOption('four-week');
+  await page.locator('#nextMonth').click();
+  await page.locator('#nextMonth').click();
+  await page.locator('#nextMonth').click();
+
+  const start = await page.locator('.day-cell[data-date="2026-09-30"]').boundingBox();
+  const end = await page.locator('.day-cell[data-date="2026-09-28"]').boundingBox();
+  expect(start).not.toBeNull();
+  expect(end).not.toBeNull();
+  await page.mouse.move(start.x + start.width / 2, start.y + 90);
+  await page.mouse.down();
+  await page.mouse.move(end.x + end.width / 2, end.y + 90, { steps: 8 });
+  await page.mouse.up();
+
+  await expect(page.locator('#eventDate')).toHaveValue('2026-09-28');
+  await expect(page.locator('#eventEndDate')).toHaveValue('2026-09-30');
+});
+
 test('dragging a timed month event moves it to the dropped date', async ({ page }) => {
   await page.goto('/');
 

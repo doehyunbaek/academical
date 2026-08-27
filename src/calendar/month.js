@@ -101,7 +101,14 @@ export function createMonthCalendar({
 
     cell.append(eventList);
 
-    cell.addEventListener("click", () => {
+    cell.addEventListener("pointerdown", (event) => startMonthRangeDrag(event, date));
+
+    cell.addEventListener("click", (event) => {
+      if (interactionState.suppressNextMonthCellClick) {
+        event.preventDefault();
+        interactionState.suppressNextMonthCellClick = false;
+        return;
+      }
       setSelectedDate(new Date(date));
       ensureDateVisible(date);
       renderApp();
@@ -128,6 +135,78 @@ export function createMonthCalendar({
     });
 
     return cell;
+  }
+
+  function startMonthRangeDrag(event, date) {
+    if (
+      event.button !== 0
+      || event.target.closest("button, a, input, select, textarea")
+      || interactionState.activeMonthRangeDrag
+      || interactionState.activeMonthEventDrag
+      || interactionState.activeWeekEventDrag
+      || interactionState.activeWeekRangeDrag
+    ) return;
+    if (!["month", "four-week"].includes(getCurrentView())) return;
+
+    interactionState.activeMonthRangeDrag = {
+      startDateKey: toDateKey(date),
+      endDateKey: toDateKey(date),
+      startX: event.clientX,
+      startY: event.clientY,
+      moved: false,
+    };
+    window.addEventListener("pointermove", handleMonthRangeDragMove);
+    window.addEventListener("pointerup", handleMonthRangeDragEnd);
+    window.addEventListener("pointercancel", cancelMonthRangeDrag);
+  }
+
+  function handleMonthRangeDragMove(event) {
+    const drag = interactionState.activeMonthRangeDrag;
+    if (!drag) return;
+    drag.moved = drag.moved || Math.hypot(event.clientX - drag.startX, event.clientY - drag.startY) > 4;
+    if (!drag.moved) return;
+    event.preventDefault();
+    const targetCell = getMonthDayCellAtPoint(event.clientX, event.clientY);
+    if (targetCell?.dataset.date) drag.endDateKey = targetCell.dataset.date;
+    renderMonthRangeSelection(drag);
+  }
+
+  function handleMonthRangeDragEnd(event) {
+    const drag = interactionState.activeMonthRangeDrag;
+    if (!drag) return;
+    if (drag.moved) {
+      const targetCell = getMonthDayCellAtPoint(event.clientX, event.clientY);
+      if (targetCell?.dataset.date) drag.endDateKey = targetCell.dataset.date;
+    }
+    cleanupMonthRangeDrag();
+    if (!drag.moved) return;
+
+    const [startDateKey, endDateKey] = [drag.startDateKey, drag.endDateKey].sort();
+    const durationDays = Math.round((fromDateKey(endDateKey) - fromDateKey(startDateKey)) / 86_400_000) + 1;
+    interactionState.suppressNextMonthCellClick = true;
+    setTimeout(() => { interactionState.suppressNextMonthCellClick = false; }, 0);
+    setSelectedDate(fromDateKey(startDateKey));
+    ensureDateVisible(fromDateKey(startDateKey));
+    openEventDialog(startDateKey, null, { endDate: endDateKey, durationDays });
+  }
+
+  function cancelMonthRangeDrag() {
+    cleanupMonthRangeDrag();
+  }
+
+  function cleanupMonthRangeDrag() {
+    elements.monthGrid.querySelectorAll(".day-cell--range-selected").forEach((cell) => cell.classList.remove("day-cell--range-selected"));
+    interactionState.activeMonthRangeDrag = null;
+    window.removeEventListener("pointermove", handleMonthRangeDragMove);
+    window.removeEventListener("pointerup", handleMonthRangeDragEnd);
+    window.removeEventListener("pointercancel", cancelMonthRangeDrag);
+  }
+
+  function renderMonthRangeSelection(drag) {
+    const [startDateKey, endDateKey] = [drag.startDateKey, drag.endDateKey].sort();
+    elements.monthGrid.querySelectorAll(".day-cell[data-date]").forEach((cell) => {
+      cell.classList.toggle("day-cell--range-selected", cell.dataset.date >= startDateKey && cell.dataset.date <= endDateKey);
+    });
   }
 
   function createEventChip(calendarEvent) {
@@ -181,6 +260,7 @@ export function createMonthCalendar({
     if (
       event.button !== 0
       || interactionState.activeMonthEventDrag
+      || interactionState.activeMonthRangeDrag
       || interactionState.activeWeekEventDrag
       || interactionState.activeWeekRangeDrag
     ) return;
