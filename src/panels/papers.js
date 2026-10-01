@@ -461,6 +461,16 @@ export function createPapersPanel({
     const pdfMatch = value.match(/https?:\/\/(?:www\.)?usenix\.org\/system\/files\/([a-z0-9][a-z0-9-]*)\.pdf(?:[?#]|$)/i);
     if (pdfMatch) return { id: pdfMatch[1].toLowerCase(), pdfUrl: `https://www.usenix.org/system/files/${pdfMatch[1].toLowerCase()}.pdf` };
 
+    const legacyMatch = value.match(/https?:\/\/(?:www\.)?usenix\.org\/system\/files\/conference\/([a-z0-9-]+)\/([a-z0-9-]+)-paper-([a-z0-9-]+)\.pdf(?:[?#]|$)/i);
+    if (legacyMatch && legacyMatch[1].toLowerCase() === legacyMatch[2].toLowerCase()) {
+      const [, conference, , slug] = legacyMatch;
+      return {
+        id: `${conference}-${slug}`.toLowerCase(),
+        pdfUrl: `https://www.usenix.org/system/files/conference/${conference.toLowerCase()}/${conference.toLowerCase()}-paper-${slug.toLowerCase()}.pdf`,
+        legacy: true,
+      };
+    }
+
     const pageMatch = value.match(/https?:\/\/(?:www\.)?usenix\.org\/conference\/([a-z0-9-]+)\/presentation\/([a-z0-9-]+)(?:[/?#]|$)/i);
     if (!pageMatch) return null;
     const id = `${pageMatch[1]}-${pageMatch[2]}`.toLowerCase();
@@ -524,7 +534,9 @@ export function createPapersPanel({
         authors: [],
         summary: "",
         published: "",
-        absUrl: `https://www.usenix.org/conference/${conference}/presentation/${slugParts.join("-")}`,
+        absUrl: usenixPaper.legacy
+          ? `https://www.usenix.org/conference/${conference}/technical-sessions/presentation/${slugParts.join("-")}`
+          : `https://www.usenix.org/conference/${conference}/presentation/${slugParts.join("-")}`,
         pdfUrl: usenixPaper.pdfUrl,
       };
     }
@@ -657,6 +669,7 @@ export function createPapersPanel({
 
       if (fallback.source === "usenix" && fallback.publisherId) {
         url.searchParams.set("usenix", fallback.publisherId);
+        if (fallback.absUrl.includes("/technical-sessions/presentation/")) url.searchParams.set("legacy", "1");
       } else {
         url.searchParams.set("doi", fallback.doi);
       }

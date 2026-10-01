@@ -22,7 +22,7 @@ Open <http://localhost:8000>.
 - Repeating events: daily, weekly, and every weekday, with an optional end date
 - Deleting a recurring event occurrence removes only that instance; `Delete recurring` removes the full series
 - Search events and query DBLP publications from the `o` shortcut; DBLP requests are only sent after pressing Enter
-- Paper task queue: paste paper titles, DOIs, or arXiv, ACM Digital Library, Nature, Science, Cell, and Semantic Scholar URLs; Nature, Science, and Cell metadata loads directly from Crossref using its browser CORS support, while arXiv and other DOI links use the Cloudflare Worker metadata proxy (all with static-link fallback); track queued and read papers separately; assign papers to events whose first four characters are `read`; assigned or exact-title-matched papers move to Read papers and return to the queue if the assigned event is deleted
+- Paper task queue: paste paper titles, DOIs, or arXiv, ACM Digital Library, USENIX (including legacy `/system/files/conference/.../...-paper-....pdf` links), Nature, Science, Cell, and Semantic Scholar URLs; Nature, Science, and Cell metadata loads directly from Crossref using its browser CORS support, while arXiv and other DOI links use the Cloudflare Worker metadata proxy (all with static-link fallback); track queued and read papers separately; assign papers to events whose first four characters are `read`; assigned or exact-title-matched papers move to Read papers and return to the queue if the assigned event is deleted
 - Toggle calendar categories, drag-and-drop reorder calendars, edit calendar name/color with an Edit calendar modal, use the 16 CSS basic colors plus `transparent` and `rebeccapurple`, open a Create calendar modal from the always-visible `+` button, create blank calendars or import `.ics` files, archive each calendar with its hover-only row-level `×` action, expand/collapse Archived calendars, select archived calendars for viewing/analysis, restore archived calendars, or permanently delete them
 - Events persist in `localStorage`
 - Optional Firebase Google sign-in sync for events, imported calendars, calendar names/colors/order, paper tasks, and calendar visibility
@@ -92,7 +92,7 @@ users/{uid}/academical/state
 
 ## Metadata and deadline proxy
 
-`worker/index.js` provides a Cloudflare Worker that validates and proxies arXiv metadata, resolves DOI metadata through Crossref (with an ACM DL metadata fallback for USENIX `10.5555` papers), and checks Researchr for newly published conference deadlines. It caches successful responses and enables CORS for the static GitHub Pages client. Nature, Science, and Cell use Crossref directly because its API returns `Access-Control-Allow-Origin: *`; Cell PII identifiers are first matched against Crossref's `alternative-id` field, so these sources do not require a Worker route.
+`worker/index.js` provides a Cloudflare Worker that validates and proxies arXiv metadata, retrieves USENIX presentation metadata (including legacy technical-sessions pages), resolves DOI metadata through Crossref (with an ACM DL metadata fallback for USENIX `10.5555` papers), and checks Researchr for newly published conference deadlines. It caches successful responses and enables CORS for the static GitHub Pages client. Nature, Science, and Cell use Crossref directly because its API returns `Access-Control-Allow-Origin: *`; Cell PII identifiers are first matched against Crossref's `alternative-id` field, so these sources do not require a Worker route.
 
 Authenticate and deploy it on the Cloudflare Workers free plan:
 
@@ -113,5 +113,6 @@ Copy that URL into `paperMetadataUrl` and `deadlineUpdatesUrl` (or the backwards
 curl 'https://academical-arxiv.YOUR-SUBDOMAIN.workers.dev/?id=2505.17716'
 curl 'https://academical-arxiv.YOUR-SUBDOMAIN.workers.dev/?doi=10.1145%2F3728973'
 curl 'https://academical-arxiv.YOUR-SUBDOMAIN.workers.dev/?usenix=osdi25-zhang-tony'
+curl 'https://academical-arxiv.YOUR-SUBDOMAIN.workers.dev/?usenix=osdi14-devecsery&legacy=1'
 curl 'https://academical-arxiv.YOUR-SUBDOMAIN.workers.dev/?conference=OOPSLA&year=2027'
 ```

@@ -2077,6 +2077,62 @@ test('USENIX PDF URLs load metadata directly from USENIX and normalize HTTP to H
   );
 });
 
+test('legacy USENIX conference PDF URLs load metadata and retain the original PDF', async ({ page }) => {
+  await page.route('**/google-api-config.js', (route) => route.fulfill({
+    contentType: 'application/javascript',
+    body: 'window.ACADEMICAL_GOOGLE_CONFIG = { paperMetadataUrl: "https://academical-papers.example.workers.dev" };',
+  }));
+  await page.route(/workers\.dev/, async (route) => {
+    const url = new URL(route.request().url());
+    expect(url.searchParams.get('usenix')).toBe('osdi14-devecsery');
+    expect(url.searchParams.get('legacy')).toBe('1');
+    await route.fulfill({
+      contentType: 'application/json',
+      body: JSON.stringify({
+        source: 'usenix',
+        publisherId: 'osdi14-devecsery',
+        title: 'Eidetic Systems',
+        authors: ['David Devecsery', 'Michael Chow'],
+        published: '2014-01-01',
+        absUrl: 'https://www.usenix.org/conference/osdi14/technical-sessions/presentation/devecsery',
+        pdfUrl: 'https://www.usenix.org/system/files/conference/osdi14/osdi14-paper-devecsery.pdf',
+      }),
+    });
+  });
+
+  await page.goto('/');
+  await page.keyboard.press('p');
+  await page.locator('#paperModalInput').fill('https://www.usenix.org/system/files/conference/osdi14/osdi14-paper-devecsery.pdf');
+  await page.locator('#paperModalForm').getByRole('button', { name: 'Add papers' }).click();
+
+  await expect(page.locator('.paper-task-title')).toHaveText('Eidetic Systems');
+  await expect(page.getByRole('link', { name: 'PDF' })).toHaveAttribute(
+    'href', 'https://www.usenix.org/system/files/conference/osdi14/osdi14-paper-devecsery.pdf'
+  );
+  await expect(page.locator('.paper-task-meta')).toContainText('David Devecsery');
+});
+
+test('legacy USENIX PDFs retain their links when metadata is unavailable', async ({ page }) => {
+  await page.route('**/google-api-config.js', (route) => route.fulfill({
+    contentType: 'application/javascript',
+    body: 'window.ACADEMICAL_GOOGLE_CONFIG = { paperMetadataUrl: "https://academical-papers.example.workers.dev" };',
+  }));
+  await page.route(/workers\.dev/, (route) => route.fulfill({ status: 404, body: '{}' }));
+
+  await page.goto('/');
+  await page.keyboard.press('p');
+  await page.locator('#paperModalInput').fill('http://www.usenix.org/system/files/conference/osdi14/osdi14-paper-devecsery.pdf');
+  await page.locator('#paperModalForm').getByRole('button', { name: 'Add papers' }).click();
+
+  await expect(page.locator('.paper-task-title')).toHaveText('USENIX:osdi14-devecsery');
+  await expect(page.getByRole('link', { name: 'Abs' })).toHaveAttribute(
+    'href', 'https://www.usenix.org/conference/osdi14/technical-sessions/presentation/devecsery'
+  );
+  await expect(page.getByRole('link', { name: 'PDF' })).toHaveAttribute(
+    'href', 'https://www.usenix.org/system/files/conference/osdi14/osdi14-paper-devecsery.pdf'
+  );
+});
+
 test('USENIX ACM DL links retain useful static links when metadata is unavailable', async ({ page }) => {
   await page.route('**/google-api-config.js', (route) => route.fulfill({
     contentType: 'application/javascript',

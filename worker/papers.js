@@ -6,7 +6,11 @@ export function handlePaperRequest(requestUrl, context, helpers) {
   const id = requestUrl.searchParams.get("id")?.trim() ?? "";
   const doi = requestUrl.searchParams.get("doi")?.trim().toLowerCase() ?? "";
   const usenix = requestUrl.searchParams.get("usenix")?.trim().toLowerCase() ?? "";
+  const legacy = requestUrl.searchParams.get("legacy");
 
+  if (legacy !== null && (legacy !== "1" || !usenix)) {
+    return helpers.jsonResponse({ error: "Invalid USENIX paper format" }, 400);
+  }
   if ([id, doi, usenix].filter(Boolean).length > 1) {
     return helpers.jsonResponse({ error: "Provide one paper identifier" }, 400);
   }
@@ -54,12 +58,16 @@ async function proxyUsenixMetadata(requestUrl, usenixId, context, helpers) {
     return helpers.jsonResponse({ error: "Invalid USENIX paper identifier" }, 400);
   }
 
-  const cacheKey = helpers.makeCacheKey(requestUrl, "usenix", usenixId);
+  const legacy = requestUrl.searchParams.get("legacy") === "1";
+  const cacheKey = helpers.makeCacheKey(requestUrl, "usenix", `${legacy ? "legacy:" : ""}${usenixId}`);
   const cached = await caches.default.match(cacheKey);
   if (cached) return cached;
 
   const [conference, ...slugParts] = usenixId.split("-");
-  const absUrl = `https://www.usenix.org/conference/${conference}/presentation/${slugParts.join("-")}`;
+  const slug = slugParts.join("-");
+  const absUrl = legacy
+    ? `https://www.usenix.org/conference/${conference}/technical-sessions/presentation/${slug}`
+    : `https://www.usenix.org/conference/${conference}/presentation/${slug}`;
   try {
     const upstream = await fetch(absUrl, {
       headers: {
@@ -70,6 +78,7 @@ async function proxyUsenixMetadata(requestUrl, usenixId, context, helpers) {
     if (!upstream.ok) return helpers.jsonResponse({ error: `USENIX returned HTTP ${upstream.status}` }, upstream.status);
 
     const metadata = parseUsenixHtml(await upstream.text(), usenixId, absUrl);
+    if (metadata && legacy) metadata.pdfUrl = `https://www.usenix.org/system/files/conference/${conference}/${conference}-paper-${slug}.pdf`;
     if (!metadata?.title) return helpers.jsonResponse({ error: "USENIX returned invalid metadata" }, 502);
 
     const response = new Response(JSON.stringify(metadata), {
