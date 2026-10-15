@@ -435,6 +435,9 @@ export function createPapersPanel({
     const urlMatch = value.match(/arxiv\.org\/(?:abs|pdf|e-print)\/([^?#\s]+)/i);
     if (urlMatch) return normalizeArxivId(urlMatch[1]);
 
+    // DOI suffixes can contain arXiv-shaped numbers (e.g. ASE63991.2025.00012).
+    if (extractDoi(value)) return null;
+
     const idMatch = value.match(/\b(\d{4}\.\d{4,5}(?:v\d+)?|[a-z-]+(?:\.[A-Z]{2})?\/\d{7}(?:v\d+)?)\b/i);
     return idMatch ? normalizeArxivId(idMatch[1]) : null;
   }

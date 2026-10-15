@@ -2212,6 +2212,44 @@ test('ACM DL links containing Elsevier and Springer DOIs load as papers', async 
   await expect(page.locator(`a[href="https://doi.org/10.1007/978-3-319-16462-5_6"]`)).toBeVisible();
 });
 
+for (const input of [
+  'https://dl.acm.org/doi/10.1109/ASE63991.2025.00012',
+  'https://doi.org/10.1109/ASE63991.2025.00012',
+  '10.1109/ASE63991.2025.00012',
+]) {
+  test(`DOIs containing arXiv-shaped numbers use DOI metadata: ${input}`, async ({ page }) => {
+    const doi = '10.1109/ase63991.2025.00012';
+    const requests = [];
+    await page.route('**/google-api-config.js', (route) => route.fulfill({
+      contentType: 'application/javascript',
+      body: 'window.ACADEMICAL_GOOGLE_CONFIG = { paperMetadataUrl: "https://academical-papers.example.workers.dev" };',
+    }));
+    await page.route(/workers\.dev/, async (route) => {
+      const params = new URL(route.request().url()).searchParams;
+      requests.push(Object.fromEntries(params));
+      await route.fulfill({
+        contentType: 'application/json',
+        body: JSON.stringify({
+          source: 'doi', doi, title: 'IEEE ASE paper', authors: ['Test Author'],
+          absUrl: `https://doi.org/${doi}`, pdfUrl: '',
+        }),
+      });
+    });
+
+    await page.goto('/');
+    await page.keyboard.press('p');
+    await page.locator('#paperModalInput').fill(input);
+    await page.locator('#paperModalForm').getByRole('button', { name: 'Add papers' }).click();
+
+    await expect(page.locator('.paper-task-title')).toHaveText('IEEE ASE paper');
+    expect(requests).toEqual([{ doi }]);
+    await expect(page.locator('.paper-task-meta')).toContainText(`DOI:${doi}`);
+    const tasks = await page.evaluate(() => JSON.parse(localStorage.getItem('academical.paperTasks.v1')));
+    expect(tasks[0].metadata.doi).toBe(doi);
+    expect(tasks[0].metadata.arxivId).toBeUndefined();
+  });
+}
+
 test('Nature, Science, and Cell URLs load metadata directly from the CORS-enabled Crossref API', async ({ page }) => {
   const requestedSources = [];
   await page.route('https://api.crossref.org/**', async (route) => {
