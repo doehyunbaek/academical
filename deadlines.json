@@ -2,6 +2,19 @@
   {
     "name": "ICSE",
     "description": "International Conference on Software Engineering - Research Track",
+    "year": 2028,
+    "link": "https://conf.researchr.org/track/icse-2028/icse-2028-papers",
+    "deadlines": [
+      "2027-07-01 23:59"
+    ],
+    "date": "April 29 - May 7, 2028",
+    "place": "Waikoloa, Hawaii, United States",
+    "predictionHistoryStartYear": 2027,
+    "note": "Mandatory abstract deadline on June 24, 2027. Main conference on May 3-5, 2028. All dates are AoE (UTC-12)."
+  },
+  {
+    "name": "ICSE",
+    "description": "International Conference on Software Engineering - Research Track",
     "year": 2027,
     "link": "https://conf.researchr.org/track/icse-2027/icse-2027-research-track",
     "deadlines": [

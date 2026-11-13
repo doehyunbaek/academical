@@ -472,7 +472,7 @@ test('Deadlines panel internalizes deadlines app entries', async ({ page }) => {
 
   await expect(page.locator('.sidebar-panel[data-panel="deadlines"]')).toBeVisible();
   await expect(page.locator('.deadline-view-header')).toContainText('Research venue deadlines');
-  await expect(page.locator('.deadline-view-header')).toContainText('4 upcoming · 2 forecasts');
+  await expect(page.locator('.deadline-view-header')).toContainText('5 upcoming · 1 forecast');
   await expect(page.locator('.deadline-card')).toHaveCount(64);
   await expect(page.locator('.deadline-card').first()).toContainText('FSE 2027');
   await expect(page.locator('.deadline-card').first()).toContainText('Deadline:');
@@ -497,9 +497,11 @@ test('Deadlines panel filters by selected tags and persists the selection', asyn
   await page.locator('input[data-deadline-filter-tag="OOPSLA"]').uncheck();
   await page.locator('input[data-deadline-filter-tag="ICSE"]').check();
   await expect(page.locator('.deadline-card')).toHaveCount(14);
-  const icsePrediction = page.locator('.deadline-card--predicted').filter({ hasText: 'ICSE 2028' });
-  await expect(icsePrediction).toContainText('Predicted deadline: Jul 1, 2027');
-  await expect(icsePrediction).toContainText('1 edition');
+  const icseDeadline = page.locator('.deadline-card').filter({ hasText: 'ICSE 2028' });
+  await expect(icseDeadline).not.toHaveClass(/deadline-card--predicted/);
+  await expect(icseDeadline).toHaveAttribute('data-deadline-at', '2027-07-02T11:59:59.000Z');
+  await expect(icseDeadline).toContainText('Mandatory abstract deadline on June 24, 2027.');
+  await expect(icseDeadline.locator('a').first()).toHaveAttribute('href', 'https://conf.researchr.org/track/icse-2028/icse-2028-papers');
 
   await page.reload();
   await page.locator('.sidebar-tab[data-panel="deadlines"]').click();
