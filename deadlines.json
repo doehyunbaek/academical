@@ -247,6 +247,18 @@
   {
     "name": "ASE",
     "description": "International Conference on Automated Software Engineering - Research Papers",
+    "year": 2027,
+    "link": "https://conf.researchr.org/track/ase-2027/ase-2027-research-track",
+    "deadlines": [
+      "2027-03-10 23:59"
+    ],
+    "date": "October 24 - 28, 2027",
+    "place": "El Paso, Texas, United States",
+    "note": "Paper submission deadline. All dates are AoE (UTC-12)."
+  },
+  {
+    "name": "ASE",
+    "description": "International Conference on Automated Software Engineering - Research Papers",
     "year": 2026,
     "link": "https://conf.researchr.org/track/ase-2026/ase-2026-research-track",
     "deadlines": [
